@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="SG04r793oqLHuqXJuza82r">
+<head data-page-node-id="PCCZFfKmKDRF7hCejQH2Zp">
+<meta charset="UTF-8" data-page-node-id="5p6rA0lXeWJ60plrC9HwLL">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="uUPbbaXc45YlIMPyE0SHGa">
+<title>合同审查 Agent · 需求覆盖高保真原型</title>
+<style>
+:root{
+  --primary:#2b4acb; --primary-hover:#2340ab; --primary-soft:#eef1fb; --primary-ring:#c7d2f5;
+  --sidebar:#141a2b; --sidebar-2:#0f1420; --sidebar-line:rgba(255,255,255,.06); --sidebar-hover:#1e2740;
+  --bg:#f4f6fa; --surface:#ffffff; --surface-2:#fafbfd;
+  --border:#e3e8f0; --border-strong:#c9d2e0;
+  --text:#1a2233; --text-2:#55617a; --text-3:#8a94ab;
+  --critical:#d92d20; --high:#e8590c; --medium:#e6a400; --low:#2b6cb0; --info:#64748b;
+  --ok:#12b76a; --ok-soft:#e7f7ef; --warn:#e6a400; --warn-soft:#fdf6e3;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+  --shadow-lg:0 8px 24px rgba(16,24,40,.12);
+  --r:10px; --r-sm:7px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Helvetica Neue',Helvetica,Arial,sans-serif;
+  --mono:'SF Mono',ui-monospace,'JetBrains Mono',Consolas,'Courier New',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:13px;color:var(--text)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#cbd3e0;border-radius:6px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#aab4c8;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ============ 布局 ============ */
+.app{display:flex;height:100vh}
+.sidebar{width:232px;min-width:232px;background:var(--sidebar);color:#d7dce8;display:flex;flex-direction:column;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:10px;padding:18px 18px 16px;border-bottom:1px solid var(--sidebar-line)}
+.brand .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#3b5cde,#2438a8);display:grid;place-items:center;flex-shrink:0;box-shadow:0 2px 6px rgba(59,92,222,.4)}
+.brand .name{font-size:15px;font-weight:600;color:#fff;letter-spacing:.3px}
+.brand .name small{display:block;font-size:10.5px;font-weight:400;color:#8b95ad;letter-spacing:.4px}
+.nav{flex:1;overflow-y:auto;padding:10px 10px 16px}
+.nav-group{margin-top:14px}
+.nav-group:first-child{margin-top:4px}
+.nav-label{padding:0 10px;margin-bottom:6px;font-size:10.5px;letter-spacing:.8px;color:#6f7a92;text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:#b9c0d0;font-size:13px;cursor:pointer;transition:background .15s,color .15s;position:relative;margin-bottom:2px}
+.nav-item:hover{background:var(--sidebar-hover);color:#fff}
+.nav-item.active{background:linear-gradient(90deg,rgba(59,92,222,.28),rgba(59,92,222,.12));color:#fff}
+.nav-item.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:#5b7cff}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:.85}
+.nav-item .badge{margin-left:auto;background:#2a3652;color:#aab6cf;font-size:10.5px;padding:0 7px;border-radius:8px;line-height:17px}
+.nav-item.active .badge{background:rgba(91,124,255,.25);color:#dbe4ff}
+.side-user{border-top:1px solid var(--sidebar-line);padding:12px 14px;display:flex;align-items:center;gap:10px}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#5b7cff,#7a5bff);display:grid;place-items:center;color:#fff;font-size:13px;font-weight:600;flex-shrink:0}
+.side-user .who{flex:1;min-width:0}
+.side-user .who b{display:block;font-size:12.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-user .who span{font-size:10.5px;color:#7d879c}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+
+/* ============ 顶栏（工作台等） ============ */
+.topbar{height:56px;min-height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 22px}
+.topbar h1{font-size:16px;font-weight:600;letter-spacing:.2px}
+.topbar .crumb{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-3)}
+.topbar .crumb a{color:var(--text-3);cursor:pointer;text-decoration:none}
+.topbar .crumb a:hover{color:var(--primary)}
+.topbar .crumb .sep{color:#c3ccdb}
+.topbar .crumb .cur{color:var(--text);font-weight:500}
+.topbar .spacer{flex:1}
+.view{flex:1;overflow-y:auto;padding:22px}
+
+/* ============ 按钮 ============ */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);transition:all .15s;white-space:nowrap}
+.btn:hover{border-color:#b8c2d4;background:var(--surface-2)}
+.btn svg{width:15px;height:15px}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--text-2)}
+.btn.ghost:hover{background:var(--surface-2);border-color:transparent}
+.btn.danger{color:var(--critical);border-color:#f3c4c0}
+.btn.danger:hover{background:#fdf1f0;border-color:#e8a7a2}
+.btn.sm{padding:4px 10px;font-size:12px;border-radius:7px}
+.btn.sm svg{width:13px;height:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ============ 徽章 / 标签 ============ */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:500;line-height:18px;white-space:nowrap}
+.badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.b-lv-critical{background:#fdebea;color:var(--critical)}
+.b-lv-high{background:#fef0e6;color:var(--high)}
+.b-lv-medium{background:#fdf6e3;color:#b28000}
+.b-lv-low{background:#e9f0fb;color:var(--low)}
+.b-lv-info{background:#eef1f6;color:var(--info)}
+.b-cat{background:#eef1fb;color:#3b4f9b;border:1px solid #dfe6f7}
+.b-status{background:var(--surface);border:1px solid var(--border);color:var(--text-2)}
+.b-ok{background:var(--ok-soft);color:#0e8a52}
+.b-warn{background:var(--warn-soft);color:#9a6a00}
+.b-err{background:#fdebea;color:var(--critical)}
+.b-muted{background:#eef1f6;color:var(--text-3)}
+.b-primary{background:var(--primary-soft);color:var(--primary)}
+
+/* ============ 统计卡 ============ */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.stat .lbl{font-size:12px;color:var(--text-3);margin-bottom:6px}
+.stat .num{font-size:26px;font-weight:600;letter-spacing:-.5px;line-height:1.1}
+.stat .num small{font-size:12px;font-weight:400;color:var(--text-3);margin-left:4px}
+.stat .trend{font-size:11.5px;margin-top:5px;color:var(--text-3)}
+.stat .trend b{font-weight:600}
+.stat .trend.up b{color:var(--critical)}
+.stat .trend.down b{color:var(--ok)}
+.stat .ico{position:absolute;right:14px;top:16px;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary)}
+.stat .ico svg{width:18px;height:18px}
+
+/* ============ 面板卡片 ============ */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.panel-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border)}
+.panel-head h2{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.panel-head .hint{font-size:12px;color:var(--text-3)}
+.panel-head .spacer{flex:1}
+.panel-body{padding:0}
+
+/* ============ 表格 ============ */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:11.5px;text-align:left;color:var(--text-3);font-weight:600;letter-spacing:.3px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface-2);white-space:nowrap}
+td{padding:11px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+td .mono{font-family:var(--mono);font-size:12px}
+.link{color:var(--primary);cursor:pointer;font-weight:500}
+.link:hover{text-decoration:underline}
+
+/* ============ 标签页 ============ */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);background:var(--surface-2);padding:0 8px}
+.tab{padding:10px 16px;font-size:13px;color:var(--text-2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+
+/* ============ 工作区（三栏） ============ */
+.workspace{flex:1;display:flex;min-height:0}
+.ws-toolbar{height:52px;min-height:52px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 16px}
+.ws-toolbar .back{display:flex;align-items:center;gap:5px;color:var(--text-2);font-size:13px;cursor:pointer;padding:5px 8px;border-radius:7px}
+.ws-toolbar .back:hover{background:var(--surface-2);color:var(--text)}
+.ws-toolbar .doc-title{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;min-width:0}
+.ws-toolbar .doc-title span.txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-toolbar .spacer{flex:1}
+.col-doc{width:42%;min-width:340px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--surface)}
+.col-risk{width:32%;min-width:300px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--surface)}
+.col-detail{flex:1;min-width:320px;display:flex;flex-direction:column;background:var(--surface)}
+
+/* 文档栏 */
+.doc-tools{height:44px;min-height:44px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;padding:0 12px;background:var(--surface-2)}
+.doc-tools .pg{font-size:12px;color:var(--text-3);margin:0 4px}
+.doc-tools .tool{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;color:var(--text-2);cursor:pointer}
+.doc-tools .tool:hover{background:#e8ecf4;color:var(--text)}
+.doc-tools .tool svg{width:16px;height:16px}
+.doc-tools .search{margin-left:auto;position:relative}
+.doc-tools .search input{height:30px;border:1px solid var(--border);border-radius:7px;padding:0 10px 0 30px;width:150px;font-size:12.5px;background:var(--surface);outline:none}
+.doc-tools .search input:focus{border-color:var(--primary)}
+.doc-tools .search svg{position:absolute;left:9px;top:7px;width:14px;height:14px;color:var(--text-3)}
+.doc-body{flex:1;overflow-y:auto;padding:34px 42px;background:var(--surface)}
+.doc-paper{max-width:720px;margin:0 auto;background:#fff;padding:48px 54px;box-shadow:var(--shadow);border:1px solid #eef0f5;border-radius:3px;font-size:14px;line-height:2.05;color:#232936;user-select:text}
+.doc-paper h3.doc-title{font-size:20px;text-align:center;font-weight:600;letter-spacing:2px;margin-bottom:26px}
+.doc-paper p{margin-bottom:14px;text-indent:2em}
+.doc-paper p.no-indent{text-indent:0}
+.doc-paper .clause{font-weight:600;margin:18px 0 8px;text-indent:0}
+.doc-paper mark{background:transparent;cursor:pointer;border-radius:2px;padding:1px 0;transition:background .15s}
+.doc-paper mark.hl-critical{background:#fde1df;border-bottom:2px solid #e8a29c}
+.doc-paper mark.hl-high{background:#fde9d8;border-bottom:2px solid #f0bd8c}
+.doc-paper mark.hl-medium{background:#fdf3d3;border-bottom:2px solid #ecd68a}
+.doc-paper mark.hl-low{background:#e2edfb;border-bottom:2px solid #b4ccee}
+.doc-paper mark.active{background:#ffe9a8;border-bottom:2px solid #e0b84a;box-shadow:0 0 0 3px rgba(224,184,74,.18)}
+.doc-paper mark:hover{filter:brightness(.97)}
+
+/* 选区浮动菜单 */
+.selection-menu{position:fixed;z-index:999;background:#1a2233;color:#fff;border-radius:8px;padding:4px;display:none;box-shadow:var(--shadow-lg)}
+.selection-menu button{display:flex;align-items:center;gap:6px;padding:7px 11px;border-radius:6px;font-size:12.5px;color:#e8ecf5;white-space:nowrap}
+.selection-menu button:hover{background:#2a3652}
+.selection-menu button svg{width:14px;height:14px}
+.selection-menu button.primary{color:#9db4ff}
+
+/* 风险栏 */
+.risk-tools{height:44px;min-height:44px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--surface-2)}
+.risk-tools .count{font-size:12px;color:var(--text-3);font-weight:500}
+.risk-tools .spacer{flex:1}
+.filters{display:flex;gap:6px}
+.filter-chip{padding:3px 10px;border-radius:16px;font-size:11.5px;color:var(--text-2);background:var(--surface);border:1px solid var(--border);cursor:pointer;white-space:nowrap}
+.filter-chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.risk-list{flex:1;overflow-y:auto;padding:12px}
+.risk-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--info);border-radius:8px;padding:11px 13px;margin-bottom:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s;position:relative}
+.risk-card:hover{box-shadow:var(--shadow);border-color:var(--border-strong)}
+.risk-card.active{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-ring)}
+.risk-card.lv-critical{border-left-color:var(--critical)}
+.risk-card.lv-high{border-left-color:var(--high)}
+.risk-card.lv-medium{border-left-color:var(--medium)}
+.risk-card.lv-low{border-left-color:var(--low)}
+.risk-card.lv-info{border-left-color:var(--info)}
+.rc-top{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.rc-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.45;flex:1;min-width:0}
+.rc-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}
+.rc-meta .loc{font-size:11.5px;color:var(--text-3);display:flex;align-items:center;gap:4px}
+.rc-meta .loc svg{width:12px;height:12px}
+.rc-foot{display:flex;align-items:center;gap:10px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
+.rc-foot .conf{font-size:11px;color:var(--text-3)}
+.rc-foot .conf b{color:var(--text-2)}
+.rc-foot .human{margin-left:auto;display:flex;gap:4px}
+.hm-btn{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;border:1px solid var(--border);color:var(--text-2);background:var(--surface)}
+.hm-btn:hover{border-color:var(--border-strong);color:var(--text)}
+.hm-btn svg{width:13px;height:13px}
+.hm-btn.ok:hover{background:var(--ok-soft);color:#0e8a52;border-color:#b9e4cf}
+.hm-btn.no:hover{background:#fdebea;color:var(--critical);border-color:#f0c2bf}
+.empty{text-align:center;color:var(--text-3);padding:40px 20px;font-size:13px}
+.empty svg{width:40px;height:40px;opacity:.3;margin-bottom:10px}
+
+/* 详情栏 */
+.detail-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px}
+.detail-head .lv-bar{width:5px;align-self:stretch;border-radius:3px;background:var(--info);flex-shrink:0}
+.detail-head.lv-critical .lv-bar{background:var(--critical)}
+.detail-head.lv-high .lv-bar{background:var(--high)}
+.detail-head.lv-medium .lv-bar{background:var(--medium)}
+.detail-head.lv-low .lv-bar{background:var(--low)}
+.detail-head .t{flex:1;min-width:0}
+.detail-head h3{font-size:15px;font-weight:600;line-height:1.4;margin-bottom:7px}
+.detail-body{flex:1;overflow-y:auto;padding:16px}
+.d-section{margin-bottom:18px}
+.d-section h4{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.d-section h4 .ln{flex:1;height:1px;background:var(--border)}
+.quote{background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:6px;padding:10px 12px;font-size:12.5px;color:var(--text-2);line-height:1.8;font-style:normal}
+.quote .q-loc{display:block;font-size:11px;color:var(--primary);margin-bottom:4px;font-weight:500}
+.basis-item{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--surface)}
+.basis-item .b-head{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.basis-item .b-title{font-size:12.5px;font-weight:600;flex:1;min-width:0}
+.basis-item .b-body{font-size:12px;color:var(--text-2);line-height:1.75}
+.basis-item .b-src{font-size:11px;color:var(--text-3);margin-top:5px;display:flex;gap:10px;flex-wrap:wrap}
+.lvl-tag{font-family:var(--mono);font-size:10.5px;padding:0 6px;border-radius:4px;font-weight:600;line-height:16px}
+.lvl-1{background:#e7f0fe;color:#1a56c4}
+.lvl-2{background:#e6f7ef;color:#0e8a52}
+.lvl-3{background:#fdf6e3;color:#9a6a00}
+.lvl-4{background:#efeafd;color:#5b3bc4}
+.lvl-5{background:#eef1f6;color:var(--text-3)}
+.kv{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.kv .k{background:var(--surface-2);border-radius:7px;padding:8px 10px}
+.kv .k .kl{font-size:10.5px;color:var(--text-3);margin-bottom:2px}
+.kv .k .kv-val{font-size:12.5px;font-weight:500}
+.detail-foot{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--surface-2)}
+.detail-foot .btn{flex:1;justify-content:center}
+.ver-trace{font-size:11px;color:var(--text-3);padding:10px 16px;border-top:1px solid var(--border);background:var(--surface-2);display:flex;flex-wrap:wrap;gap:6px 14px}
+.ver-trace .mono{font-family:var(--mono)}
+
+/* ============ 底部状态栏 ============ */
+.statusbar{height:34px;min-height:34px;background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 16px;font-size:11.5px;color:var(--text-3)}
+.statusbar .item{display:flex;align-items:center;gap:5px}
+.statusbar .item svg{width:13px;height:13px}
+.statusbar .spacer{flex:1}
+.statusbar .state{display:flex;align-items:center;gap:6px;font-weight:500}
+.statusbar .state .pulse{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(18,183,106,.15)}
+
+/* ============ 弹窗 ============ */
+.overlay{position:fixed;inset:0;background:rgba(15,20,32,.5);z-index:1000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+.overlay.show{display:flex}
+.modal{background:var(--surface);border-radius:14px;width:560px;max-width:94vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);animation:pop .16s ease}
+.modal.wide{width:760px}
+.modal.small{width:460px}
+@keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+.modal-head{display:flex;align-items:center;gap:10px;padding:18px 22px 14px;border-bottom:1px solid var(--border)}
+.modal-head h3{font-size:15px;font-weight:600;flex:1}
+.modal-head .x{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;color:var(--text-3);cursor:pointer}
+.modal-head .x:hover{background:var(--surface-2);color:var(--text)}
+.modal-body{padding:20px 22px;overflow-y:auto}
+.modal-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;background:var(--surface-2);border-radius:0 0 14px 14px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12.5px;font-weight:500;color:var(--text-2);margin-bottom:6px}
+.field label .req{color:var(--critical);margin-left:3px}
+.field .desc{font-size:11.5px;color:var(--text-3);margin-top:4px}
+.inp{width:100%;height:38px;border:1px solid var(--border-strong);border-radius:8px;padding:0 12px;outline:none;background:var(--surface);transition:border .15s}
+.inp:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-ring)}
+textarea.inp{height:auto;padding:10px 12px;resize:vertical;line-height:1.7}
+select.inp{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a94ab' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px}
+.radio-row{display:flex;gap:10px;flex-wrap:wrap}
+.radio-card{flex:1;min-width:140px;border:1px solid var(--border);border-radius:9px;padding:12px 14px;cursor:pointer;transition:all .15s}
+.radio-card:hover{border-color:var(--border-strong)}
+.radio-card.active{border-color:var(--primary);background:var(--primary-soft);box-shadow:0 0 0 1px var(--primary)}
+.radio-card .r-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+.radio-card .r-desc{font-size:11.5px;color:var(--text-3);margin-top:4px;line-height:1.5}
+.check-row{display:flex;gap:14px;flex-wrap:wrap}
+.check{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);cursor:pointer}
+.check input{width:15px;height:15px;accent-color:var(--primary);cursor:pointer}
+.upload-zone{border:2px dashed var(--border-strong);border-radius:10px;padding:26px;text-align:center;color:var(--text-3);cursor:pointer;transition:all .15s}
+.upload-zone:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+.upload-zone svg{width:30px;height:30px;margin-bottom:8px;opacity:.6}
+.chip-set{display:flex;gap:7px;flex-wrap:wrap}
+.chip{padding:4px 12px;border-radius:16px;font-size:12px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);cursor:pointer}
+.chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.chip.on{background:var(--primary-soft);color:var(--primary);border-color:var(--primary-ring)}
+
+/* 提示 */
+.toast{position:fixed;right:22px;bottom:22px;z-index:1200;display:flex;flex-direction:column;gap:8px}
+.toast-item{background:#1a2233;color:#fff;padding:11px 16px;border-radius:9px;font-size:12.5px;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:9px;animation:toastIn .2s ease}
+.toast-item svg{width:15px;height:15px;flex-shrink:0}
+.toast-item.ok svg{color:#4ade80}
+.toast-item.warn svg{color:#facc15}
+@keyframes toastIn{from{transform:translateX(20px);opacity:0}to{none}}
+
+/* 进度条 */
+.progress{height:5px;background:#e6eaf2;border-radius:3px;overflow:hidden}
+.progress .bar{height:100%;background:linear-gradient(90deg,#3b5cde,#5b7cff);border-radius:3px;transition:width .4s}
+
+/* 模型/Skill 卡片 */
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.mcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;box-shadow:var(--shadow)}
+.mcard .m-head{display:flex;align-items:flex-start;gap:11px;margin-bottom:12px}
+.mcard .m-ico{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
+.mcard .m-ico svg{width:19px;height:19px}
+.mcard .m-name{font-size:14px;font-weight:600;flex:1}
+.mcard .m-name small{display:block;font-size:11.5px;color:var(--text-3);font-weight:400;margin-top:1px}
+.mcard .m-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.mcard .m-foot{display:flex;gap:7px;border-top:1px solid var(--border);padding-top:11px}
+.mcard .m-foot .btn{flex:1;justify-content:center}
+
+/* 空态与欢迎 */
+.hero{background:linear-gradient(135deg,#1d2b54,#2b4acb);border-radius:14px;padding:26px 30px;color:#fff;margin-bottom:20px;display:flex;align-items:center;gap:20px;position:relative;overflow:hidden}
+.hero h2{font-size:19px;font-weight:600;margin-bottom:6px}
+.hero p{font-size:13px;color:#c6d1ee;line-height:1.6}
+.hero .btn{background:#fff;color:var(--primary);border-color:#fff;font-weight:600}
+.hero .btn:hover{background:#eef1fb;border-color:#eef1fb}
+.hero .deco{position:absolute;right:-30px;top:-40px;width:180px;height:180px;border-radius:50%;background:rgba(91,124,255,.18);filter:blur(2px)}
+
+/* 审查配置：知识库绑定 */
+.sect-label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--text);margin:20px 0 10px}
+.sect-label .ln{flex:1;height:1px;background:var(--border)}
+.mat-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface-2)}
+.mat-item .mi-ico{width:34px;height:34px;border-radius:8px;background:rgba(43,74,203,.12);color:#2b4acb;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mat-item .mi-info{flex:1;min-width:0}
+.mat-item .mi-info b{display:block;font-size:13px;color:var(--text);font-weight:600}
+.mat-item .mi-info span{display:block;font-size:12px;color:var(--text-3);margin-top:2px}
+</style>
+<style>
+/* Requirements-focused overrides: preserve the ds shell while keeping the prototype compact and usable. */
+.hero{background:#263f9f}
+.hero .deco{display:none}
+.brand .mark{background:#2b4acb}
+.avatar{background:#5b7cff}
+.progress .bar{background:#2b4acb}
+.req-filter-set{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.req-filter-set .filter-chip{font-size:11px}
+.req-filter-select,.req-filter-input{height:30px;border:1px solid var(--border);border-radius:7px;background:var(--surface);padding:0 8px;font-size:11.5px;color:var(--text-2);max-width:128px}
+.req-filter-input{width:148px;padding:0 9px}
+.req-filter-input:focus,.req-filter-select:focus{outline:2px solid var(--primary-ring);border-color:var(--primary)}
+.req-risk-topic{font-family:var(--mono);font-size:10.5px;color:var(--text-3);margin-top:3px}
+.req-risk-flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.req-risk-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px dashed var(--border)}
+.req-risk-actions .btn{flex:1;min-width:72px;justify-content:center}
+.req-detail-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.req-detail-actions .btn{justify-content:center}
+.req-source{display:flex;align-items:flex-start;gap:7px;border:1px solid var(--border);border-radius:7px;padding:9px 10px;margin-bottom:7px;background:var(--surface)}
+.req-source .source-body{flex:1;min-width:0}
+.req-source .source-title{font-size:12px;font-weight:600;line-height:1.45}
+.req-source .source-meta{font-size:11px;color:var(--text-3);margin-top:3px;line-height:1.45}
+.req-source.invalid{background:#fff6f5;border-color:#f1c4c0}
+.req-source.l3{background:#fffaf0;border-color:#f1dfaa}
+.req-source.l4{background:#f6f3ff;border-color:#ddd4ff}
+.req-source.l5{background:#f4f6f8;border-color:#dce1e8}
+.req-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.req-field-grid .k{min-width:0}
+.req-field-grid .kv-val{overflow-wrap:anywhere}
+.req-callout{border:1px solid var(--primary-ring);background:var(--primary-soft);border-radius:8px;padding:10px 12px;font-size:12px;color:#3b4f9b;line-height:1.6}
+.req-warning{border-color:#f1dd9a;background:var(--warn-soft);color:#8a6a1a}
+.req-danger{border-color:#f0c2bf;background:#fff6f5;color:#8f2e26}
+.req-version-strip{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-2);padding:7px 16px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px;color:var(--text-3)}
+.req-version-strip strong{color:var(--text-2)}
+.req-version-pill{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:3px 8px;cursor:pointer}
+.req-version-pill.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary)}
+.req-task-panel{margin-top:16px}
+.req-task-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:14px}
+.req-task-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.req-task-actions .btn{min-width:94px}
+.req-state-flow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:8px}
+.req-state-flow span{font-size:10px;padding:2px 6px;border-radius:4px;background:#eef1f6;color:var(--text-3)}
+.req-state-flow span.done{background:var(--ok-soft);color:#0e8a52}
+.req-state-flow span.current{background:var(--primary-soft);color:var(--primary);font-weight:600}
+.req-error-table{width:100%;border-collapse:collapse;font-size:11.5px}
+.req-error-table th,.req-error-table td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+.req-error-table th{color:var(--text-3);font-weight:600;background:var(--surface-2)}
+.req-health-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;border-bottom:1px solid var(--border);padding:8px 0}
+.req-health-row:last-child{border-bottom:0}
+.req-health-row small{display:block;color:var(--text-3);margin-top:2px}
+.req-modal-note{font-size:11.5px;color:var(--text-3);line-height:1.6}
+.req-audit-table td,.req-audit-table th{font-size:11.5px}
+.req-chip-set{display:flex;gap:7px;flex-wrap:wrap}
+.req-chip{padding:5px 10px;border-radius:16px;font-size:11.5px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);cursor:pointer}
+.req-chip.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.req-upload-status{display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface-2);border-radius:7px;padding:9px 10px;font-size:12px;color:var(--text-2)}
+.req-upload-status svg{width:16px;height:16px;color:var(--ok)}
+.req-no-wrap{white-space:nowrap}
+@media (max-width:1100px){
+  .sidebar{width:204px;min-width:204px}
+  .col-doc{width:39%;min-width:320px}
+  .col-risk{width:32%;min-width:280px}
+  .col-detail{min-width:300px}
+  .req-task-grid{grid-template-columns:1fr}
+}
+@media (max-width:860px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100vh;display:block}
+  .sidebar{width:100%;min-width:0;height:auto;display:block}
+  .brand{padding:12px 16px}
+  .nav{display:flex;overflow:auto;padding:8px 10px}
+  .nav-group{display:flex;align-items:center;gap:3px;margin:0 10px 0 0}
+  .nav-group:first-child{margin-top:0}
+  .nav-label{display:none}
+  .nav-item{white-space:nowrap;margin:0}
+  .side-user{display:none}
+  .main{min-height:calc(100vh - 58px)}
+  .view{overflow:visible}
+  .workspace{display:grid;grid-template-columns:1fr;min-height:0}
+  .col-doc,.col-risk,.col-detail{width:100%;min-width:0;min-height:620px;border-right:0;border-bottom:1px solid var(--border)}
+  .col-detail{min-height:650px}
+  .ws-toolbar{height:auto;min-height:52px;flex-wrap:wrap;padding:9px 12px}
+  .ws-toolbar .spacer{display:none}
+  .ws-toolbar .btn{margin-left:auto}
+  .doc-body{padding:20px 14px}
+  .doc-paper{padding:32px 26px}
+  .statusbar{height:auto;min-height:34px;flex-wrap:wrap;padding:8px 12px;gap:7px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .topbar{height:auto;min-height:56px;flex-wrap:wrap;padding:10px 14px}
+  .topbar .spacer{display:none}
+  .hero{border-radius:10px}
+  .req-filter-set{width:100%}
+  .req-filter-input{max-width:none;flex:1}
+}
+@media (max-width:540px){
+  .stats{grid-template-columns:1fr}
+  .view{padding:0}
+  .view > .topbar + div{padding:14px !important}
+  .hero{padding:20px}
+  .project-table{min-width:680px}
+  .panel-body{overflow:auto}
+  .doc-paper{padding:28px 18px;font-size:13px}
+  .req-field-grid{grid-template-columns:1fr}
+  .req-detail-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+</style>
+</head>
+<body data-page-node-id="MuqL0ym0puGKNvrrHc719D">
+<div class="app" data-page-node-id="pSn7KAO0NNrI9juqv6BX2d">
+  <!-- ===================== 侧边栏 ===================== -->
+  <aside class="sidebar" data-page-node-id="vbnaTc2ICpQVEJxYttcPFf">
+    <div class="brand" data-page-node-id="WRgdtnA73bT9tCVXrCBlBD">
+      <div class="mark" data-page-node-id="OgHkH5As4OdJM3lCVf7uy6"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="gAbDobCjJA7XLn8XIRvTml"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" data-page-node-id="TyNgvTp8kJ72gbpnmMRdIl"/><path d="M9.5 12l2 2 3.5-4" data-page-node-id="O6X7B8cCsuwc5zbHugt0et"/></svg></div>
+      <div class="name" data-page-node-id="EHPOcxJQWaIlVNwWmy362f">合同审查 Agent<small data-page-node-id="dARkP6NvP20pK81HodlA4o">Contract Review Workbench</small></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-group">
+        <div class="nav-label">工作区</div>
+        <div class="nav-item active" data-view="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>工作台</div>
+        <div class="nav-item" data-view="review"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13l2 2 4-4"/></svg>审查工作区<span class="badge" id="navRiskCount">6</span></div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">治理</div>
+        <div class="nav-item" data-view="knowledge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>知识库与规则</div>
+        <div class="nav-item" data-view="capability"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 7.7l5.4-.8z"/></svg>能力配置</div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">系统</div>
+        <div class="nav-item" data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>系统设置</div>
+      </div>
+    </nav>
+    <div class="side-user" data-page-node-id="zCIIeL1q0Z1Zj18lLFxiP7">
+      <div class="avatar" data-page-node-id="6jZe8uKgKB8Rw6MDZOZhkP">法</div>
+      <div class="who" data-page-node-id="Ea8edU1jxxaw9D8zf5BmOC"><b data-page-node-id="HD2Ccyv8tQsWA62GjyKOT">法务用户</b><span data-page-node-id="sgJc75IFCy5pFuMmdCDAS6">复核 / 规则维护</span></div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7d879c" stroke-width="2" data-page-node-id="Pp3tEB08sb2lPsiaq4hn7u"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z" data-page-node-id="hAod0VvLm43PGAjzyAuq3T"/><path d="M4 21a8 8 0 0 1 16 0" data-page-node-id="p0qC0qJ0bpd7fq02J0k0Mb"/></svg>
+    </div>
+  </aside>
+
+  <!-- ===================== 主区 ===================== -->
+  <div class="main" data-page-node-id="GEpdg8pk496BjDoQf6kdAO">
+
+    <!-- ===== 视图：工作台 ===== -->
+    <div class="view" id="view-dashboard" data-page-node-id="iL4bdaWwqn0XSmNlY320Ku">
+      <div class="topbar" data-page-node-id="BTqe47IuXwdD0qAqqHhPyG"><h1 data-page-node-id="5FUBmaBVIKh2bhULmFEgVZ">工作台</h1><span class="spacer" data-page-node-id="yv7mEUXdy80FIm8KuUEw5o"></span>
+        <button class="btn ghost" onclick="toast('已刷新数据','ok')" data-page-node-id="W8XZGir0FkxgXzU7towgGp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="vjUEaxhGGoLQE1ywRZYDEt"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" data-page-node-id="ZvYArEBKlRDLWGCWXQFCfZ"/></svg>刷新</button>
+        <button class="btn primary" onclick="openUpload()" data-page-node-id="z624HzDW37Um7FjH1h3KqM"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="MXnrHShtwhou2yFIaL0oPQ"><path d="M12 5v14M5 12h14" data-page-node-id="zt9Y9gZ2gc6boVnpnxefh7"/></svg>新建审查</button>
+      </div>
+      <div style="padding:22px" data-page-node-id="AZnZu72uTouCTJlEoZfH2Z">
+        <div class="hero" data-page-node-id="GVCEjqzYV6tnpStlkbG5Z0">
+          <div style="flex:1" data-page-node-id="pPEFDoqwW7fhrZZONk79bV">
+            <h2 data-page-node-id="ZXUEz4vsHNTKsF1uSOzII0">合同审查工作台</h2>
+            <p data-page-node-id="2iNpfZVJRxDpLBDGNgIOPe">当前项目为 <b style="color:#fff" data-page-node-id="XnohYZTspR3SfJr2ZG0bVZ">华东供应链设备采购合同</b>，AI 已完成初审，正在等待法务确认高风险和需核验事项。</p>
+            <div style="margin-top:16px;display:flex;gap:10px" data-page-node-id="fkuoklwH0BBR8cvcBqiJgy">
+              <button class="btn" onclick="openUpload()" data-page-node-id="SMNM0qBbuZntdJogKBlLRB">上传合同</button>
+              <button class="btn" style="background:rgba(255,255,255,.12);color:#fff;border-color:transparent" onclick="goReview()" data-page-node-id="uup9RsnEpzfJVXICuKGkCA">进入审查工作区</button>
+            </div>
+          </div>
+          <div class="deco" data-page-node-id="N5EeboPQ20IGknxmZLjJg9"></div>
+        </div>
+        <div class="stats" data-page-node-id="1nr3ozxdRBJmaqNydxDnET">
+          <div class="stat" data-page-node-id="2RlVMoEzaaJPO8GBFwcvkN"><div class="lbl" data-page-node-id="KTBp1PHfzYDzl3AlX4FEuA">全部项目</div><div class="num" data-page-node-id="NZeY5yuL9JdmvDwoMwrKIF">24<small data-page-node-id="PynGkVZXz5s9OSvoGC8CEl">个</small></div><div class="trend" data-page-node-id="qimu9uxDmxDbwBJI0yPDyn">本月新增 <b data-page-node-id="XaXhku4HyXul6vy8QmCBBl">+5</b></div><div class="ico" data-page-node-id="pIAoE4YZVY5I8A7nO9VGMB"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="UZeiOwsolrqfBxKWSnD5BR"><path d="M3 7h18M3 12h18M3 17h10" data-page-node-id="wbCNPXLbJCELBEYizq184m"/></svg></div></div>
+          <div class="stat" data-page-node-id="cDNOxhb6OoSzu7TEjXy1kk"><div class="lbl" data-page-node-id="wh1I1G92zzK2ouDagKEQXg">待人工任务</div><div class="num" data-page-node-id="XIOcpgKpKA3fPzXWH0YkBP">1<small data-page-node-id="ktkrgZEQevw1tGHkiyS0Gw">个</small></div><div class="trend up" data-page-node-id="dmFON34z4Y6bfY0l1UM6tZ">高风险与需核验 <b data-page-node-id="ZhaWzSNHA0KD20CpfGKGGp">待处理</b></div><div class="ico" data-page-node-id="ziYlZ2OEWaEOGuOsntBRWd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="Iq7IfypYEcO3mPp126rB6c"><circle cx="12" cy="12" r="9" data-page-node-id="qOGGTDvbUH8DGySD4uFwI1"/><path d="M12 7v5l3 3" data-page-node-id="ztsTeUTLfyA3W92FHKWdcC"/></svg></div></div>
+          <div class="stat" data-page-node-id="kaxl8canmexKomY0c5p8KJ"><div class="lbl" data-page-node-id="sN5Os8ed6L3djNEg3SCBTD">发现风险</div><div class="num" data-page-node-id="ji3DeDF0BZyB8O4fJirWmd">6<small data-page-node-id="qlJi12vCRGFFLTd9lNLWtY">条</small></div><div class="trend" data-page-node-id="SS09S2kany9own7II6eOSo">critical/high <b data-page-node-id="f7Ceu1K8U6HcnD62D2H714">3 条</b></div><div class="ico" style="background:#fdebea;color:var(--critical)" data-page-node-id="aG9TSaZeuiNG2waQNcc3hc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="sou6Ii5gwHmp1QK1sHqn1N"><path d="M12 3l9 16H3z" data-page-node-id="0iPNgLzeMg3spN8hX5TGox"/><path d="M12 10v4M12 17h.01" data-page-node-id="XEgkHBYzgyIH5y5VtvWjNe"/></svg></div></div>
+          <div class="stat" data-page-node-id="5bz3387gHtqHEFy3mK4zTY"><div class="lbl" data-page-node-id="WvesUGYGFhea2wBkgG4fYu">审查版本</div><div class="num" data-page-node-id="sXOOwFXhZLPWrVTTcy93Lz">3<small data-page-node-id="PfQKFTeafiiwSLBHJ0BGMv">个</small></div><div class="trend down" data-page-node-id="JibZRAvCuCXVmj3QCHfBwH">AI 原始 + <b data-page-node-id="xRN4X5OfCez2sg1Fo9lHuJ">2 次人工修订</b></div><div class="ico" style="background:var(--ok-soft);color:var(--ok)" data-page-node-id="KSmFC3005aQy7Emaj1fgip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="5up3QbBevxSsgwlEkk9TCl"><path d="M20 6L9 17l-5-5" data-page-node-id="ncws69RqS2AOxjeQYZ4sKO"/></svg></div></div>
+        </div>
+
+        <div class="panel" data-page-node-id="Pgvt01Ex6JqSiWB1gA2ECT">
+          <div class="panel-head" data-page-node-id="STmLHe9MsDIqTwAoARi2nK"><h2 data-page-node-id="r31KdetlRYje70P4lggGYB">审查任务</h2><span class="hint" data-page-node-id="QDVnY3oYiLrWHVMNzT51L1">按状态与合同类型筛选</span><span class="spacer" data-page-node-id="0wePvzOvBU199v26dlggIw"></span>
+            <div class="filters" id="taskFilters" data-page-node-id="Rg4vFu16e2wr4FhicO2Adg">
+              <div class="filter-chip active" data-f="all" data-page-node-id="BxnOp9JUwAa5eXD553FX1e">全部</div>
+              <div class="filter-chip" data-f="working" data-page-node-id="E5G35moYs0HDTT81iFT1ak">进行中</div>
+              <div class="filter-chip" data-f="waiting_confirmation" data-page-node-id="ZyxfJovAwoaNRTZ5ez1gDP">待复核</div>
+              <div class="filter-chip" data-f="completed" data-page-node-id="Xreraz3G63KsicaZLXL1Ng">已完成</div>
+              <div class="filter-chip" data-f="partial" data-page-node-id="m1HrpjaSxHTYooLqOZtIlc">部分完成</div>
+            </div>
+          </div>
+          <div class="panel-body" data-page-node-id="wNbxK4GsXPALhGTcmZISvn"><table data-page-node-id="H6xwRjJ6SDOnaFBODFSmty">
+            <thead data-page-node-id="LedChwHLluhcR4SRwHhzYj"><tr data-page-node-id="dU9y25CZIKAbV4viZxSgxn"><th data-page-node-id="4Cme0pgP6NFDZq9JHrJD4z">任务 / 合同</th><th data-page-node-id="iRJEzg6EBG4jknqrkQJQSM">合同类型</th><th data-page-node-id="ac1q8KVpaeMMHbtWx8NufT">状态</th><th data-page-node-id="ORAKfitqneogBhaAuZADOd">进度</th><th data-page-node-id="zboYervPemrifbXuIO0CRH">风险</th><th data-page-node-id="WBJm6OouNRRjt7F7qTPCGR">更新时间</th><th data-page-node-id="kXQQJ539vIYNhxWwbssP0E"></th></tr></thead>
+            <tbody id="taskTable" data-page-node-id="Uq3aoGy9MH9uq59WkNxY8i"></tbody>
+          </table></div>
+        </div>
+        <div class="req-task-grid req-task-panel">
+          <div class="panel">
+            <div class="panel-head"><h2>任务状态与 Checkpoint</h2><span class="hint">submitted / working / validating / waiting_confirmation / completed</span><span class="spacer"></span><span class="badge b-warn" id="taskStateBadge"><span class="dot"></span>waiting_confirmation</span></div>
+            <div class="panel-body" style="padding:16px">
+              <div class="kv">
+                <div class="k"><div class="kl">task_id</div><div class="kv-val mono">task_20260910_hdsc_001</div></div>
+                <div class="k"><div class="kl">checkpoint_id</div><div class="kv-val mono" id="checkpointId">ckpt_20260910_153240</div></div>
+                <div class="k"><div class="kl">idempotency_key</div><div class="kv-val mono">idem_hdsc_contract_v3</div></div>
+                <div class="k"><div class="kl">last_error_code</div><div class="kv-val mono" id="lastErrorCode">SOURCE_UNAVAILABLE</div></div>
+              </div>
+              <div class="req-state-flow" id="stateFlow"></div>
+              <div class="req-task-actions">
+                <button class="btn" onclick="transitionTask('input_required')">暂停 / 待补充</button>
+                <button class="btn" onclick="transitionTask('working')">继续</button>
+                <button class="btn" onclick="transitionTask('validating')">校验</button>
+                <button class="btn" onclick="transitionTask('completed')">确认完成</button>
+                <button class="btn" onclick="transitionTask('failed')">模拟失败</button>
+                <button class="btn danger" onclick="transitionTask('cancelled')">取消</button>
+                <button class="btn" onclick="restoreCheckpoint()">Checkpoint 恢复</button>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Validator 与错误码</h2><span class="hint">导出前强制执行</span></div>
+            <div class="panel-body" style="padding:12px">
+              <table class="req-error-table">
+                <thead><tr><th>校验项</th><th>状态</th><th>错误码</th></tr></thead>
+                <tbody id="validatorRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 视图：审查工作区 ===== -->
+    <div class="view" id="view-review" style="display:none;flex-direction:column;padding:0" data-page-node-id="nWTfAXZyFz0Ctw4B0eLgjY">
+      <div class="ws-toolbar" data-page-node-id="rxOYbGOcj8zoOr0nWcqGEf">
+        <div class="back" onclick="showView('dashboard')" data-page-node-id="z2W2ea2E2VKBdNoAGyRBji"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="FaBzpMKjx0KthbFniiW9rW"><path d="M15 18l-6-6 6-6" data-page-node-id="CeNXsTyDiT6mvkRnB73IgA"/></svg>返回</div>
+        <div class="doc-title" data-page-node-id="hlMCeJ00KHbTBpOJFW3FM4"><span class="badge b-cat" id="wsDocType" data-page-node-id="53TDu6AiCH8TmzjZIqcZ9k">采购合同</span><span class="txt" id="wsDocName" data-page-node-id="L28FtBpjwCCuGJm6dAz73g">XX科技 服务器及网络设备采购合同</span></div>
+        <span class="spacer" data-page-node-id="y7ElmGiWOiXurKt0jl60dV"></span>
+        <span class="badge b-status" id="wsTaskState" data-page-node-id="EuocbbFEEuUBkcccJrTlDt"><span class="dot" style="background:var(--warn)" data-page-node-id="8zBPTHHDJ0wCFlABtHFDlP"></span>待复核</span>
+        <button class="btn" onclick="openReviewConfig()" data-page-node-id="2OjbtOCablWZkMEF3e1qUO"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="4TfH93dxjKPAETbjhMfxpn"><circle cx="12" cy="12" r="3" data-page-node-id="6JNwXfwA3ekp2kkq94ji0l"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" data-page-node-id="TdyZHFrKoEHoX0UmW2RM91"/></svg>知识库配置</button>
+        <button class="btn" onclick="openExport()" data-page-node-id="4WL1fylmua4VaQdBz7bhza"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="7l73MYdO9QHGHgl8UgBeIS"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" data-page-node-id="Dw3dElI0ACqBQICumC4yNW"/></svg>导出报告</button>
+      </div>
+      <div class="workspace" data-page-node-id="GXFoQ0Yv2j4kJ4468W9pX4">
+        <!-- 左：文档 -->
+        <div class="col-doc" data-page-node-id="l80iw8go1Sf5hpkiIhWv5x">
+          <div class="doc-tools" data-page-node-id="EidPYg5CGBL1TwMDEWr4YN">
+            <div class="tool" title="放大" data-page-node-id="kxMBiTCAGfGG3R9I3lv7eo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="AiunWpN72c1u3UEO4LDMAz"><circle cx="11" cy="11" r="7" data-page-node-id="BZBzzyAaz9Q8HMWrKKFJnm"/><path d="M21 21l-4-4M11 8v6M8 11h6" data-page-node-id="eYyVDPXkqg8gypuE55CPqJ"/></svg></div>
+            <div class="tool" title="缩小" data-page-node-id="c7A0b6DRxPZbLkhnjzfIvd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="ZRvr8fv9QGtuf6kZ1qfwD7"><circle cx="11" cy="11" r="7" data-page-node-id="R7eY1Bc9tqkcMzKOZGuBS2"/><path d="M21 21l-4-4M8 11h6" data-page-node-id="jgjqRX9sFDGEY7YQhe6jQq"/></svg></div>
+            <div class="pg" data-page-node-id="pJfBkvOQO53fqYg8l5UoBF">第 1 / 12 页</div>
+            <div class="tool" title="上一页" data-page-node-id="QVTO5ZHbYfa62EeraGFP9w"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="omfHxAaDP3zWe26zfJcDG5"><path d="M15 18l-6-6 6-6" data-page-node-id="WVjxMiEgV2fexZbe0hBCdK"/></svg></div>
+            <div class="tool" title="下一页" data-page-node-id="yJea2cfsk5SFoqNV51IAke"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="KvyDvnKhwFrFEUguDxBEvZ"><path d="M9 6l6 6-6 6" data-page-node-id="0dVDR9CXTwDRx0X2lQVAyl"/></svg></div>
+            <div class="tool" title="目录" data-page-node-id="vo1puTz8QAuKrM4nQPeZCa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="Gyxd6qZf9IwciyupzM28yj"><path d="M4 6h16M4 12h16M4 18h10" data-page-node-id="VCdMi2u5HM8pj0QWHLhj5n"/></svg></div>
+            <div class="search" data-page-node-id="NQAK2XugxfCiGjKyDkRCSS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="BUmmbkQxNHMK9STtSua5vs"><circle cx="11" cy="11" r="7" data-page-node-id="2kkBsGgtZKbFst6lnDY09m"/><path d="M21 21l-4-4" data-page-node-id="ITDm8QML6tzdHbq4Ix1LXC"/></svg><input placeholder="搜索正文…" data-page-node-id="6PWOsSwuvyXiLQPxGJww42"></div>
+          </div>
+          <div class="doc-body" data-page-node-id="3WOguIdZ9EmdR6OrEayqPF">
+            <div class="doc-paper" id="docPaper" data-page-node-id="i3rvhe8G3Up1whlDGU6K7T">
+              <h3 class="doc-title" data-page-node-id="5M36l2G0GYYvPppUst28Ig">服务器及网络设备采购合同</h3>
+              <p class="no-indent" style="font-size:12.5px;color:#8a94ab;text-indent:0" data-page-node-id="2SYSOiLe6CD9R3SnPz1Bc5">合同编号：CG-2026-0910-001 · 签订日期：2026 年 09 月 01 日</p>
+              <p class="no-indent" style="font-size:12.5px;color:#8a94ab;text-indent:0" data-page-node-id="jqq4pao7Nzi5LttyKafHx5">甲方（采购方）：XX科技有限公司　　乙方（供货方）：YY信息技术有限公司</p>
+              <p class="clause" data-page-node-id="8glo6btmURQ1WZcdmhvcAh">第一条　合同标的与规格</p>
+              <p data-page-node-id="xCxEMv3kN4P3Nd34LIvF3j">1.1 乙方向甲方供应服务器 20 台、核心交换机 4 台，具体规格、型号与数量以附件一《设备清单》为准。</p>
+              <p class="clause" data-page-node-id="wwMjJuFq2tz75elmyFFmLK">第二条　价格与付款</p>
+              <p data-page-node-id="TEF0sR1YmQgIUHhcyTn4wy">2.1 合同总价为人民币 <mark class="hl-high" data-risk="risk_002" data-page-node-id="hPMm8QiFDKx9xSU4A8BdyQ">2,680,000 元</mark>（大写：贰佰陆拾捌万元整），含 13% 增值税。</p>
+              <p data-page-node-id="fKvyTgUMMq0GEvEP6sYSOT">2.2 付款方式：<mark class="hl-critical" data-risk="risk_001" data-page-node-id="eD7KG1QoPCHPT9MUVKqf2q">合同签订后 5 日内，甲方支付合同总价的 60% 作为预付款</mark>；设备到货验收合格后支付 35%；剩余 5% 作为质保金，质保期满后支付。</p>
+              <p data-page-node-id="vNgUkuh8yPErPHrYjSCreX">2.3 发票：乙方应在每次付款前向甲方开具等额增值税专用发票。</p>
+              <p class="clause" data-page-node-id="5AdRAwSZcFE7GIwpx3QsFU">第三条　交付与验收</p>
+              <p data-page-node-id="TqxLsv0aO20EavX9o8F2kd">3.1 交付时间：乙方应于 2026 年 10 月 15 日前完成全部设备交付。</p>
+              <p data-page-node-id="t326FrW7hwR3K5B3xGttcW">3.2 验收：<mark class="hl-medium" data-risk="risk_004" data-page-node-id="rL7n5cduL1TVi7YWkmI1e2">甲方应在设备到货后 7 日内完成验收</mark>；逾期未提出书面异议的，视为验收合格。</p>
+              <p class="clause" data-page-node-id="EXzoVLWFkDnse3dBcHwWsE">第四条　质量保证与售后服务</p>
+              <p data-page-node-id="1zauRw4MmuPED5SzJF1ioh">4.1 乙方提供 <mark class="hl-medium" data-risk="risk_005" data-page-node-id="xe5FeV54o2N5kFz1Pv1BaT">36 个月</mark> 的免费质保服务，自验收合格之日起算。</p>
+              <p class="clause" data-page-node-id="KTTybZgvUk175qIfmsbIuE">第五条　违约责任</p>
+              <p data-page-node-id="iw0iew2DzBVltLWv6KVOnp">5.1 <mark class="hl-critical" data-risk="risk_003" data-page-node-id="6sz5y3APEtTND25De91c52">任何一方违约，应赔偿对方因此遭受的全部直接及间接损失</mark>，并支付合同总价 30% 的违约金。</p>
+              <p class="clause" data-page-node-id="SqfSgCF5uNJycrEabJ7rRf">第六条　争议解决</p>
+              <p data-page-node-id="rUZtaxWdtIPNSE5io1dmja">6.1 因本合同引起的争议，双方应友好协商；协商不成的，<mark class="hl-low" data-risk="risk_006" data-page-node-id="eTbYnxPrzOI98P2PhBCbe6">提交甲方所在地有管辖权的人民法院</mark>诉讼解决。</p>
+              <p class="clause" data-page-node-id="nIUhG2ON4fVw47fFiRvI9l">第七条　其他</p>
+              <p data-page-node-id="uoxO5TExiX6HCIG7Jz4mth">7.1 本合同自双方授权代表签字并加盖公章之日起生效，一式肆份，双方各执贰份。</p>
+              <p style="text-indent:0;margin-top:40px;color:#8a94ab;font-size:12px" data-page-node-id="Rwv1aFTgGLg1CqPFpZJeKw">（以下无正文）</p>
+            </div>
+          </div>
+        </div>
+        <!-- 中：风险清单 -->
+        <div class="col-risk" data-page-node-id="yUGKRn2w8g7tulXghqCF6C">
+          <div class="risk-tools" data-page-node-id="1bN75WKgtcoahfMcNQ8kQm">
+            <span class="count" id="riskCount" data-page-node-id="R05JGxYIL9f6Q3TwIJruto">6 条风险</span><span class="spacer" data-page-node-id="3WkJ2ZBaP6CsjTp8tz9MiN"></span>
+            <div class="filters" id="riskFilters" data-page-node-id="OTkTn1ubxj1ZuSOnekDt4f">
+              <div class="filter-chip active" data-lv="all" data-page-node-id="qNWsQcAOeGTIgFORyelOa7">全部</div>
+              <div class="filter-chip" data-lv="critical" data-page-node-id="omVI8prCCFUDY8Ox3M0yTz">严重</div>
+              <div class="filter-chip" data-lv="high" data-page-node-id="5Sp6HiCMdPBW6KIGks6sCB">高</div>
+              <div class="filter-chip" data-lv="medium" data-page-node-id="TAaqcSVVbAKv3KnyttD1TS">中</div>
+              <div class="filter-chip" data-lv="low" data-page-node-id="ZX9nbe1BXW8FAttOF0DSOz">低</div>
+            </div>
+          </div>
+          <div class="risk-list" id="riskList" data-page-node-id="JKcEhd4IVHP1ZcIiDFvBD7"></div>
+        </div>
+        <!-- 右：详情 -->
+        <div class="col-detail" data-page-node-id="4RRvrTgT3U3U7V4Qo8cIML">
+          <div id="detailArea" data-page-node-id="hFMC2ETLd5Am8MqDwoYhOK"></div>
+          <div class="ver-trace" id="verTrace" data-page-node-id="HouSx0whwn4z79DC1cwdyy"></div>
+        </div>
+      </div>
+      <div class="statusbar" data-page-node-id="yfxpc8og3y7XrQgVfbjssT">
+        <div class="item state" data-page-node-id="w3xz3gp6gMjasqeQmWUfeR"><span class="pulse" data-page-node-id="qxxU7p5SvA4HrkT0DOXiCX"></span><b style="color:var(--text)" data-page-node-id="G2mj1F1tsnwPHaStegwbrt">任务状态：</b>等待人工复核</div>
+        <div class="item" data-page-node-id="VWLz0remH5zN4XvnULamRV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="EaVYrYLLKpjMmOEgu31T3T"><path d="M12 8v4l2.5 2.5" data-page-node-id="UvOYVjB0Fmn03AnbGj1Rxz"/><circle cx="12" cy="12" r="9" data-page-node-id="ncjASBLr3USH4B9teR7tHU"/></svg>审查模式：标准审查</div>
+        <div class="item" data-page-node-id="3qj7MdClRB3nGxrCzyWlI8">法律快照：legal-snapshot-v1.3</div>
+        <div class="item" data-page-node-id="YBwLbohr4DU3BcHNhAxVMA">规则集：procurement-rules@2.1</div>
+        <span class="spacer" data-page-node-id="EFyiNjh5cfFTvDgZBTQ4UC"></span>
+        <div class="item" data-page-node-id="BeVmYTkvPFMTHwUauXuFiO">模型：hunyuan-pro · 配置 v3</div>
+        <div class="item" data-page-node-id="e0PHob7DH2DZNAOB0AADgA">实时核验：<span style="color:var(--text-3)" data-page-node-id="VE8vIncirRqOklSxQpanR9">未请求</span></div>
+      </div>
+    </div>
+
+    <!-- ===== 视图：知识库 ===== -->
+    <div class="view" id="view-knowledge" style="display:none" data-page-node-id="FJ3I9Wi4zpaOeckP8E9xbG">
+      <div class="topbar" data-page-node-id="nSP46e0RNuNNFoTbB3lc5q"><h1 data-page-node-id="JJHAMhC3RVSK5dbD04CnzT">知识库</h1><span class="spacer" data-page-node-id="uBhx31lr5jAAsuECriJgaa"></span><button class="btn primary" onclick="toast('导入法律快照（原型演示）','ok')" data-page-node-id="5GVUCAVfLhbzmGDGbtR5bq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="FU5mRDTOKjAulYGKyIL78u"><path d="M12 3v12M7 10l5 5 5-5" data-page-node-id="h7JOsNgVHqphtDoYPGXsxe"/><path d="M4 21h16" data-page-node-id="F8KsKCx0HZAqBrZl9EcSJv"/></svg>导入法律快照</button></div>
+      <div style="padding:22px" data-page-node-id="R1o2Cgf2n6o2PsCDoyisFC">
+        <div class="tabs" id="kbTabs" data-page-node-id="B6uePNEoyZFFsltHwwXEgn">
+          <div class="tab active" data-kb="snapshot" data-page-node-id="qzrwX2iXsDOUEf8cT0sGor">法律快照</div>
+          <div class="tab" data-kb="rules" data-page-node-id="Px9xUcCT0BhspxoRLD2wQB">确定性规则库</div>
+          <div class="tab" data-kb="policy" data-page-node-id="im3spkMsjiPmb6L4cp6Y8X">企业制度</div>
+          <div class="tab" data-kb="memory">记忆</div>
+        </div>
+        <div style="margin-top:16px" data-page-node-id="Z3cR6oQUY2rahvr6rq2Suj">
+          <div class="panel" id="kbSnapshot" data-page-node-id="zbkNSrtGIKSDiKd1yWaE6O">
+            <div class="panel-head" data-page-node-id="fMgzINaPH7YFxCQvFDvA0N"><h2 data-page-node-id="BwWRdKEbMw1AxsefZuj8LB">法律知识快照</h2><span class="hint" data-page-node-id="QPgJwJVWez2TTKsInGtlke">标准审查须绑定 published 快照</span></div>
+            <div class="panel-body" data-page-node-id="fJWGYjdX68Q5IinlUAsfLb"><table data-page-node-id="8asUyqDcZ7XvzoY8PPF8N9">
+              <thead data-page-node-id="5QC4za6SRA2JJQth3G4ulM"><tr data-page-node-id="3jXXA4r8xQ2elXzOjiJmGm"><th data-page-node-id="FtMznelDD5ntRz0wQY5W7P">快照版本</th><th data-page-node-id="jAXMHgqcanOR8RJcCAsGFf">状态</th><th data-page-node-id="dYB3hC8IC47S35y3gyJEHg">覆盖法规</th><th data-page-node-id="mOKZtFirDurRslRBivufFi">生成时间</th><th data-page-node-id="EMud8Nf08QIvZejWXlvaJJ">内容哈希</th><th data-page-node-id="CPcMaSSs8QWycdB5c0rdkH">操作</th></tr></thead>
+              <tbody data-page-node-id="QyC9ZPoW1MFfCCNgDM24Kj">
+                <tr data-page-node-id="WpfQI2QRlUcPHks3BH9NZG"><td class="mono link" data-page-node-id="bbEJfvAQ8hgjulmpJlUYqE">legal-snapshot-v1.3</td><td data-page-node-id="eMdI2iPXLeV7hsQZUPQ7YI"><span class="badge b-ok" data-page-node-id="62cvnWYDkG3VAp7HyqRiC8"><span class="dot" data-page-node-id="JyRlANXJel15VVLhmwOt4Z"></span>published</span></td><td data-page-node-id="1POhFjEJCFhca6aHAiiVPg">128 部法规 · 5 类合同</td><td data-page-node-id="UmUbaKF62C3SWoW41jYfSk">2026-09-05</td><td class="mono" data-page-node-id="GtmLTizNvnwio7tiNObV3D">sha256:9f3a…c2e1</td><td data-page-node-id="p9fySqg4CJ3wzGzKsADlFo"><span class="link" data-page-node-id="9c5bYmf4tuwjiqfQDyKFyZ">查看清单</span> · <span class="link" data-page-node-id="JBg3NNSbWCtA2qm263rcTk">设为默认</span></td></tr>
+                <tr data-page-node-id="MgD0mvC2EbmLEmzBNNUhVC"><td class="mono link" data-page-node-id="9mXACv3EulB2H2wZnH9NuG">legal-snapshot-v1.4-draft</td><td data-page-node-id="nGEUpfeh0OSiCT6jXvybiC"><span class="badge b-warn" data-page-node-id="Tvj8PHfO2Z5D33FQkHcFri"><span class="dot" data-page-node-id="9tNfpOQ2SVgHKoQaZYeqTi"></span>validating</span></td><td data-page-node-id="zFFCaa4THA4UPU06HDijLF">132 部法规（含建工解释二）</td><td data-page-node-id="XykIujEOFw8sGjcuGSSXAe">2026-09-09</td><td class="mono" data-page-node-id="O1Pd02LfuVg2YIsSS195pl">sha256:7b1d…88aa</td><td data-page-node-id="5HAmFeEoshBprnpeKYZSJu"><span class="link" data-page-node-id="NLhiamIeEQKqi8viz86pQs">查看校验</span></td></tr>
+                <tr data-page-node-id="FzetaNMcL0npYbbrx1W4EJ"><td class="mono link" data-page-node-id="qdnpma7Odr7UEZYJi6yFeA">legal-snapshot-v1.2</td><td data-page-node-id="esiS2qXfCyQosI9EG6A5ZK"><span class="badge b-muted" data-page-node-id="pDMPj5n4FThL4SInYmSy6k"><span class="dot" data-page-node-id="82Oiefaoj3btRkTi97PG5E"></span>superseded</span></td><td data-page-node-id="uvskExTIzIs8Cm6EuysNBg">120 部法规</td><td data-page-node-id="nYDsDHxn2M8lYRjV9IDrE5">2026-07-20</td><td class="mono" data-page-node-id="cnxia0enDlzBOuK5OB1tFS">sha256:41c2…07fe</td><td data-page-node-id="4fCU3eVGbGsjYq7DtDubCr"><span class="link" data-page-node-id="JIpFgWFslCDtAC7B23TSB0">查看</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="panel" id="kbRules" style="display:none" data-page-node-id="600w0B56SguhW9it5EN2NO">
+            <div class="panel-head" data-page-node-id="QYeb3FFCBCsi3uhqylW5fD"><h2 data-page-node-id="x8yws1YOiHmhtZ4fgH0202">确定性规则库</h2><span class="hint" data-page-node-id="80V03CxlfRbESEapdZW0XD">规则命中/未命中/无法判断均须带 rule_id 与版本</span></div>
+            <div class="panel-body" data-page-node-id="y7U4im7X2aKnQkeqOnDwEA"><table data-page-node-id="vr0x3GLgPqlYuDRb2EQbmZ">
+              <thead data-page-node-id="d1OMeutkEOcJgOuJDFZu0W"><tr data-page-node-id="XV10oHCRy24FTGw0OSYtdp"><th data-page-node-id="t8XgAC6siVKRM0OIbe4r08">规则 ID</th><th data-page-node-id="G8x2IQcROTCwout4euPR6c">类型</th><th data-page-node-id="7bPbk7ycIpeP6HMrVjJTyc">适用</th><th data-page-node-id="huK6MfrqttDnILtHK1v6Kd">优先级</th><th data-page-node-id="HNNA3K91YV0mVKmqu6yda9">版本</th><th data-page-node-id="vvvrHZQYcXxu7iIyeM3Fov">状态</th></tr></thead>
+              <tbody data-page-node-id="r6TcCwnf3oBnb9RmjNNvxL">
+                <tr data-page-node-id="RaOFBRMj3sK8jneLI2WzBg"><td class="mono" data-page-node-id="oClfEsGflxT4frDm8eIDWK">contract.amount.cross_document</td><td data-page-node-id="eaVvZ3vLN0VAinqMdBQExS"><span class="badge b-muted" data-page-node-id="G9GGzh700FVm8wDdtOCrna">cross_document</span></td><td data-page-node-id="q8zBngmisFj7lqppjnz8YZ">全部</td><td data-page-node-id="vphfjtr9fJn8jvRsu8xiRn"><span class="badge b-err" data-page-node-id="TE92BRIIVU4GbPZ3dDC9Ju">blocker</span></td><td class="mono" data-page-node-id="C7mlTda47NzZihxMWRhm13">v1</td><td data-page-node-id="Wx0VOVzeebyxViFlP8WD5S"><span class="badge b-ok" data-page-node-id="gUuQ1ZJRanbCPBvb2F3csv">active</span></td></tr>
+                <tr data-page-node-id="zba3JgtaG94cIg4WN3CWqq"><td class="mono" data-page-node-id="W088AFlUDcMaBrbFVZxqDq">contract.date.logic</td><td data-page-node-id="MNLlc0FRdqo6ZWzMNYjayz"><span class="badge b-muted" data-page-node-id="F2FGm6nWuGpZzrecXCBX6m">date_logic</span></td><td data-page-node-id="AOFgxoaTztlBzcSMW4edXc">全部</td><td data-page-node-id="MBnf13EGj7KnMGfwgRriJ2"><span class="badge b-warn" data-page-node-id="My8L61GuXgHcxDT3gPifEZ">high</span></td><td class="mono" data-page-node-id="VhloJ6tW3SJZOTB22OrLXG">v2</td><td data-page-node-id="PcN4d0ELZ31JvhcbXpuM3G"><span class="badge b-ok" data-page-node-id="sRr0p8VkS0aMYzUpI0HoSh">active</span></td></tr>
+                <tr data-page-node-id="Hfre5svC9MGWxBFpiOgZ3A"><td class="mono" data-page-node-id="szFDFYXWdfrIdBT6FN0t1O">contract.liability.scope</td><td data-page-node-id="SMIQ7mcv8O93IviNc3WNVA"><span class="badge b-muted" data-page-node-id="Vnl1exVmUT6BCKHclOjHzs">policy_match</span></td><td data-page-node-id="gBq8V9RwYGLwgPJ5orySHv">全部</td><td data-page-node-id="RXdBUZBvTplSQwrlWzh0ET"><span class="badge b-err" data-page-node-id="8MTOM3Y8YoP5TqGAHBRAMN">blocker</span></td><td class="mono" data-page-node-id="ES4Sv8WqUngCVi3JJVo1bj">v1</td><td data-page-node-id="vKo8miSLTzSTKOhGZTKJs7"><span class="badge b-ok" data-page-node-id="vhqJ7k8HW9iLDiQ68AB8Gd">active</span></td></tr>
+                <tr data-page-node-id="FGtwmvpQVuxlfCjrnEYNea"><td class="mono" data-page-node-id="uaq8ZdkPPWZAZCgvfW1AWp">procurement.prepayment.ratio</td><td data-page-node-id="pooh88bJ7CrXLNo9vRsyca"><span class="badge b-muted" data-page-node-id="z0svPLUnfKcFuyOt6SeveJ">arithmetic</span></td><td data-page-node-id="m0BDF67aGkTPCca0CZQddb">采购</td><td data-page-node-id="OjRK8oDx0gy4iEajdOUhpv"><span class="badge b-err" data-page-node-id="04eUkcNxm4GoTiBa7SUHV3">blocker</span></td><td class="mono" data-page-node-id="OokZznN0fz6e2PHNJiaE8u">v1</td><td data-page-node-id="wzJO0gk9pJcSC4YUwCSEo6"><span class="badge b-warn" data-page-node-id="xBDQ9wf0geHKiYtrWBLXVo">draft</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="panel" id="kbPolicy" style="display:none" data-page-node-id="Wb6NWqLvbnU3wa2QFC39xk">
+            <div class="panel-head" data-page-node-id="uxETd8Djsm0Z3ByI8da52Q"><h2 data-page-node-id="fvxhcL576dDzcrAXEaMIyG">企业制度库</h2><span class="hint" data-page-node-id="Px1eYRucoRTVTPJDms5QLC">L3 来源，不得冒充国家法律</span></div>
+            <div class="panel-body" data-page-node-id="bSGRvky7ZBJTWB1uZHkySv"><table data-page-node-id="2EDxsmff2gvdq3VSAXUgJH">
+              <thead data-page-node-id="OZNTHvIzc07SMI7zjF6lGo"><tr data-page-node-id="NpgNYbZLq49YLqzdr8d2tz"><th data-page-node-id="e17BmIsNxOj9CWLDbuVCpN">制度名称</th><th data-page-node-id="AO1BrLUpYeKLS45WwB93vZ">版本</th><th data-page-node-id="nvuTDDPqA55l7WCI3p9h5l">生效期</th><th data-page-node-id="2JXjHlFzUZzLZDfCHCeOCK">状态</th><th data-page-node-id="SbDHLOqKphGb1jnISj2v6O">操作</th></tr></thead>
+              <tbody data-page-node-id="Hwh7WCpS5obr95UabzrXpq">
+                <tr data-page-node-id="SnArgrxhNXWwqMWS3yqR44"><td data-page-node-id="UwFORp2CAkBuOmZWRYYk8M">公司采购管理制度</td><td class="mono" data-page-node-id="jrZsqmPCVMh4T7wGwlSHbA">v3.2</td><td data-page-node-id="xWylO1V2lEGogrQsZEw3PT">2026-01-01 起</td><td data-page-node-id="T2tak9GXBDmJquW54Pxinj"><span class="badge b-ok" data-page-node-id="OzifEDX2LdmCVAdBTOvaq9">已发布</span></td><td data-page-node-id="CbwkxMF5fEO7KZkmeT9cUd"><span class="link" data-page-node-id="0mgjFUNGpOA3L7Fs9wUYJr">查看</span></td></tr>
+                <tr data-page-node-id="94fXALnSbbAkGhATi6EnL7"><td data-page-node-id="jjk6V1zCbGcHqqBEt41glr">合同授权与用印管理办法</td><td class="mono" data-page-node-id="Ge7xeQ3kBFND5IQObOQbfB">v2.0</td><td data-page-node-id="2PgkQgVtzjCGSKVUsrjqpY">2025-09-01 起</td><td data-page-node-id="EvFPRgEW5Hk9966Hlfy2no"><span class="badge b-ok" data-page-node-id="KGdwYpXL9HkuqyVQ7BG4K6">已发布</span></td><td data-page-node-id="UuH2ocThGRtPR303HAVfkK"><span class="link" data-page-node-id="NOHYogng3t9LGEvce675ps">查看</span></td></tr>
+                <tr data-page-node-id="R6EJzvPekK5kg3yde95zDv"><td data-page-node-id="CzdynZBrnJwAPzYGb4NznD">供应商准入与评估制度</td><td class="mono" data-page-node-id="EUrY6fPgPHLhco2OyrbA8R">v1.8</td><td data-page-node-id="1wIUsOOaIOChyHvGtZPCyC">2026-02-01 起</td><td data-page-node-id="Br1ch6gqDbfDXSEUNT8ODx"><span class="badge b-warn" data-page-node-id="GITYsBLybJlqMgRkHMDese">草稿</span></td><td data-page-node-id="YNGOA6TZMIssievFeVJXs5"><span class="link" data-page-node-id="RhRsGfyLcM476hecBQmccA">查看</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="panel" id="kbMemory" style="display:none" data-page-node-id="2BbWjxxJ3MITA88rJBjpnD">
+          <div class="panel-head" data-page-node-id="0XbCd4zCRqbWRErGIUMzHN"><h2 data-page-node-id="zk4tZqt9dO3EUGBJxlY5v2">记忆列表</h2><span class="spacer" data-page-node-id="jsoEfjhMx5cIZebgjFHSHI"></span>
+            <div class="filters" data-page-node-id="6o8l72D6BkfxEhCIMj51PJ"><div class="filter-chip active" data-page-node-id="bSQgVhTM1US9pxG1BEqGku">全部</div><div class="filter-chip" data-page-node-id="E9jOOFDvWHSVJKbZ4wFh0V">正式</div><div class="filter-chip" data-page-node-id="UxqnxPRfx6mp8P5F2GqMGN">候选</div><div class="filter-chip" data-page-node-id="yyU6AMJOPHdiHbacyBA1s1">已撤销</div></div>
+          </div>
+          <div class="panel-body" data-page-node-id="PAu4G7Gjku5fFp23nZHoYQ"><table data-page-node-id="tKK06W1eyGANVAQ3zmbBJJ">
+            <thead data-page-node-id="wSCxBMXb7W0nKPRUOUK2a1"><tr data-page-node-id="PTY6GGPln910MQKQl9MJwy"><th data-page-node-id="XlAAmKSKNMNWFJdjNozWzP">记忆内容</th><th data-page-node-id="4Ul80S0suq45GmKFG1ve2e">作用域</th><th data-page-node-id="LwK6n1b4vUzSLtLIr3nYfO">类型</th><th data-page-node-id="KDx9d1fFIGYOrFrJysAjPD">状态</th><th data-page-node-id="3PYNYjGHzQxscYAwEeL163">置信度</th><th data-page-node-id="77tFWuoqnfK9RMZE60bdO5">操作</th></tr></thead>
+            <tbody data-page-node-id="ZXHAbr9Ygrg19STko424aF">
+              <tr data-page-node-id="o0arw1Oj3xD7h9oWqxT94f"><td data-page-node-id="tqc4gwmYSyPGtELduHVBbW">采购合同预付款比例上限 30%（超过需财务总监审批）</td><td data-page-node-id="9oXQ5fmxuEjtvO4giN2W1i">组织级</td><td data-page-node-id="MxDH6LCrwNSoPm77zD4tE4"><span class="badge b-cat" data-page-node-id="o3ZtKCcmkhgoeb1GBFQKPK">企业偏好</span></td><td data-page-node-id="3eEqr81g7Cki9S9gaSX5YV"><span class="badge b-ok" data-page-node-id="MAtckEjBwDDWBwMGCr3si6">正式</span></td><td data-page-node-id="xLW0d0xdfeIoMjxrKPhH5z">0.95</td><td data-page-node-id="O09Ey39OjtzZbV4o4qQ0gd"><span class="link" data-page-node-id="33BWYSrTdeIO653XBnFr3i">编辑</span> · <span class="link" data-page-node-id="OytFwYhlaFvJn68WnSpDaA">禁用</span></td></tr>
+              <tr data-page-node-id="eAecEwjmj2DDfxmRdD8V8c"><td data-page-node-id="fqtxaZgdkj1I5JMb1dg4xN">供应商 YY信息 历史上 3 次延期交付，风险条款应更严格</td><td data-page-node-id="QPQkew3vti6zcJ1nLvPHRI">合同类型级</td><td data-page-node-id="TpphOwNJ0Q9RpGdoDSRcu6"><span class="badge b-cat" data-page-node-id="kA2aSPx1OtJfEDCct9yVCw">历史经验</span></td><td data-page-node-id="gmGU6s48YHl7aCFRKcRC49"><span class="badge b-warn" data-page-node-id="xLDZjlbXWhzSGH438QymoW">候选</span></td><td data-page-node-id="BqfDUFs33WyHlqkupCwoEI">0.72</td><td data-page-node-id="tvxMugEWZvcw50SlP8x6OU"><span class="link" data-page-node-id="AkAwejrooARoHi0BAjGpSh">确认</span> · <span class="link" data-page-node-id="dCw9jjzNRvA5J5EaYSXzX2">驳回</span></td></tr>
+              <tr data-page-node-id="gj49vhizf0J2a3RstdBcIg"><td data-page-node-id="pEwKgXwuMdIokPji3oeWXx">房屋租赁合同需额外检查「装修恢复原状」条款</td><td data-page-node-id="CXCA1OnOczXmBI65No0ap2">合同类型级</td><td data-page-node-id="EBm737kGqK6XYf5dsBVu9r"><span class="badge b-cat" data-page-node-id="8AvNfMMgBLtxz3NDSVqDYD">审查经验</span></td><td data-page-node-id="H387wHGepRJahNY6IDYDkj"><span class="badge b-ok" data-page-node-id="KAOfjCal5Mu2KmBTCFfrZt">正式</span></td><td data-page-node-id="InRVtH9T7SSv6ry8cosW3I">0.9</td><td data-page-node-id="6NCBwk8RrhbDhSm8mgvTrP"><span class="link" data-page-node-id="AvPFXGc9UdzflyxkHF8ebs">编辑</span></td></tr>
+              <tr data-page-node-id="d85IDgex1CZqoUP5G2wQfl"><td data-page-node-id="Z0H3FRo479gNUlUBTW1WzF">旧版「实际施工人直接诉发包人」口径（已被解释二替代）</td><td data-page-node-id="TWt87eoxlGvBTJkd8EsZgJ">合同类型级</td><td data-page-node-id="SDPtbx4h7EVgjfs1XuCHJh"><span class="badge b-muted" data-page-node-id="3Yb6e8KVPHSEzskuwqQSp1">历史经验</span></td><td data-page-node-id="IJlOrvqUaG4j1pDjX2yd4e"><span class="badge b-err" data-page-node-id="SsBFoA2gLdehlH5blkmB2U">已撤销</span></td><td data-page-node-id="fKvvkZl4rKsgtRKCeRtIY0">—</td><td data-page-node-id="gsvENkWHA8qw80maoGP1wB"><span class="link" data-page-node-id="bdVGxuQoJkny8KDAg1rUxA">查看</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 视图：能力配置 ===== -->
+    <div class="view" id="view-capability" style="display:none">
+      <div class="topbar">
+        <h1>能力配置</h1>
+        <span class="hint" style="color:var(--text-3)">Skill 人工安装校验 · 统一模型网关</span>
+        <span class="spacer"></span>
+        <button class="btn" onclick="toast('新增模型配置（原型演示）','ok')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新增模型</button>
+        <button class="btn primary" onclick="openSkillUpload()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>上传 Skill 包</button>
+      </div>
+      <div style="padding:22px">
+        <div class="tabs" id="capTabs">
+          <div class="tab active" data-cap="skills">Skill 管理</div>
+          <div class="tab" data-cap="models">模型配置</div>
+        </div>
+        <div style="margin-top:16px">
+          <div class="mgrid" id="skillGrid"></div>
+          <div class="mgrid" id="modelGrid" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 视图：系统设置 ===== -->
+    <div class="view" id="view-settings" style="display:none">
+      <div class="topbar"><h1>系统设置</h1><span class="hint" style="color:var(--text-3)">审查参数 · 审计日志</span></div>
+      <div style="padding:22px;max-width:960px">
+        <div class="tabs" id="setTabs">
+          <div class="tab active" data-set="settings">系统设置</div>
+          <div class="tab" data-set="audit">审计日志</div>
+        </div>
+        <div style="margin-top:16px">
+          <div class="panel" id="setSettings" data-page-node-id="exdui6ESsRscVuMIfZKr58"><div class="panel-head" data-page-node-id="zejiDqhQtbUQNVE0wDrzTt"><h2 data-page-node-id="dnQGcLMgOYoXDpGE7uJhuz">审查参数</h2></div><div class="panel-body" style="padding:18px" data-page-node-id="6qhOi9CQ3K4vVbQkjFKIOE">
+          <div class="field" data-page-node-id="NXhRBJmswTxiv5zEDZy8tf"><label data-page-node-id="TFaV2DYLy0ygrVJKlbzTZA">风险评级置信度分档</label><div class="kv" data-page-node-id="FnL2yiozUpKgiebSRFLyYN"><div class="k" data-page-node-id="OlBuHOY45f3ratyyL4zq1J"><div class="kl" data-page-node-id="Tzpdky9jPJOIr7x0Iisj35">high 阈值</div><div class="kv-val" data-page-node-id="Lac2sBVNwXPTx33Wb3V03f">≥ 0.80</div></div><div class="k" data-page-node-id="jwT2GuIImAWolXGI21A9Ed"><div class="kl" data-page-node-id="Sq3yM9cRcsKYJakIqw5XHg">medium 阈值</div><div class="kv-val" data-page-node-id="avTlSh7fCX6ntFmMvEi0vW">≥ 0.60</div></div><div class="k" data-page-node-id="lzokeNYDdFgAEQZGjxHLa9"><div class="kl" data-page-node-id="TfVrudgBQNDQHr6b9w2gRg">定位置信度 high</div><div class="kv-val" data-page-node-id="kwf7GXXgKGSRm0qGCCIzOc">≥ 0.90</div></div><div class="k" data-page-node-id="SnmUcI4Od4QghiViEEZToW"><div class="kl" data-page-node-id="Y7pMrq41GxZ5TgL2ixAsPL">定位容差（字符）</div><div class="kv-val" data-page-node-id="GZA9B29eWGvoKQrnbEhQ6X">± 20</div></div></div></div>
+          <div class="field" data-page-node-id="QHGMS8Y78bxRM6Yrz5sHYh"><label data-page-node-id="nhaQrlvTDnxT4Ua1dtEVAa">文件上限</label><div class="kv" data-page-node-id="02OQr62HFFcVICHxcCLAQC"><div class="k" data-page-node-id="nYIYs9QE74Vla63GfVyiMN"><div class="kl" data-page-node-id="PkllQ3JqqOOG73BkkELJ1s">单文件大小</div><div class="kv-val" data-page-node-id="gn7vsi8SWySEcrpBJOfgoQ">50 MB</div></div><div class="k" data-page-node-id="fH4N2yhsOj5funMUDY8vpc"><div class="kl" data-page-node-id="OrDLlNmgG5x9hAGdaKEByL">最大页数</div><div class="kv-val" data-page-node-id="jZibV8xBjOpOK2yEcOzXip">200 页</div></div><div class="k" data-page-node-id="x148PYtt3cIILMG3Zssu8U"><div class="kl" data-page-node-id="SHXXZrZHO3j185z5auuMzD">单用户并发任务</div><div class="kv-val" data-page-node-id="CRckCDJPIyhJMkfy2kFrkF">2</div></div><div class="k" data-page-node-id="HOkCtw8A5aZ4PRmDAFmF0w"><div class="kl" data-page-node-id="yL2jJyzAbmEMCY0I45Qsnq">实例并发任务</div><div class="kv-val" data-page-node-id="AUvHSnmB0m5CUQPDsu7ojF">20</div></div></div></div>
+          <div class="field" data-page-node-id="qXwAkeHIUxpMMROEsCprnq"><label data-page-node-id="Ft2WlthdoSzzrFsiIhKEMG">部署形态 <span style="color:var(--text-3);font-weight:400" data-page-node-id="93BFzkALnYtlB1GbA8ZxdF">（待确认 DEC-001）</span></label><div class="radio-row" data-page-node-id="7nJan997HquuAjDZv2vuqF"><div class="radio-card active" data-page-node-id="CesnRTELOa9g5GaRWO5OBK"><div class="r-title" data-page-node-id="fFXIqOmrBhLHdESp6aQGay">企业内网 B/S</div><div class="r-desc" data-page-node-id="fdjjs5kABrTSH8I5HWHGoZ">主部署形态</div></div><div class="radio-card" data-page-node-id="IAlGKC7LlcQBykGuAsgzh0"><div class="r-title" data-page-node-id="lRG2qdA8nqHmSRAAxOfO3N">本地单机</div><div class="r-desc" data-page-node-id="NAKjQTsgbj0j8MfLDGYfjo">可选部署</div></div></div></div>
+        </div></div>
+          <div class="panel" id="setAudit" style="display:none" data-page-node-id="X0MGSaUBmd34GUXD2aeGtD">
+          <div class="panel-body" data-page-node-id="I1vrgNcp0erqy9aUZDsu9r"><table data-page-node-id="Pjf3DNsFLZ5UOwERFZgMMi">
+            <thead data-page-node-id="qoeGChwp9dPuWuZ6YGGIPv"><tr data-page-node-id="FdDHlBfMP1X1014kvlM3nc"><th data-page-node-id="bU0xLp6NGFAe1PuVH4nRDu">时间</th><th data-page-node-id="BDzYz19kEmRbVeB4T0hxBE">主体</th><th data-page-node-id="A8LvLJnjm1cAd8DPzR8kIc">动作</th><th data-page-node-id="vC0OFBD3BvNbIc410eoIY6">资源</th><th data-page-node-id="l2otdenlozR2TF0RzdqSdg">结果</th><th data-page-node-id="EGTTR4JSikFIHLNSUqZ3ID">IP</th></tr></thead>
+            <tbody data-page-node-id="IptukmC7NLEcvvUVDA2icd">
+              <tr data-page-node-id="YhhWykMVnenM7hixv9OH6y"><td class="mono" data-page-node-id="CFB1IPv7miNFIUW7RNdD10">2026-09-10 15:12:03</td><td data-page-node-id="9d5eF076BLt8AucQuMk0B5">杨洋</td><td data-page-node-id="qawp2x4zvqnP7DT9WCaCJV">导出审查报告</td><td data-page-node-id="E98B5HrWEKquKXMoCnx9HB">XX科技采购合同 · PDF</td><td data-page-node-id="BE5CmQWz6tYkXugGDPuLcx"><span class="badge b-ok" data-page-node-id="xK8Qa5PhVONcYYgQsQf88N">成功</span></td><td class="mono" data-page-node-id="ibEJPKta6XIvLoD3V5o9G7">10.8.2.14</td></tr>
+              <tr data-page-node-id="Rj1cQoAjCHXX9hfn9CjaJp"><td class="mono" data-page-node-id="BSoJrYkmhLwdaISVg5Bgxa">2026-09-10 14:58:41</td><td data-page-node-id="iQG4TV7zmSNzLX1WKISzEY">杨洋</td><td data-page-node-id="w9CTbO8Lcvy2cz3RjyxQ8n">标记风险为误报</td><td data-page-node-id="oc15Wgz7P5FNL4hMEhVGp0">risk_006 争议解决</td><td data-page-node-id="uq4qvJEAp0HDbNRcMinHZN"><span class="badge b-ok" data-page-node-id="9ZHfzhC9aaGSHIPVUTuqgo">成功</span></td><td class="mono" data-page-node-id="yMYqhVMubdoixlzpB2tBDV">10.8.2.14</td></tr>
+              <tr data-page-node-id="s2rnUiJ8T4SFmne3UtwxJA"><td class="mono" data-page-node-id="wMgJovozPysNzFCk4BNmiD">2026-09-10 14:31:22</td><td data-page-node-id="cSiC4TBiGIE5VEgv9Z62I9">系统</td><td data-page-node-id="vKQ9YY0sIK5eMeBpJl5gyF">模型降级</td><td data-page-node-id="wDDuFD1cKStrBVFagtZzrR">hunyuan-pro → fallback-glm4</td><td data-page-node-id="tmzETgauxG9yLd8MFC5v5s"><span class="badge b-warn" data-page-node-id="pl4crAt0lokENNR0wG7Tpv">降级</span></td><td class="mono" data-page-node-id="bGsXOAOJlgCG1ykgUYzKne">internal</td></tr>
+              <tr data-page-node-id="t6l0pt0yUs6xDTeJJv1DYG"><td class="mono" data-page-node-id="CJBoevKaEKXi5sJKLVZsva">2026-09-10 13:05:10</td><td data-page-node-id="iqOwlVaBFYgmF3HrppmSBO">杨洋</td><td data-page-node-id="VByPf8YBYZCeVm97IWQSG6">启用 Skill</td><td data-page-node-id="ntUY6GPsCyEVXny538x0Ya">property-lease-contract-review</td><td data-page-node-id="6QEnACfxK6MRPcRTnHV5ot"><span class="badge b-ok" data-page-node-id="AwuFPwkTTzgTsjvUsRqh8j">成功</span></td><td class="mono" data-page-node-id="wvDFfvTQLq1VAMDG5OhjPM">10.8.2.14</td></tr>
+              <tr data-page-node-id="wOb1SeDsbkTSCDEL8lw9gl"><td class="mono" data-page-node-id="x7O3wZI0VkTFJiQOrHBGmk">2026-09-10 11:47:55</td><td data-page-node-id="iE69YLR4vXF5AE0Eo6Ruh9">系统</td><td data-page-node-id="MiC1e1ZScC6ficCjdpW0Vf">越权访问阻断</td><td data-page-node-id="ubzcmJtOlod5GgIF14Tvwi">project:其他部门项目</td><td data-page-node-id="NYmOXoG71PlI2SwJ9i9phu"><span class="badge b-err" data-page-node-id="KrGmDzhzlL5cMRoLyLwqrK">PERMISSION_DENIED</span></td><td class="mono" data-page-node-id="M7t2jH4x6GDUmoo8Mbq0Jy">10.8.2.14</td></tr>
+              <tr data-page-node-id="Od2s7P9FmWFktq3GsYjPvb"><td class="mono" data-page-node-id="I1WukJA68QHxpcd5AViZT5">2026-09-10 10:20:31</td><td data-page-node-id="EEEkGLzk4Tb5JJHG29Bhp1">杨洋</td><td data-page-node-id="JAnIBckxmwiDzRm0haClnu">上传合同</td><td data-page-node-id="m09sEqcfxkdUn8ezXAoehV">XX科技采购合同.pdf</td><td data-page-node-id="S19nZHF4xmKNXI8KxiXVZY"><span class="badge b-ok" data-page-node-id="FvXHkozjoFQCzOIvEg4nS9">成功</span></td><td class="mono" data-page-node-id="DQBes9zOogwRBfZaKXsJjh">10.8.2.14</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 弹窗 ===================== -->
+<!-- 上传合同 -->
+<div class="overlay" id="ov-upload" data-page-node-id="7nkWsU7zPadXTmcu3Qn8J8">
+  <div class="modal wide" data-page-node-id="xt4ahBISgNhBsSRh6tb2JW">
+    <div class="modal-head" data-page-node-id="A8nQEPWEoGbascnJJ3p6fA"><h3 data-page-node-id="jePKoQFzUbtztXQWeBZEpi">新建合同审查</h3><div class="x" onclick="closeOv('upload')" data-page-node-id="7xEOmA27sf8iJA2HHBdw9I"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="yEnzIJG4drVS4IpjMMen8N"><path d="M18 6L6 18M6 6l12 12" data-page-node-id="zUru9OlrJX5P71IYjjMi6O"/></svg></div></div>
+    <div class="modal-body" data-page-node-id="B8uofDCc3lEAfGlUD3iI6R">
+      <div class="field" data-page-node-id="RJjDIWuyiPgWFUXPlvoZb1"><label data-page-node-id="XkeAmKqZvSZVhz8H4U8Rfc">项目名称<span class="req" data-page-node-id="spr9ntcZHufHRWQmK7JGaq">*</span></label><input class="inp" id="upName" placeholder="例如：XX科技 服务器及网络设备采购合同" data-page-node-id="byaCHT1bxAHuFlMbSQAiOj"></div>
+      <div class="field" data-page-node-id="InFhmOkHRhwUPBnQFj6lqV"><label data-page-node-id="S0hGuyTTQSCqYtTMKa11J3">合同类型<span class="req" data-page-node-id="zOEa4em5RtnRPKsRsu4jIG">*</span></label>
+        <div class="radio-row" id="upType" data-page-node-id="6RhyNH0oks3LHOVD0HaBZ1">
+          <div class="radio-card active" data-t="procurement" data-page-node-id="kvpSQCTKAsO8kPwGsprphH"><div class="r-title" data-page-node-id="pgWJPJCsGEsM1b5RM3jcUC">采购合同</div><div class="r-desc" data-page-node-id="yw4w5EzRZ3GMY9PeIveerA">采购 / 供货</div></div>
+          <div class="radio-card" data-t="supplier_service" data-page-node-id="Dkkj0Hwjgx4MgHmr7aPNrk"><div class="r-title" data-page-node-id="qOkZYmMKKwxuWSWUEDZMTr">供应商服务</div><div class="r-desc" data-page-node-id="SsmDwSJ3FiEY2wd9vlrgI8">服务 / SLA</div></div>
+          <div class="radio-card" data-t="sales" data-page-node-id="9GMB0AVaWoYcFD5vDOLsRr"><div class="r-title" data-page-node-id="txur7b23aL1VgqcS0A0vRN">销售/客户服务</div><div class="r-desc" data-page-node-id="2kQFO4WUH2W2Krb2zH3Ota">销售 / 客服</div></div>
+          <div class="radio-card" data-t="property_lease" data-page-node-id="Ji2lH63TmMBD7QYP4FHodj"><div class="r-title" data-page-node-id="2BPpHquYW6DYHNRochIGC2">房屋租赁</div><div class="r-desc" data-page-node-id="5YyVGTEdZdxfdK9Y2BjU7d">办公 / 仓库</div></div>
+          <div class="radio-card" data-t="software" data-page-node-id="Jjg4Dn7GVc5EPe1rPjXprX"><div class="r-title" data-page-node-id="YLWZdFuuSzrSmVVLLktGru">软件开发</div><div class="r-desc" data-page-node-id="zE3AaiOHpPKBD4Qr6F0ooG">定制 / 技术</div></div>
+        </div>
+      </div>
+      <div class="field" data-page-node-id="nD6uu7dVpjyBoF4FRkQesS"><label data-page-node-id="XY224g0GUv8nA0eNnxIcHC">上传合同文件<span class="req" data-page-node-id="fo3Rn8hYUnVG248WSqIgyz">*</span></label>
+        <div class="upload-zone" onclick="toast('选择文件（原型演示）','ok')" data-page-node-id="bqwceIq6IlkXUgLGl0uCvG"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="XYlCHVqX8NY0mLhvzyuvDC"><path d="M12 3v12M7 10l5 5 5-5" data-page-node-id="y3XRdB7lTUZwZ5JE4zcjnA"/><path d="M4 21h16" data-page-node-id="PkaFGxTDDihlO91Em5M1Gy"/></svg><div data-page-node-id="OP5WEiGbSEOwkJJcLwIUHd">点击或拖拽上传 · 支持 DOCX / PDF / 扫描 PDF · ≤ 50MB / 200 页</div></div>
+      </div>
+      <div class="field" data-page-node-id="9bcFbxKL63k0VTNhe3ROgo"><label data-page-node-id="yT6TqESWrpCCcYHpGmj9HQ">审查模式</label>
+        <div class="radio-row" id="upMode" data-page-node-id="bs2Us4OZaRyVtYETv1imrb">
+          <div class="radio-card active" data-m="standard" data-page-node-id="DJr2hOLs5y2G2JBJGJLvus"><div class="r-title" data-page-node-id="9lv7N0C6D6nzY7PqFRh2VF">标准审查</div><div class="r-desc" data-page-node-id="9DPjwELwNCpsCY2lc2C5di">离线法律快照 + 企业知识库，稳定可复现</div></div>
+          <div class="radio-card" data-m="realtime" data-page-node-id="K6D1SGjXZ2x9ULfFfE4Rpl"><div class="r-title" data-page-node-id="cn7woIGyydXUBiogdaOEAn">实时核查</div><div class="r-desc" data-page-node-id="qqZz0jQ6FxSeHzm9M2kfWo">高风险项查询实时法律来源</div></div>
+          <div class="radio-card" data-m="internet" data-page-node-id="4EvMfCWlC59MMMqycqcqKG"><div class="r-title" data-page-node-id="C86YiU0b8zjuxZ5lv6wZg2">互联网线索</div><div class="r-desc" data-page-node-id="XE9YmUZpMDOpVr6OpeyvHV">仅作线索，不能单独下结论</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot" data-page-node-id="uPY8p2nPlavQfSrNbw8WlV"><button class="btn" onclick="closeOv('upload')" data-page-node-id="Aa7FzrLXzdlEIScPsnQe2A">取消</button><button class="btn primary" onclick="startReview()" data-page-node-id="WQVXWI78ru1AemJhtfNxbN">开始审查</button></div>
+  </div>
+</div>
+
+<!-- 审查配置确认 -->
+<div class="overlay" id="ov-config">
+  <div class="modal wide">
+    <div class="modal-head"><h3>知识库配置</h3><span class="hint" style="color:var(--text-3)">绑定本次审查使用的知识库、规则与资料</span><div class="x" onclick="closeOv('config')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></div></div>
+    <div class="modal-body">
+      <div class="kv" style="grid-template-columns:1fr 1fr;margin-bottom:8px">
+        <div class="k"><div class="kl">合同类型</div><div class="kv-val">采购合同（procurement）</div></div>
+        <div class="k"><div class="kl">分析模型</div><div class="kv-val">hunyuan-pro · v3</div></div>
+      </div>
+
+      <div class="field"><label>审查模式</label>
+        <div class="radio-row">
+          <div class="radio-card active"><div class="r-title">标准审查</div><div class="r-desc">离线快照 + 企业知识库，稳定可复现</div></div>
+          <div class="radio-card"><div class="r-title">深度审查</div><div class="r-desc">启用实时核验与多模型交叉</div></div>
+        </div>
+      </div>
+
+      <div class="sect-label">法律快照<span class="ln"></span><span class="hint" style="color:var(--text-3)">选择本次绑定版本</span></div>
+      <div class="radio-row">
+        <div class="radio-card active" style="flex:none;min-width:210px"><div class="r-title">legal-snapshot-v1.3</div><div class="r-desc">128 部法规 · published</div></div>
+        <div class="radio-card" style="flex:none;min-width:210px"><div class="r-title">v1.4-draft</div><div class="r-desc">132 部法规 · 校验中</div></div>
+      </div>
+
+      <div class="sect-label">确定性规则库<span class="ln"></span><span class="hint" style="color:var(--text-3)">勾选本次启用规则集</span></div>
+      <div class="check-row">
+        <label class="check"><input type="checkbox" checked>procurement-rules@2.1（采购通用）</label>
+        <label class="check"><input type="checkbox" checked>contract-common@1.0（通用条款）</label>
+        <label class="check"><input type="checkbox">consistency-rules@0.9（跨文件一致性 · draft）</label>
+      </div>
+
+      <div class="sect-label">企业制度<span class="ln"></span><span class="hint" style="color:var(--text-3)">勾选本次引用制度</span></div>
+      <div class="check-row">
+        <label class="check"><input type="checkbox" checked>公司采购管理制度 v3.2</label>
+        <label class="check"><input type="checkbox" checked>合同授权与用印管理办法 v2.0</label>
+        <label class="check"><input type="checkbox">供应商准入与评估制度 v1.8</label>
+      </div>
+
+      <div class="sect-label">辅助资料<span class="ln"></span><span class="badge b-warn">仅本次生效</span></div>
+      <div style="background:var(--warn-soft);border:1px solid #f1dd9a;border-radius:8px;padding:10px 12px;font-size:12px;color:#8a6a1a;margin-bottom:12px">临时资料仅本次审查生效，审查结束自动解绑，不会写入全局知识库。</div>
+      <div class="mat-item">
+        <div class="mi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></div>
+        <div class="mi-info"><b>供应商报价单 · YY信息技术</b><span>订单/报价 · v1.0 · 临时上传</span></div>
+        <button class="btn sm" onclick="toast('已移除临时资料','warn')">移除</button>
+      </div>
+      <div class="mat-item">
+        <div class="mi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></div>
+        <div class="mi-info"><b>设备清单（附件一）</b><span>技术资料 · v1.1 · 临时上传</span></div>
+        <button class="btn sm" onclick="toast('已移除临时资料','warn')">移除</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        <button class="btn sm" onclick="toast('从知识库选择资料（原型演示）','ok')">从知识库选择</button>
+        <button class="btn sm" onclick="toast('上传临时资料（原型演示）','ok')">上传临时资料</button>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeOv('config')">取消</button><button class="btn primary" onclick="closeOv('config');toast('已更新本次审查配置','ok')">保存配置</button></div>
+  </div>
+</div>
+
+<!-- 划词审核 -->
+<div class="overlay" id="ov-select" data-page-node-id="msVewICDN3oFVfzfz0tLUz">
+  <div class="modal" data-page-node-id="CEbqe4inSeztKeUgKoPR5G">
+    <div class="modal-head" data-page-node-id="6Ex4XoSZn3W3fFGNPp6RMK"><h3 data-page-node-id="TvIDwE4kgVwpyBeZo9kI18">审核选中内容</h3><div class="x" onclick="closeOv('select')" data-page-node-id="siHExCGwQLgQZ0wUqox4YL"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="cmdNF5BSyrSblfk7b2JriC"><path d="M18 6L6 18M6 6l12 12" data-page-node-id="pnwCZaR9SQ7o6eVMwGClHG"/></svg></div></div>
+    <div class="modal-body" data-page-node-id="tjENMiz3ClZvHxyPNzhO8z">
+      <div class="field" data-page-node-id="Rss3fLLMHJTs4oJvGcfBE5"><label data-page-node-id="04EH31nz8729wtFWXKuUj7">选中文本</label><div class="quote" id="selQuote" style="font-size:12.5px" data-page-node-id="IMRN2BeVIEzNVkuJqdTAiJ">…</div></div>
+      <div class="field" data-page-node-id="u1t3IkJRCkSDAVces1pXBR"><label data-page-node-id="AU1gAnDZd4HskPCDw3qb1H">位置锚点</label><div class="kv" data-page-node-id="hrZn7lmfhVXooPiqd3LIfd"><div class="k" data-page-node-id="sFE0ELzFA68ShgKMGCzX8Y"><div class="kl" data-page-node-id="INSg4Ur49FeAXhOGPZOCXZ">页码 / 条款</div><div class="kv-val mono" data-page-node-id="GDEFwPr1HHs7YBD67d2sOi">P1 · 第 2.2 条</div></div><div class="k" data-page-node-id="9Tg5sbAnqJEiBSKj9REhAO"><div class="kl" data-page-node-id="PBLDihrnA8uFhur7sScz1k">字符范围</div><div class="kv-val mono" data-page-node-id="vYoIZaioxT1iHbOItdbGw1">[1204, 1298]</div></div></div></div>
+      <div class="field" data-page-node-id="HHsCb7wysEhn4BalPo2qGD"><label data-page-node-id="L9CVxiCc3dzRr6R04GiLKN">审核类型</label>
+        <div class="chip-set" id="selTypes" data-page-node-id="9GDjCl1ijB9VBDkvEHgBj6">
+          <div class="chip active" data-st="legal" data-page-node-id="RB2MbvCvtFelT5ltQrswg7">法律风险</div>
+          <div class="chip" data-st="reasonable" data-page-node-id="t4b6g41y0K2TgnntHbtjXH">条款合理性</div>
+          <div class="chip" data-st="template" data-page-node-id="gJyYfcXK4Uz8QUDxguYWA0">模板对比</div>
+          <div class="chip" data-st="suggest" data-page-node-id="7qIDfIUXUSFMJEAEUpJ9iz">修改建议</div>
+          <div class="chip" data-st="explain" data-page-node-id="AQB0KvKfNa54IdEuKeM39f">条款解释</div>
+          <div class="chip" data-st="special" data-page-node-id="xTWF71dVFV1mm66yFJalxm">专项审核</div>
+        </div>
+      </div>
+      <div class="field" id="specialWrap" style="display:none" data-page-node-id="6W0u01yBc8z9qandmmbKgr"><label data-page-node-id="vp53LqmE8cFCt6po8Phzpj">专项主题</label>
+        <div class="check-row" data-page-node-id="ySgQEAAyV0LPaFtkSvHXWb">
+          <label class="check" data-page-node-id="D36uVEHc11HqLgawjhiVDO"><input type="checkbox" checked data-page-node-id="KrVMEjGbBwUE63BEys6GC6">付款</label>
+          <label class="check" data-page-node-id="rFFUCprv6rSyLpNgDhYy2T"><input type="checkbox" data-page-node-id="3PWBs2MxBdFeVMF9b4aGiB">违约责任</label>
+          <label class="check" data-page-node-id="LFEYkeg3Ngh0vVj6KGoGx6"><input type="checkbox" data-page-node-id="7vz2k6SVDB7DWBYvTlxoPw">责任限制</label>
+          <label class="check" data-page-node-id="5Fj4s6Y8mPkM4LjRTxHW0R"><input type="checkbox" data-page-node-id="O7l0B4xaRlKXQRw7ylJVR0">知识产权</label>
+          <label class="check" data-page-node-id="rlZIfkLJBIBWePKP7rLCNQ"><input type="checkbox" data-page-node-id="uDU10IoJf69HVrIwEgSCpe">保密</label>
+          <label class="check" data-page-node-id="kLNGMl5xNcG1mIC8GvHsp6"><input type="checkbox" data-page-node-id="DAN0tapMZLModtpAhRgE07">数据保护</label>
+          <label class="check" data-page-node-id="vMkWfw18DNfs9alDT58GJB"><input type="checkbox" data-page-node-id="m2g6CknxcpTBB9QfPaLVUE">解除终止</label>
+          <label class="check" data-page-node-id="O7FWoXO59nemhkHeQ3P7Ir"><input type="checkbox" data-page-node-id="lnIQRryzucXCB4sshEvMVO">争议解决</label>
+        </div>
+      </div>
+      <div class="field" data-page-node-id="MO5x5WyjtUcUf6D77nX21b"><label data-page-node-id="BbxRv3h3w4cAxiwmyRWTaE">上下文范围</label>
+        <div class="radio-row" data-page-node-id="onahSzRkvMvMz8DcBtii7G"><div class="radio-card active" data-page-node-id="qNswb1Zj3bIGFw808FjJ4h"><div class="r-title" data-page-node-id="EaqONG08GnDFYeOTvefSFL">所在条款 + 前后各一条</div><div class="r-desc" data-page-node-id="G4Ji2JXtnCivjG6GaoqQky">默认策略</div></div><div class="radio-card" data-page-node-id="WoxuIBVU6wMhclzywJ6zaz"><div class="r-title" data-page-node-id="gacHAVOl35kMd2fIJDyNKM">仅所在条款</div><div class="r-desc" data-page-node-id="Ou89WEfeLkgRV9IOlYUJPT">最小上下文</div></div></div>
+        <div class="desc" data-page-node-id="ITWGpRCgVxhnKLn1CedWx6">提交前可在左侧文档中调整上下文范围；系统仅根据解析出的显式引用关系补充定义条款。</div>
+      </div>
+    </div>
+    <div class="modal-foot" data-page-node-id="af4oFR3rrUB0rjn3YaImjx"><button class="btn" onclick="closeOv('select')" data-page-node-id="MKdYBcuH7IdfQ7sBukh4OH">取消</button><button class="btn primary" onclick="runSelectReview()" data-page-node-id="dV17pi2JO9hzBCdawW8VGT">提交局部审查</button></div>
+  </div>
+</div>
+
+<!-- 导出 -->
+<div class="overlay" id="ov-export" data-page-node-id="OwFED1lJJuo0uW3HS1Cl6G">
+  <div class="modal" data-page-node-id="TCrCnEASgL8C3jcIrbkEPK">
+    <div class="modal-head" data-page-node-id="PynkjDxeXagZmaz9gFg4PM"><h3 data-page-node-id="Aw08CIXlCx91HZKzMF19aZ">导出审查报告</h3><div class="x" onclick="closeOv('export')" data-page-node-id="TkRgq92UYgekJC9MpYkcGp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="DChns91dLjbz4PldqcHhzY"><path d="M18 6L6 18M6 6l12 12" data-page-node-id="o6COMOIMnEvexF0huO0tAf"/></svg></div></div>
+    <div class="modal-body" data-page-node-id="K4GVh1ePHWRVUnZAqrhu26">
+      <div class="field" data-page-node-id="GuriIFhdo5UzJwLJnqpVrt"><label data-page-node-id="gNfaQgGV7GVZysFX3uJEjY">导出格式</label>
+        <div class="check-row" data-page-node-id="9Pl9DyrUClPWy5SNMupuVy">
+          <label class="check" data-page-node-id="GR7Dc6W6nmzeIJGVssEGTp"><input type="checkbox" checked data-page-node-id="HcH4dfCs7UrjaQ5lqY9RcC">DOCX 审查报告</label>
+          <label class="check" data-page-node-id="sBktuDEExhrVAOuXJ1ELxY"><input type="checkbox" checked data-page-node-id="l96jyKYMjLiigVlfwmek3x">PDF 审查报告</label>
+          <label class="check" data-page-node-id="PLG2cN8M4R5VrisVB3RWTw"><input type="checkbox" data-page-node-id="MHLlMxTkNaA01D7PrFLNgu">XLSX 风险清单</label>
+          <label class="check" data-page-node-id="LaxLqqTu9b0iDLfESH1Cft"><input type="checkbox" checked data-page-node-id="FIMNb2FuzDeFxxIob3bigt">JSON 结构化结果</label>
+        </div>
+      </div>
+      <div class="field" data-page-node-id="oc6SbfYrQHIYD5T9jd0VQf"><label data-page-node-id="r29GDcvXAe0Mp99IVmOnA9">包含内容</label>
+        <div class="check-row" data-page-node-id="EgrII7tRwKaDL965aSRXrH">
+          <label class="check" data-page-node-id="ITPqkXUU5EMphMwEUjl3cU"><input type="checkbox" checked data-page-node-id="nShpbndp9njB42fIrAAD9T">合同正文与高亮</label>
+          <label class="check" data-page-node-id="BJoe3NfmU2E4UhAqm2yoXx"><input type="checkbox" checked data-page-node-id="kchbJhyyr1tnoCRldDqSDc">风险分析与建议</label>
+          <label class="check" data-page-node-id="R7uHZT07uBKAOqecs4CnR6"><input type="checkbox" checked data-page-node-id="2U9ZGptOO2MHkauqz70by1">法律依据与证据</label>
+          <label class="check" data-page-node-id="YiDTh9bsnmReRRnMEUlGTd"><input type="checkbox" checked data-page-node-id="pMA4NbRvHzp7jibtP15hge">人工处理记录</label>
+        </div>
+      </div>
+      <div style="background:var(--primary-soft);border-radius:8px;padding:10px 12px;font-size:12px;color:#3b4f9b;display:flex;gap:8px" data-page-node-id="etAnvXZullSEbnC10kyWGH"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:2px" data-page-node-id="8BCPLATS2jxjWV3nzlwFHx"><circle cx="12" cy="12" r="9" data-page-node-id="Y6EJbqGMnBXsydPw1u5GBA"/><path d="M12 8v4l2.5 2.5" data-page-node-id="txpwPMhpjtXw3IyjEc8oi3"/></svg>导出前将执行定位、法律依据、必填字段、人工状态与敏感信息校验；存在待复核风险时将一并标注。</div>
+    </div>
+    <div class="modal-foot" data-page-node-id="WIsp6dn02KawBAbLH4cBDF"><button class="btn" onclick="closeOv('export')" data-page-node-id="TVv3Qa6kRJThr0pVUrYiOA">取消</button><button class="btn primary" onclick="closeOv('export');toast('已生成导出任务，完成后通知','ok')" data-page-node-id="q1aDJJ6HFYpo6s3KSvDRnA">导出</button></div>
+  </div>
+</div>
+
+<!-- Skill 上传 -->
+<div class="overlay" id="ov-skill" data-page-node-id="g4kh2giai8p5HyfdKCnmHx">
+  <div class="modal" data-page-node-id="8dKv5ToSYlOGP7WQGwIzHD">
+    <div class="modal-head" data-page-node-id="PNKicZtWz4tv7GKUIoWuCq"><h3 data-page-node-id="Zoy6gXLZB29ZSQwYa8WQFJ">上传 Skill 包</h3><div class="x" onclick="closeOv('skill')" data-page-node-id="kYDBHQQqs6YHv8uxiJlaJu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="BZzHmjHpjS719BsfnDtc3i"><path d="M18 6L6 18M6 6l12 12" data-page-node-id="Q2Idz11GTFA1feu1heQGlO"/></svg></div></div>
+    <div class="modal-body" data-page-node-id="fl5BJLTNZewnnXGBFTzqQO">
+      <div class="upload-zone" onclick="toast('选择 ZIP Skill 包（原型演示）','ok')" data-page-node-id="CVT72DUH39jc8AB3ef1q7j"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="AyvZX3ZiyEy6RxXMZUmgDF"><path d="M12 3v12M7 10l5 5 5-5" data-page-node-id="DvzGsHYMQzGaHiECzn5huE"/><path d="M4 21h16" data-page-node-id="uguW38IzBT5OmUFHciG6ND"/></svg><div data-page-node-id="BD0EvxggxsglZF7eZ5QgEp">上传 ZIP 格式 Skill 包（含 SKILL.md / references / scripts）</div></div>
+      <div style="margin-top:14px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;color:var(--text-2)" data-page-node-id="tjycQ1HsPm1f3paZRW3um3">
+        <b style="color:var(--text)" data-page-node-id="L0DHNkmk8G87yJBDB0xZOT">安装流程：</b>解压隔离 → 路径穿越/符号链接检查 → 提示注入扫描 → 脚本沙箱 Eval → 生成安全报告 → 人工确认作用域 → 启用
+      </div>
+    </div>
+    <div class="modal-foot" data-page-node-id="GqSgHlkE2d3RcrsQUIaXoH"><button class="btn" onclick="closeOv('skill')" data-page-node-id="aR5DnfihbTnoCBHzIeFAPY">取消</button><button class="btn primary" onclick="closeOv('skill');toast('已上传，开始隔离校验','ok')" data-page-node-id="EY7FFUd1GF7e8fxbM2bNpr">上传并校验</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" data-page-node-id="TIpD4w7GzA2Pi0irnJkZOp"></div>
+<div class="selection-menu" id="selMenu" data-page-node-id="U5cVNP4TrJzkQR1SCehtVH">
+  <button class="primary" onclick="openSelect()" data-page-node-id="FPKNT2SKYLInLmb4jq2yN2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="4WW0XeA2Tkfkleza2r9EQ6"><circle cx="11" cy="11" r="7" data-page-node-id="9eEeC3znOXnRs6bIpqEand"/><path d="M21 21l-4-4" data-page-node-id="z38b5AlKiCrdecpVv3iXDI"/></svg>审核选中内容</button>
+  <button onclick="toast('已添加批注（原型演示）','ok')" data-page-node-id="t8th2rgdX5IF01BWLSAmeR"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="dB4f72cMt47c49GhaMgM2V"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" data-page-node-id="RqfsbBu3DU3pcYSbOU4kDV"/></svg>添加批注</button>
+  <button onclick="toast('已高亮（原型演示）','ok')" data-page-node-id="807zo7q5juskOa245AGEmX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="4PqPdBAZTwcPtPixcIpfEL"><path d="M12 3l9 16H3z" data-page-node-id="fyO7SgZVBGZeL9gQZyuA9X"/></svg>高亮标记</button>
+</div>
+
+<script>
+/* ================= 数据 ================= */
+const CTYPES = {procurement:'采购合同',supplier_service:'供应商服务',sales:'销售/客户服务',property_lease:'房屋租赁',software:'软件开发',other:'其他'};
+const LV = {critical:{t:'严重',c:'b-lv-critical'},high:{t:'高',c:'b-lv-high'},medium:{t:'中',c:'b-lv-medium'},low:{t:'低',c:'b-lv-low'},info:{t:'提示',c:'b-lv-info'}};
+const CAT = {legal:'法律风险',commercial:'商业风险',company_policy:'企业制度',text_quality:'文本质量',evidence:'证据问题'};
+const CATC = {legal:'#7c5cff',commercial:'#e8590c',company_policy:'#2b6cb0',text_quality:'#0e8a52',evidence:'#64748b'};
+
+const risks = [
+  {id:'risk_001',level:'critical',cat:'commercial',topic:'prepayment',title:'预付款比例 60% 超出公司制度上限',loc:'第 2.2 条 · P1',locDetail:'第 2.2 条 · 第 1 页 · 字符 [1204,1298]',quote:'合同签订后 5 日内，甲方支付合同总价的 60% 作为预付款…',analysis:'预付款比例达 60%，远超公司《采购管理制度 v3.2》规定的 30% 上限，且未设置履约担保或进度节点对冲，甲方资金风险与供应商履约风险敞口过大。',confidence:0.92,location_confidence:0.96,evidence:'verified',realtime:'not_requested',human:'pending_review',
+    basis:[{lvl:1,title:'《中华人民共和国民法典》第五百七十七条',src:'法律快照 legal-snapshot-v1.3 · 检索于 2026-09-10'},{lvl:3,title:'公司《采购管理制度 v3.2》第三章第 12 条',src:'企业制度 · L3'}],
+    suggestion:'建议将预付款比例降至 30% 以内，并增设履约保函；余款按到货验收、终验等节点分期支付。',
+    provenance:{rule:'procurement.prepayment.ratio@v1',skill:'procurement-contract-review@1.2.0',model:'hunyuan-pro · cfg v3',snapshot:'legal-snapshot-v1.3'}},
+  {id:'risk_002',level:'high',cat:'text_quality',topic:'amount_consistency',title:'合同总价与设备清单金额不一致',loc:'第 2.1 条 · P1',locDetail:'第 2.1 条 · 第 1 页 · 字符 [980,1060]',quote:'合同总价为人民币 2,680,000 元…',analysis:'正文总价 268 万与附件一《设备清单》汇总金额 2,716,500 元存在 36,500 元差异，且未约定金额不一致时的处理规则，存在结算争议风险。',confidence:0.81,location_confidence:0.88,evidence:'partially_verified',realtime:'not_requested',human:'pending_review',
+    basis:[{lvl:1,title:'《中华人民共和国民法典》第五百一十条',src:'法律快照 legal-snapshot-v1.3'},{lvl:4,title:'跨文档金额一致性规则 contract.amount.cross_document@v1',src:'确定性规则'}],
+    suggestion:'核对附件一清单，统一总价；如以清单为准，应在正文明确「如正文与附件不一致，以附件一为准」。',
+    provenance:{rule:'contract.amount.cross_document@v1',skill:'contract-common-review@1.3.0',model:'hunyuan-pro · cfg v3',snapshot:'legal-snapshot-v1.3'}},
+  {id:'risk_003',level:'critical',cat:'legal',topic:'liability_scope',title:'违约责任含「间接损失」且违约金畸高',loc:'第 5.1 条 · P1',locDetail:'第 5.1 条 · 第 1 页 · 字符 [2100,2180]',quote:'任何一方违约，应赔偿对方因此遭受的全部直接及间接损失，并支付合同总价 30% 的违约金…',analysis:'「全部直接及间接损失」责任范围过宽且不可执行，叠加 30% 违约金可能被认定过高，对甲方同样构成重大风险敞口。',confidence:0.94,location_confidence:0.97,evidence:'verified',realtime:'not_requested',human:'pending_review',
+    basis:[{lvl:1,title:'《中华人民共和国民法典》第五百八十五条',src:'法律快照 legal-snapshot-v1.3 · 检索于 2026-09-10'},{lvl:1,title:'《中华人民共和国民法典》第五百九十二条',src:'法律快照 legal-snapshot-v1.3'}],
+    suggestion:'删除「间接损失」表述，明确损失范围限于直接损失；违约金比例协商下调，并约定守约方应采取措施防止损失扩大。',
+    provenance:{rule:'contract.liability.scope@v1',skill:'contract-common-review@1.3.0',model:'hunyuan-pro · cfg v3',snapshot:'legal-snapshot-v1.3'}},
+  {id:'risk_004',level:'medium',cat:'commercial',topic:'acceptance',title:'验收期限 7 日过短且「视为验收」对甲方不利',loc:'第 3.2 条 · P1',locDetail:'第 3.2 条 · 第 1 页 · 字符 [1860,1920]',quote:'甲方应在设备到货后 7 日内完成验收；逾期未提出书面异议的，视为验收合格…',analysis:'服务器与网络设备验收需上电测试、压力测试等，7 日过短；「视为验收」条款在到货与验收能力不匹配时对甲方不利。',confidence:0.72,location_confidence:0.9,evidence:'verified',realtime:'not_requested',human:'pending_review',
+    basis:[{lvl:3,title:'公司《采购管理制度 v3.2》验收规范',src:'企业制度 · L3'}],
+    suggestion:'验收期限延长至 15 个工作日，并区分「外观验收」与「技术验收」，明确分批验收机制。',
+    provenance:{rule:'procurement.acceptance.period@v1',skill:'procurement-contract-review@1.2.0',model:'hunyuan-pro · cfg v3',snapshot:'legal-snapshot-v1.3'}},
+  {id:'risk_005',level:'medium',cat:'commercial',topic:'warranty',title:'质保期 36 个月与行业惯例偏离',loc:'第 4.1 条 · P1',locDetail:'第 4.1 条 · 第 1 页 · 字符 [1950,2010]',quote:'乙方提供 36 个月的免费质保服务…',analysis:'服务器整机质保 36 个月可接受，但未区分关键部件（硬盘、电源）与整机的不同质保期，也未约定备件更换时限与响应 SLA。',confidence:0.68,location_confidence:0.85,evidence:'partially_verified',realtime:'not_requested',human:'pending_review',
+    basis:[{lvl:4,title:'行业质保惯例（辅助分析）',src:'L4 · 实务资料'}],
+    suggestion:'明确关键部件质保期、故障响应时限与备件 SLA，并约定过保后的维修收费标准。',
+    provenance:{rule:'procurement.warranty.scope@v1',skill:'procurement-contract-review@1.2.0',model:'hunyuan-pro · cfg v3',snapshot:'legal-snapshot-v1.3'}},
+  {id:'risk_006',level:'low',cat:'legal',topic:'dispute',title:'争议管辖约定可优化',loc:'第 6.1 条 · P1',locDetail:'第 6.1 条 · 第 1 页 · 字符 [2240,2300]',quote:'…提交甲方所在地有管辖权的人民法院诉讼解决…',analysis:'约定甲方所在地法院管辖对甲方有利，可保留；建议补充仲裁或诉讼的选择一致性，避免与其他条款冲突。',confidence:0.55,location_confidence:0.93,evidence:'verified',realtime:'not_requested',human:'pending_review',
+    basis:[{lvl:1,title:'《中华人民共和国民事诉讼法》第三十五条',src:'法律快照 legal-snapshot-v1.3'}],
+    suggestion:'维持甲方所在地管辖；若希望提速可考虑约定仲裁，但需与争议解决整体策略一致。',
+    provenance:{rule:'contract.dispute.jurisdiction@v1',skill:'contract-common-review@1.3.0',model:'hunyuan-pro · cfg v3',snapshot:'legal-snapshot-v1.3'}}
+];
+
+const skills = [
+  {name:'contract-common-review',ver:'1.3.0',desc:'合同通用结构、一致性与风险审查',scope:'系统内置 · 全部合同',status:'enabled',icon:'shield',color:'#2b4acb'},
+  {name:'procurement-contract-review',ver:'1.2.0',desc:'采购合同专项审查',scope:'采购合同',status:'enabled',icon:'cart',color:'#e8590c'},
+  {name:'supplier-service-contract-review',ver:'1.0.0',desc:'供应商服务合同专项审查',scope:'供应商服务',status:'enabled',icon:'wrench',color:'#2b6cb0'},
+  {name:'sales-customer-service-review',ver:'1.0.0',desc:'销售/客户服务合同专项审查',scope:'销售/客服',status:'enabled',icon:'user',color:'#0e8a52'},
+  {name:'property-lease-contract-review',ver:'1.1.0',desc:'房屋租赁合同专项审查',scope:'房屋租赁',status:'enabled',icon:'home',color:'#5b3bc4'},
+  {name:'software-development-contract-review',ver:'1.0.0',desc:'软件开发合同专项审查',scope:'软件开发',status:'enabled',icon:'code',color:'#0e7490'},
+  {name:'selected-text-review',ver:'1.0.0',desc:'人工划词/划句局部审查',scope:'全部合同',status:'enabled',icon:'cursor',color:'#7c5cff'},
+  {name:'legal-source-verification',ver:'1.0.0',desc:'法律来源版本、状态与证据核验',scope:'全部合同',status:'enabled',icon:'book',color:'#0e8a52'},
+  {name:'company-policy-comparison',ver:'1.0.0',desc:'企业制度与标准模板对比',scope:'全部合同',status:'disabled',icon:'building',color:'#64748b'},
+  {name:'document-render-and-export',ver:'1.0.0',desc:'报告生成、渲染与导出检查',scope:'全部合同',status:'enabled',icon:'file',color:'#2b4acb'}
+];
+const SSTATUS = {enabled:{t:'已启用',c:'b-ok'},disabled:{t:'已停用',c:'b-muted'},validating:{t:'校验中',c:'b-warn'},isolated:{t:'已隔离',c:'b-err'}};
+
+const models = [
+  {name:'hunyuan-pro',prov:'企业模型网关',role:'analysis',status:'active',base:'internal-gw.xx.com',ver:'v3'},
+  {name:'extract-fast',prov:'企业模型网关',role:'extraction',status:'active',base:'internal-gw.xx.com',ver:'v2'},
+  {name:'embed-bge-m3',prov:'本地部署',role:'embedding',status:'active',base:'10.8.0.15:8080',ver:'v1'},
+  {name:'rerank-bge',prov:'本地部署',role:'rerank',status:'active',base:'10.8.0.15:8080',ver:'v1'},
+  {name:'fallback-glm4',prov:'第三方 API',role:'analysis',status:'active',base:'api.3rd.com/v1',ver:'v1'},
+  {name:'legacy-gpt4',prov:'第三方 API',role:'analysis',status:'credential_expired',base:'api.3rd.com/v1',ver:'v2'}
+];
+const MSTATUS = {active:{t:'运行中',c:'b-ok'},disabled:{t:'已停用',c:'b-muted'},testing:{t:'测试中',c:'b-warn'},test_failed:{t:'测试失败',c:'b-err'},credential_expired:{t:'凭据过期',c:'b-warn'},unhealthy:{t:'异常',c:'b-err'}};
+const MROLE = {analysis:'语义分析',extraction:'条款抽取',embedding:'向量化',rerank:'重排序',vision:'视觉理解'};
+
+const tasks = [
+  {name:'XX科技 服务器及网络设备采购合同',type:'procurement',status:'waiting_confirmation',progress:78,risks:6,critical:2,time:'15:12'},
+  {name:'湖畔办公 房屋租赁合同',type:'property_lease',status:'working',progress:45,risks:0,critical:0,time:'14:30'},
+  {name:'云启 SaaS 软件开发合同',type:'software',status:'partial',progress:100,risks:9,critical:1,time:'11:08'},
+  {name:'智联 供应商服务合同',type:'supplier_service',status:'completed',progress:100,risks:5,critical:0,time:'昨天'},
+  {name:'华辰 销售合同',type:'sales',status:'completed',progress:100,risks:3,critical:0,time:'昨天'}
+];
+const TSTATUS = {submitted:{t:'已提交',c:'b-muted'},working:{t:'进行中',c:'b-primary'},input_required:{t:'待补充输入',c:'b-warn'},validating:{t:'校验中',c:'b-warn'},waiting_confirmation:{t:'待复核',c:'b-warn'},completed:{t:'已完成',c:'b-ok'},partial:{t:'部分完成',c:'b-muted'},failed:{t:'失败',c:'b-err'},cancelled:{t:'已取消',c:'b-muted'}};
+
+/* ================= 视图切换 ================= */
+const VIEWS = ['dashboard','review','knowledge','capability','settings'];
+function showView(v){
+  VIEWS.forEach(x=>{
+    const el = document.getElementById('view-'+x);
+    el.style.display = (x===v) ? (x==='review' ? 'flex':'block') : 'none';
+  });
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v));
+}
+document.querySelectorAll('.nav-item').forEach(n=>{
+  n.addEventListener('click',()=>{
+    if(n.dataset.view==='review'){ goReview(); return; }
+    showView(n.dataset.view);
+  });
+});
+
+/* ================= 渲染：任务表 ================= */
+function renderTasks(f='all'){
+  const tb = document.getElementById('taskTable');
+  tb.innerHTML = tasks.filter(t=>f==='all'||t.status===f).map(t=>{
+    const s = TSTATUS[t.status];
+    return `<tr>
+      <td><div class="link" onclick="goReview()">${t.name}</div></td>
+      <td><span class="badge b-cat">${CTYPES[t.type]}</span></td>
+      <td><span class="badge ${s.c}"><span class="dot"></span>${s.t}</span></td>
+      <td style="width:150px"><div class="progress"><div class="bar" style="width:${t.progress}%"></div></div></td>
+      <td>${t.risks? `<span style="color:${t.critical?'var(--critical)':'var(--text-2)'}">${t.risks} 条</span>` : '—'}</td>
+      <td class="mono" style="color:var(--text-3)">${t.time}</td>
+      <td><span class="link">打开</span></td>
+    </tr>`;
+  }).join('');
+}
+document.getElementById('taskFilters').addEventListener('click',e=>{
+  const c = e.target.closest('.filter-chip'); if(!c) return;
+  document.querySelectorAll('#taskFilters .filter-chip').forEach(x=>x.classList.remove('active'));
+  c.classList.add('active'); renderTasks(c.dataset.f);
+});
+
+/* ================= 渲染：风险清单 ================= */
+let riskFilter = 'all', activeRisk = 'risk_001';
+function renderRisks(){
+  const list = risks.filter(r=>riskFilter==='all'||r.level===riskFilter);
+  document.getElementById('riskCount').textContent = list.length+' 条风险';
+  document.getElementById('riskList').innerHTML = list.map(r=>`
+    <div class="risk-card lv-${r.level} ${r.id===activeRisk?'active':''}" data-id="${r.id}" onclick="selectRisk('${r.id}')">
+      <div class="rc-top">
+        <span class="badge ${LV[r.level].c}"><span class="dot"></span>${LV[r.level].t}</span>
+        <span class="badge b-cat" style="background:${CATC[r.cat]}14;color:${CATC[r.cat]};border-color:${CATC[r.cat]}30">${CAT[r.cat]}</span>
+      </div>
+      <div class="rc-title">${r.title}</div>
+      <div class="rc-meta">
+        <span class="loc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>${r.loc}</span>
+      </div>
+      <div class="rc-foot">
+        <span class="conf">置信度 <b>${Math.round(r.confidence*100)}%</b></span>
+        <span class="badge ${r.evidence==='verified'?'b-ok':r.evidence==='partially_verified'?'b-warn':'b-muted'}">${r.evidence==='verified'?'证据已验证':r.evidence==='partially_verified'?'证据部分验证':'证据待验证'}</span>
+        <span class="human">
+          <button class="hm-btn ok" title="接受" onclick="event.stopPropagation();actRisk('${r.id}','accepted')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></button>
+          <button class="hm-btn no" title="驳回" onclick="event.stopPropagation();actRisk('${r.id}','false_positive')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </span>
+      </div>
+    </div>`).join('');
+  document.querySelectorAll('.risk-card').forEach(c=>{
+    c.classList.toggle('active', c.dataset.id===activeRisk);
+  });
+}
+document.getElementById('riskFilters').addEventListener('click',e=>{
+  const c = e.target.closest('.filter-chip'); if(!c) return;
+  document.querySelectorAll('#riskFilters .filter-chip').forEach(x=>x.classList.remove('active'));
+  c.classList.add('active'); riskFilter = c.dataset.lv; renderRisks();
+});
+function selectRisk(id){
+  activeRisk = id; renderRisks(); renderDetail(id); highlightDoc(id);
+}
+function actRisk(id,act){
+  const r = risks.find(x=>x.id===id); if(!r) return;
+  r.human = act==='accepted' ? 'accepted' : 'false_positive';
+  if(act==='accepted') toast('已接受风险「'+r.title.slice(0,12)+'…」','ok');
+  else toast('已标记为误报，AI 原始结果保留','warn');
+  renderRisks(); renderDetail(id);
+}
+
+/* ================= 渲染：详情 ================= */
+function renderDetail(id){
+  const r = risks.find(x=>x.id===id); if(!r) return;
+  const basis = r.basis.map(b=>`
+    <div class="basis-item">
+      <div class="b-head"><span class="lvl-tag lvl-${b.lvl}">L${b.lvl}</span><span class="b-title">${b.title}</span></div>
+      <div class="b-src">${b.src}</div>
+    </div>`).join('');
+  document.getElementById('detailArea').innerHTML = `
+    <div class="detail-head lv-${r.level}"><div class="lv-bar"></div>
+      <div class="t">
+        <h3>${r.title}</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <span class="badge ${LV[r.level].c}"><span class="dot"></span>${LV[r.level].t}</span>
+          <span class="badge b-cat" style="background:${CATC[r.cat]}14;color:${CATC[r.cat]};border-color:${CATC[r.cat]}30">${CAT[r.cat]}</span>
+          <span class="badge b-warn"><span class="dot"></span>待人工复核</span>
+        </div>
+      </div>
+    </div>
+    <div class="detail-body">
+      <div class="d-section"><h4>合同定位<span class="ln"></span></h4>
+        <div class="quote"><span class="q-loc">${r.locDetail}</span>${r.quote}</div>
+        <div class="kv" style="margin-top:10px">
+          <div class="k"><div class="kl">定位置信度</div><div class="kv-val">${Math.round(r.location_confidence*100)}%</div></div>
+          <div class="k"><div class="kl">模型置信度</div><div class="kv-val">${Math.round(r.confidence*100)}%</div></div>
+        </div>
+      </div>
+      <div class="d-section"><h4>风险分析<span class="ln"></span></h4><div style="font-size:13px;color:var(--text-2);line-height:1.85">${r.analysis}</div></div>
+      <div class="d-section"><h4>法律与制度依据<span class="ln"></span></h4>${basis}</div>
+      <div class="d-section"><h4>修改建议<span class="ln"></span></h4><div style="font-size:13px;color:var(--text);background:var(--ok-soft);border:1px solid #cdeedd;border-radius:8px;padding:10px 12px;line-height:1.8">${r.suggestion}</div></div>
+      <div class="d-section"><h4>证据与核验<span class="ln"></span></h4>
+        <div class="kv">
+          <div class="k"><div class="kl">证据状态</div><div class="kv-val">${r.evidence==='verified'?'已验证':r.evidence==='partially_verified'?'部分验证':'待验证'}</div></div>
+          <div class="k"><div class="kl">结论状态</div><div class="kv-val">候选（candidate）</div></div>
+          <div class="k"><div class="kl">实时核验</div><div class="kv-val">未请求</div></div>
+          <div class="k"><div class="kl">人工状态</div><div class="kv-val">待复核</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="detail-foot">
+      <button class="btn" onclick="actRisk('${r.id}','accepted')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>接受</button>
+      <button class="btn" onclick="actRisk('${r.id}','false_positive')">标记误报</button>
+      <button class="btn" onclick="toast('已进入修改（原型演示）','ok')">修改</button>
+      <button class="btn danger" onclick="toast('已暂缓处理','warn')">暂缓</button>
+    </div>`;
+  document.getElementById('verTrace').innerHTML = `
+    <span>规则 <span class="mono">${r.provenance.rule}</span></span>
+    <span>Skill <span class="mono">${r.provenance.skill}</span></span>
+    <span>模型 <span class="mono">${r.provenance.model}</span></span>
+    <span>快照 <span class="mono">${r.provenance.snapshot}</span></span>
+    <span>trace <span class="mono">trace_${r.id.slice(-4)}</span></span>`;
+}
+function highlightDoc(id){
+  document.querySelectorAll('#docPaper mark').forEach(m=>m.classList.toggle('active', m.dataset.risk===id));
+  const m = document.querySelector(`#docPaper mark[data-risk="${id}"]`);
+  if(m) m.scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+/* ================= 划词 ================= */
+document.addEventListener('mouseup',e=>{
+  setTimeout(()=>{
+    const sel = window.getSelection();
+    if(!sel || sel.isCollapsed){ hideSelMenu(); return; }
+    const txt = sel.toString().trim();
+    if(!txt) { hideSelMenu(); return; }
+    const anchor = sel.anchorNode;
+    const inDoc = anchor && anchor.parentElement && anchor.parentElement.closest('#docPaper');
+    if(!inDoc){ hideSelMenu(); return; }
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const menu = document.getElementById('selMenu');
+    menu.style.display = 'flex';
+    menu.style.flexDirection = 'column';
+    menu.style.left = Math.min(rect.left + rect.width/2 - 70, window.innerWidth-180) + 'px';
+    menu.style.top = (rect.top - 8 - 96) + 'px';
+  },10);
+});
+document.addEventListener('mousedown',e=>{
+  if(!e.target.closest('.selection-menu')) hideSelMenu();
+});
+function hideSelMenu(){ document.getElementById('selMenu').style.display='none'; }
+function openSelect(){
+  const txt = window.getSelection().toString().trim();
+  document.getElementById('selQuote').textContent = txt || '（未选中文本）';
+  hideSelMenu(); openOv('select');
+}
+
+/* ================= 弹窗 ================= */
+function openOv(id){ document.getElementById('ov-'+id).classList.add('show'); }
+function closeOv(id){ document.getElementById('ov-'+id).classList.remove('show'); }
+document.querySelectorAll('.overlay').forEach(o=>{
+  o.addEventListener('mousedown',e=>{ if(e.target===o) o.classList.remove('show'); });
+});
+function openUpload(){ openOv('upload'); }
+function openReviewConfig(){ openOv('config'); }
+function openExport(){ openOv('export'); }
+function openSkillUpload(){ openOv('skill'); }
+function startReview(){ closeOv('upload'); toast('合同已上传，进入解析与类型识别…','ok'); setTimeout(()=>goReview(),600); }
+function goReview(){ showView('review'); }
+function runSelectReview(){
+  closeOv('select');
+  toast('局部审查已提交（P95 < 15s）','ok');
+  setTimeout(()=>toast('局部审查完成，结果已合并','ok'),900);
+}
+
+/* 上传弹窗交互 */
+document.getElementById('upType').addEventListener('click',e=>{
+  const c=e.target.closest('.radio-card'); if(!c)return;
+  document.querySelectorAll('#upType .radio-card').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+});
+document.getElementById('upMode').addEventListener('click',e=>{
+  const c=e.target.closest('.radio-card'); if(!c)return;
+  document.querySelectorAll('#upMode .radio-card').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+});
+document.querySelectorAll('.chip-set .chip').forEach(c=>{
+  c.addEventListener('click',()=>c.classList.toggle('on'));
+});
+document.getElementById('selTypes').addEventListener('click',e=>{
+  const c=e.target.closest('.chip'); if(!c)return;
+  document.querySelectorAll('#selTypes .chip').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+  document.getElementById('specialWrap').style.display = c.dataset.st==='special' ? 'block' : 'none';
+});
+
+/* 知识库 tabs */
+document.getElementById('kbTabs').addEventListener('click',e=>{
+  const c=e.target.closest('.tab'); if(!c)return;
+  document.querySelectorAll('#kbTabs .tab').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+  ['snapshot','rules','policy','memory'].forEach(k=>{
+    const el = document.getElementById('kb'+k.charAt(0).toUpperCase()+k.slice(1));
+    if(el) el.style.display = (k===c.dataset.kb)?'block':'none';
+  });
+});
+
+/* 能力配置 tabs */
+document.getElementById('capTabs').addEventListener('click',e=>{
+  const c=e.target.closest('.tab'); if(!c)return;
+  document.querySelectorAll('#capTabs .tab').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+  document.getElementById('skillGrid').style.display = (c.dataset.cap==='skills')?'grid':'none';
+  document.getElementById('modelGrid').style.display = (c.dataset.cap==='models')?'grid':'none';
+});
+
+/* 系统设置 tabs */
+document.getElementById('setTabs').addEventListener('click',e=>{
+  const c=e.target.closest('.tab'); if(!c)return;
+  document.querySelectorAll('#setTabs .tab').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+  document.getElementById('setSettings').style.display = (c.dataset.set==='settings')?'block':'none';
+  document.getElementById('setAudit').style.display = (c.dataset.set==='audit')?'block':'none';
+});
+
+/* ================= 渲染：Skill ================= */
+const ICONS = {shield:'<path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/>',
+ cart:'<circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M3 4h2l2.5 11h9L19 7H6"/>',
+ wrench:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.8-.7-.7-2.8z"/>',
+ user:'<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="4"/>',
+ home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+ code:'<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>',
+ cursor:'<path d="M4 3l7 18 2-8 8-2z"/>',
+ book:'<path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2z"/><path d="M8 7h8M8 11h5"/>',
+ building:'<rect x="5" y="3" width="14" height="18"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/>',
+ file:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'};
+document.getElementById('skillGrid').innerHTML = skills.map(s=>{
+  const st = SSTATUS[s.status];
+  return `<div class="mcard">
+    <div class="m-head"><div class="m-ico" style="background:${s.color}16;color:${s.color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${ICONS[s.icon]||ICONS.shield}</svg></div>
+      <div class="m-name">${s.name}<small>${s.desc}</small></div></div>
+    <div class="m-meta"><span class="badge b-cat">v${s.ver}</span><span class="badge ${st.c}"><span class="dot"></span>${st.t}</span><span class="badge b-muted">${s.scope}</span></div>
+    <div class="m-foot"><button class="btn sm">详情</button><button class="btn sm">${s.status==='enabled'?'停用':'启用'}</button><button class="btn sm" onclick="toast('校验报告（原型演示）','ok')">校验报告</button></div>
+  </div>`;
+}).join('');
+
+/* ================= 渲染：模型 ================= */
+document.getElementById('modelGrid').innerHTML = models.map(m=>{
+  const st = MSTATUS[m.status];
+  const roleC = {analysis:'#2b4acb',extraction:'#e8590c',embedding:'#0e8a52',rerank:'#5b3bc4',vision:'#0e7490'}[m.role]||'#64748b';
+  return `<div class="mcard">
+    <div class="m-head"><div class="m-ico" style="background:${roleC}16;color:${roleC}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg></div>
+      <div class="m-name">${m.name}<small>${m.prov}</small></div></div>
+    <div class="m-meta"><span class="badge b-cat">${MROLE[m.role]}</span><span class="badge ${st.c}"><span class="dot"></span>${st.t}</span><span class="badge b-muted">${m.ver}</span></div>
+    <div style="font-size:11.5px;color:var(--text-3);margin-bottom:12px;font-family:var(--mono)">${m.base}</div>
+    <div class="m-foot"><button class="btn sm" onclick="toast('连通性测试（原型演示）','ok')">测试连接</button><button class="btn sm">${m.status==='active'?'停用':'启用'}</button><button class="btn sm">编辑</button></div>
+  </div>`;
+}).join('');
+
+/* ================= Toast ================= */
+function toast(msg,type='ok'){
+  const t = document.getElementById('toast');
+  const el = document.createElement('div');
+  el.className = 'toast-item '+type;
+  el.innerHTML = (type==='ok'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>') + msg;
+  t.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); },2600);
+}
+
+/* ================= 初始化 ================= */
+renderTasks(); renderRisks(); renderDetail('risk_001');
+</script>
+</body>
+</html>
