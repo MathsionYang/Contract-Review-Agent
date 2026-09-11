@@ -7,6 +7,7 @@ import { useReviewStore } from "../stores/review";
 import Modal from "./Modal.vue";
 
 const store = useReviewStore();
+defineEmits(["new-review", "open-review", "configure", "export"]);
 const roleLabels = {
   analysis: "语义分析",
   extraction: "条款抽取",

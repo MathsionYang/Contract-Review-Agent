@@ -5,6 +5,7 @@ import { useReviewStore } from "../stores/review";
 import { defaultSettings } from "../data/sampleData";
 
 const store = useReviewStore();
+defineEmits(["new-review", "open-review", "configure", "export"]);
 const settings = reactive({ ...defaultSettings });
 const legalAllowlistText = ref("");
 const exportOptions = ["DOCX", "PDF", "XLSX", "JSON"];

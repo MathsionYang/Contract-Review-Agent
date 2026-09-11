@@ -512,8 +512,8 @@ Validator 返回 `canExport`、机器可读的校验项、阻断错误码和处�
 
 ```text
 npm test
-33 tests
-33 pass
+35 tests
+35 pass
 0 fail
 
 npm run build
@@ -530,14 +530,17 @@ node --check electron/review-engine.cjs
 node --check electron/model-gateway.cjs
 node --check electron/legal-source.cjs
 node --check electron/review-runner.cjs
+node --check scripts/launch-electron.cjs
 ```
 
-测试覆盖了本地状态读写、原始文件版本复制、DOCX/PDF 解析、导出门禁、四种格式导出、模型和 Skill 执行快照、知识文件版本和条款解析、规则三态、知识检索、模型网关、法律快照导入、白名单核验、真实审查编排、选区文本快照和局部审查风险候选。
+测试覆盖了本地状态读写、原始文件版本复制、DOCX/PDF 解析、导出门禁、四种格式导出、模型和 Skill 执行快照、知识文件版本和条款解析、规则三态、知识检索、模型网关、法律快照导入、白名单核验、真实审查编排、选区文本快照、局部审查风险候选、Vue 响应式 IPC 克隆转换和 Electron 启动环境隔离。
 
 ## 14. 本次 P0 交付与同步
 
 - 源码交付目录：`D:\项目\CheckMCP\Doc\合同审批`。
 - Electron 主进程、预加载白名单、知识文件服务、规则引擎、模型网关、法律来源核验和审查编排代码已纳入同一版本。
+- `scripts/launch-electron.cjs` 统一 Electron 启动入口，启动前清除宿主环境中的 `ELECTRON_RUN_AS_NODE`，避免桌面端误以 Node 模式运行。
+- `src/services/clonePayload.mjs` 统一处理 Vue/Pinia 响应式对象到 Electron IPC 的可克隆数据转换，覆盖状态保存、审查执行、知识导入、Validator 和导出调用。
 - `npm run build` 生成的 `dist/` 已与当前 Vue 3 源码同步，作为生产构建产物一并交付。
 - 阶段文档、P0 设计说明和实施计划均保存在 `docs/` 下；原型文件未被覆盖。
 - 同步目标为 Git 远端 `origin/master`；提交前重新执行测试、生产构建、Electron 模块语法检查和 Git 差异检查。

@@ -9,6 +9,7 @@ import Modal from "./Modal.vue";
 import { electronApi } from "../services/electronApi";
 
 const store = useReviewStore();
+defineEmits(["new-review", "open-review", "configure", "export"]);
 const activeTab = ref("rules");
 const keyword = ref("");
 const statusFilter = ref("all");

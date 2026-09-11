@@ -1,4 +1,6 @@
 // 所有渲染层本地能力都从这里经过，组件不直接访问 Node.js 或文件系统。
+import { toCloneable } from "./clonePayload.mjs";
+
 const bridge = typeof window !== "undefined" ? window.contractApp : null;
 
 function readBrowserState() {
@@ -17,7 +19,7 @@ export const electronApi = {
   },
   importContract(options) {
     if (!bridge?.importContract) return Promise.reject(new Error("当前页面未连接 Electron 文件导入能力"));
-    return bridge.importContract(options);
+    return bridge.importContract(toCloneable(options));
   },
   selectKnowledgeFiles(kind) {
     if (!bridge?.selectKnowledgeFiles) return Promise.reject(new Error("当前页面未连接 Electron 知识文件选择能力"));
@@ -25,19 +27,19 @@ export const electronApi = {
   },
   importKnowledgeFiles(payload) {
     if (!bridge?.importKnowledgeFiles) return Promise.reject(new Error("当前页面未连接 Electron 知识文件导入能力"));
-    return bridge.importKnowledgeFiles(payload);
+    return bridge.importKnowledgeFiles(toCloneable(payload));
   },
   importLegalSnapshot(payload) {
     if (!bridge?.importLegalSnapshot) return Promise.reject(new Error("当前页面未连接 Electron 法律快照导入能力"));
-    return bridge.importLegalSnapshot(payload);
+    return bridge.importLegalSnapshot(toCloneable(payload));
   },
   verifyLegalRealtime(payload) {
     if (!bridge?.verifyLegalRealtime) return Promise.reject(new Error("当前页面未连接 Electron 法律来源核验能力"));
-    return bridge.verifyLegalRealtime(payload);
+    return bridge.verifyLegalRealtime(toCloneable(payload));
   },
   runReview(payload) {
     if (!bridge?.runReview) return Promise.reject(new Error("当前页面未连接 Electron 审查执行能力"));
-    return bridge.runReview(payload);
+    return bridge.runReview(toCloneable(payload));
   },
   onReviewProgress(callback) {
     if (!bridge?.onReviewProgress) return () => {};
@@ -47,9 +49,10 @@ export const electronApi = {
     return bridge?.loadState ? bridge.loadState() : Promise.resolve(readBrowserState());
   },
   saveState(state) {
-    if (bridge?.saveState) return bridge.saveState(state);
-    window.localStorage.setItem("contract-review-state", JSON.stringify(state));
-    return Promise.resolve(state);
+    const plainState = toCloneable(state);
+    if (bridge?.saveState) return bridge.saveState(plainState);
+    window.localStorage.setItem("contract-review-state", JSON.stringify(plainState));
+    return Promise.resolve(plainState);
   },
   validateExport(payload) {
     if (!bridge?.validateExport) {
@@ -59,10 +62,10 @@ export const electronApi = {
         blockingCodes: ["ELECTRON_BRIDGE_UNAVAILABLE"]
       });
     }
-    return bridge.validateExport(payload);
+    return bridge.validateExport(toCloneable(payload));
   },
   exportReview(payload) {
     if (!bridge?.exportReview) return Promise.reject(new Error("当前页面未连接 Electron 导出能力"));
-    return bridge.exportReview(payload);
+    return bridge.exportReview(toCloneable(payload));
   }
 };
