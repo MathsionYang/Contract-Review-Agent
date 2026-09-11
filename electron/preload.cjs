@@ -16,6 +16,17 @@ const api = {
   importLegalSnapshot: (payload) => ipcRenderer.invoke("legal:import-snapshot", payload),
   verifyLegalRealtime: (payload) => ipcRenderer.invoke("legal:verify-realtime", payload),
   runReview: (payload) => ipcRenderer.invoke("review:run", payload),
+  chatReview: (payload) => ipcRenderer.invoke("review:chat", payload),
+  retryChat: (payload) => ipcRenderer.invoke("review:chat-retry", payload),
+  cancelChat: (payload) => ipcRenderer.invoke("review:chat-cancel", payload),
+  confirmMemory: (payload) => ipcRenderer.invoke("review:memory-confirm", payload),
+  dismissMemory: (payload) => ipcRenderer.invoke("review:memory-dismiss", payload),
+  onChatEvent: (callback) => {
+    if (typeof callback !== "function" || !ipcRenderer) return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("review:chat-event", listener);
+    return () => ipcRenderer.removeListener("review:chat-event", listener);
+  },
   onReviewProgress: (callback) => {
     if (typeof callback !== "function" || !ipcRenderer) return () => {};
     const listener = (_event, payload) => callback(payload);

@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import {
-  Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, Cpu, FileCog, FileDown, Flag, Highlighter, ListChecks, LoaderCircle, Maximize2, Minus, Plus, RotateCcw, ScanSearch, Search, Settings2, SquarePen, Trash2, X
+  Bot, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, Cpu, FileCog, FileDown, Flag, Highlighter, ListChecks, LoaderCircle, Maximize2, MessageSquare, Minus, Plus, RotateCcw, ScanSearch, Search, Send, Settings2, SquarePen, Trash2, UserRound, X
 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
 import { riskCategories, riskLevels } from "../data/sampleData";
@@ -12,6 +12,9 @@ const riskFilter = ref("all");
 const searchQuery = ref("");
 const documentTextElement = ref(null);
 const selectionMenu = ref(null);
+const lastSelection = ref(null);
+const chatInput = ref("");
+const memoryEdits = reactive({});
 const selectionReviewForm = reactive({ reviewType: "legal_risk", topic: "general", contextScope: "selected_clause" });
 
 const reviewTypeOptions = [
@@ -90,6 +93,21 @@ const searchMatchCount = computed(() => {
   if (!searchQuery.value.trim()) return 0;
   return (currentPage.value.text.match(new RegExp(escapeRegExp(searchQuery.value.trim()), "gi")) || []).length;
 });
+const chatMessages = computed(() => store.chatMessages || []);
+const chatModels = computed(() => store.activeAnalysisModels || []);
+const chatSession = computed(() => store.activeChatSession);
+const chatCandidates = computed(() => store.chatMemoryCandidates || []);
+const chatModelName = computed({
+  get: () => store.selectedChatModel || store.reviewExecution?.models?.analysis?.name || chatModels.value[0]?.name || "",
+  set: (value) => store.setChatModel(value)
+});
+const chatContextItems = computed(() => [
+  { key: "includeKnowledge", label: "知识依据", enabled: store.chatContextPreferences.includeKnowledge },
+  { key: "includeCurrentPage", label: "当前页", enabled: store.chatContextPreferences.includeCurrentPage },
+  { key: "includeSelection", label: "当前选区", enabled: store.chatContextPreferences.includeSelection },
+  { key: "includeCurrentRisk", label: "当前风险", enabled: store.chatContextPreferences.includeCurrentRisk },
+  { key: "includeMemory", label: "企业记忆", enabled: store.chatContextPreferences.includeMemory }
+]);
 
 function escapeRegExp(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]); }
@@ -192,6 +210,12 @@ function selectionPayload() {
   };
 }
 
+function selectionForChat() {
+  if (lastSelection.value?.annotation_id) return { selectionRef: lastSelection.value.annotation_id };
+  if (lastSelection.value) return { selection: { ...lastSelection.value, text: lastSelection.value.text_snapshot } };
+  return {};
+}
+
 function closeSelectionMenu() {
   selectionMenu.value = null;
   clearNativeSelection();
@@ -206,7 +230,8 @@ async function markSelection() {
   const payload = selectionPayload();
   if (!payload) return;
   try {
-    await store.saveSelectionAnnotation(payload);
+    const annotation = await store.saveSelectionAnnotation(payload);
+    lastSelection.value = annotation;
     closeSelectionMenu();
   } catch (error) {
     store.notify(error.message || "选区标记失败", "warn");
@@ -249,6 +274,13 @@ function handleDocumentMouseUp(event) {
     charRange: [start, end],
     rect
   };
+  lastSelection.value = {
+    text_snapshot: text,
+    file_version_id: store.activeProject?.file_version_id,
+    page: currentPage.value.page,
+    clause_no: guessClauseNo(currentPage.value.text, start),
+    char_range: [start, end]
+  };
 }
 
 function handleEscape(event) {
@@ -282,6 +314,42 @@ async function handleRiskCardAction(risk, action) {
   store.selectRisk(risk.risk_id);
   await store.applyRiskAction(risk.risk_id, action);
 }
+function toggleChatContext(key) {
+  store.updateChatContextPreferences({ [key]: !store.chatContextPreferences[key] });
+}
+function memoryEdit(candidate) {
+  if (!memoryEdits[candidate.candidate_id]) memoryEdits[candidate.candidate_id] = { content: candidate.content, scope: candidate.scope };
+  return memoryEdits[candidate.candidate_id];
+}
+async function sendChat(prompt = "") {
+  const content = String(prompt || chatInput.value || "").trim();
+  if (!content || store.chatBusy) return;
+  chatInput.value = "";
+  try {
+    await store.chatReview({ userInput: content, modelName: chatModelName.value, ...selectionForChat() });
+  } catch (_error) {
+    // store 已将错误转换为页面通知。
+  }
+}
+async function retryChat(message) {
+  try { await store.retryChat({ sessionId: chatSession.value?.chat_session_id, messageId: message.message_id, modelName: chatModelName.value }); } catch (_error) {}
+}
+async function confirmCandidate(candidate, resolution) {
+  try {
+    const result = await store.confirmMemoryCandidate({ candidateId: candidate.candidate_id, edited: memoryEdit(candidate), resolution });
+    if (result?.errorCode === "MEMORY_CONFLICT") store.notify("请选择替换、合并或保留现有记忆", "warn");
+  } catch (error) { store.notify(error.message || "记忆确认失败", "warn"); }
+}
+async function dismissCandidate(candidate) {
+  try { await store.dismissMemoryCandidate(candidate.candidate_id); } catch (error) { store.notify(error.message || "记忆候选处理失败", "warn"); }
+}
+function citationLabel(citation) {
+  return `${citation.file_name || "依据文件"} · ${citation.clause_no || "具体条款"}`;
+}
+
+watch(chatModels, (models) => {
+  if (!store.selectedChatModel && models[0]) store.setChatModel(models[0].name);
+}, { immediate: true });
 function riskBadge(risk) { return riskLevels[risk.risk_level] || riskLevels.info; }
 function sourceFileName(source) { return source?.file_name || source?.fileName || source?.document_name || source?.documentName || source?.file || source?.title || "未命名依据"; }
 function sourceClause(source) { return source?.clause_no || source?.clauseNo || source?.clause_title || source?.clauseTitle || source?.clause || source?.citation || "未绑定具体条款"; }
@@ -368,6 +436,47 @@ function displaySize(bytes) {
           <select v-model.number="store.selectedPage" class="page-select" aria-label="选择页码"><option v-for="page in pageCount" :key="page" :value="page">第 {{ page }} 页</option></select>
           <button class="icon-button" type="button" title="下一页" aria-label="下一页" :disabled="store.selectedPage >= pageCount" @click="changePage(1)"><ChevronRight :size="17" /></button>
         </footer>
+        <section class="chat-panel" aria-label="对话审核">
+          <header class="chat-header">
+            <div class="chat-title"><span class="chat-icon"><MessageSquare :size="16" /></span><div><h2>对话审核</h2><p>{{ chatSession ? `本地会话 · ${chatMessages.length} 条消息` : "输入自然语言，协同完成当前合同审核" }}</p></div></div>
+            <label class="chat-model-select"><span>模型</span><select v-model="chatModelName" :disabled="store.chatBusy || !chatModels.length" aria-label="选择对话审核模型"><option value="" disabled>未配置可用模型</option><option v-for="model in chatModels" :key="model.name" :value="model.name">{{ model.name }} · {{ model.modelId }}</option></select></label>
+          </header>
+          <div class="chat-context-bar">
+            <span class="chat-context-label">本轮上下文</span>
+            <span class="context-chip active fixed"><Check :size="12" />合同文件</span>
+            <button v-for="item in chatContextItems" :key="item.key" class="context-chip" :class="{ active: item.enabled }" type="button" :aria-pressed="item.enabled" @click="toggleChatContext(item.key)"><Check v-if="item.enabled" :size="12" />{{ item.label }}</button>
+            <select class="chat-scope-select" :value="store.chatContextPreferences.contextScope" aria-label="选择选区上下文范围" @change="store.updateChatContextPreferences({ contextScope: $event.target.value })"><option value="selected_clause">仅选区条款</option><option value="adjacent_clauses">前后同级条款</option><option value="current_chapter">当前页章节</option></select>
+            <span v-if="lastSelection" class="chat-selection-note">{{ lastSelection.clause_no || "选区" }} · {{ lastSelection.text_snapshot?.slice(0, 18) }}{{ lastSelection.text_snapshot?.length > 18 ? "..." : "" }}</span>
+          </div>
+          <div class="chat-message-list" aria-live="polite">
+            <div v-if="!chatMessages.length" class="chat-empty"><Bot :size="22" /><span>可以问我“审查当前选区”“检查付款责任”或“生成待核验风险”。</span></div>
+            <article v-for="message in chatMessages" :key="message.message_id" class="chat-message" :class="`chat-message-${message.role} chat-message-${message.status || 'completed'}`">
+              <span class="chat-avatar"><UserRound v-if="message.role === 'user'" :size="14" /><Bot v-else :size="15" /></span>
+              <div class="chat-message-main">
+                <div class="chat-message-meta"><strong>{{ message.role === "user" ? "你" : "审查助手" }}</strong><small>{{ message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "" }}</small><span v-if="message.model?.name" class="chat-model-badge">{{ message.model.name }}</span></div>
+                <p>{{ message.content }}</p>
+                <div v-if="message.status === 'failed' || message.status === 'cancelled'" class="chat-message-error"><span>{{ message.error_code || "CHAT_FAILED" }}</span><button class="text-action" type="button" @click="retryChat(message)"><RotateCcw :size="13" />重试</button></div>
+                <div v-if="message.citations?.length" class="chat-citation-list"><span class="chat-result-label">依据</span><span v-for="citation in message.citations" :key="citation.citation_id" class="chat-citation">{{ citationLabel(citation) }}</span></div>
+                <div v-if="message.risk_refs?.length" class="chat-result-card chat-risk-result"><div><strong>已生成待核验风险</strong><span>{{ message.risk_refs.length }} 条，已加入右侧风险清单</span></div><button class="text-action" type="button" @click="store.selectRisk(message.risk_refs[0])"><ScanSearch :size="13" />查看风险</button></div>
+                <div v-if="message.review_action?.type === 'local_review'" class="chat-result-card"><div><strong>已触发局部审查</strong><span>{{ message.review_action.topic || "通用条款" }} · 结果需人工核验</span></div><button class="text-action" type="button" @click="message.risk_refs?.[0] && store.selectRisk(message.risk_refs[0])"><ScanSearch :size="13" />定位结果</button></div>
+              </div>
+            </article>
+            <div v-if="store.chatBusy && store.chatStreamText" class="chat-streaming"><Bot :size="15" /><span>{{ store.chatStreamText }}</span></div>
+          </div>
+          <div v-if="chatCandidates.length" class="memory-candidate-list">
+            <div class="memory-candidate-heading"><strong>待确认企业记忆</strong><span>不会自动写入正式记忆</span></div>
+            <article v-for="candidate in chatCandidates" :key="candidate.candidate_id" class="memory-candidate-card">
+              <textarea v-model="memoryEdit(candidate).content" rows="2" aria-label="编辑企业记忆候选内容"></textarea>
+              <div class="memory-candidate-meta"><span>{{ candidate.scope }} · {{ candidate.memory_type }} · {{ Math.round(candidate.confidence * 100) }}%</span><span v-if="candidate.sensitivity_findings?.length" class="memory-sensitive">需要脱敏</span></div>
+              <div v-if="candidate.conflicts?.length" class="memory-conflict"><strong>检测到冲突</strong><span>现有：{{ candidate.conflicts[0].content }}</span></div>
+              <div class="memory-candidate-actions"><button class="text-action" type="button" @click="confirmCandidate(candidate)"><Check :size="13" />确认写入</button><button v-if="candidate.conflicts?.length" class="text-action" type="button" @click="confirmCandidate(candidate, 'replace')">替换</button><button v-if="candidate.conflicts?.length" class="text-action" type="button" @click="confirmCandidate(candidate, 'merge')">合并</button><button v-if="candidate.conflicts?.length" class="text-action" type="button" @click="confirmCandidate(candidate, 'keep_existing')">保留现有</button><button class="text-action danger-text" type="button" @click="dismissCandidate(candidate)"><X :size="13" />放弃</button></div>
+            </article>
+          </div>
+          <div class="chat-composer">
+            <textarea v-model="chatInput" rows="2" placeholder="输入自然语言审核请求..." aria-label="输入对话审核请求" :disabled="store.chatBusy || !chatModels.length" @keydown.enter.exact.prevent="sendChat()"></textarea>
+            <div class="chat-composer-footer"><span>{{ chatModels.length ? "模型只会使用已勾选的上下文" : "请先在能力配置中启用 analysis 模型" }}</span><div><button v-if="store.chatBusy" class="icon-button small danger" type="button" title="停止对话审核" aria-label="停止对话审核" @click="store.cancelChat"><X :size="15" /></button><button class="icon-button chat-send-button" type="button" title="发送审核请求" aria-label="发送审核请求" :disabled="store.chatBusy || !chatInput.trim() || !chatModels.length" @click="sendChat()"><LoaderCircle v-if="store.chatBusy" class="spin" :size="16" /><Send v-else :size="16" /></button></div></div>
+          </div>
+        </section>
       </section>
 
       <section class="risk-panel">

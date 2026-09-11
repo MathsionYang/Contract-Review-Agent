@@ -10,9 +10,14 @@ const { exportReview } = require("./exporter.cjs");
 const { buildKnowledgeItem, parseKnowledgeFile, parseLegalSnapshotFile, validateKnowledgeFile } = require("./knowledge.cjs");
 const { runReview } = require("./review-runner.cjs");
 const { verifyLegalSource } = require("./legal-source.cjs");
+const { createReviewChatService } = require("./review-chat.cjs");
 
 let mainWindow;
 let storage;
+let reviewChatService;
+
+// 审查工作台不依赖 GPU；关闭硬件加速可兼容受限桌面、远程会话和无可用显卡驱动环境。
+app.disableHardwareAcceleration();
 
 function isDevelopment() {
   return Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -61,6 +66,11 @@ function sendReviewProgress(projectId, progress) {
     progress: Math.min(Math.max(Number(progress?.progress) || 0, 0), 100),
     status: String(progress?.status || "running")
   });
+}
+
+function sendChatEvent(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("review:chat-event", payload);
 }
 
 async function chooseContractFile() {
@@ -143,6 +153,10 @@ function mergeAudit(state, entry) {
 }
 
 function registerIpc() {
+  reviewChatService = createReviewChatService({
+    storage,
+    sendEvent: sendChatEvent
+  });
   ipcMain.handle("contract:select-file", chooseContractFile);
 
   ipcMain.handle("knowledge:select-files", (_event, options = {}) => chooseKnowledgeFiles(options.kind || "policies"));
@@ -240,6 +254,12 @@ function registerIpc() {
     storage.saveState(nextState);
     return { ...result, state: nextState };
   });
+
+  ipcMain.handle("review:chat", async (_event, options = {}) => reviewChatService.chat(options));
+  ipcMain.handle("review:chat-retry", async (_event, options = {}) => reviewChatService.retry(options));
+  ipcMain.handle("review:chat-cancel", (_event, options = {}) => reviewChatService.cancel(options));
+  ipcMain.handle("review:memory-confirm", (_event, options = {}) => reviewChatService.confirmMemory(options));
+  ipcMain.handle("review:memory-dismiss", (_event, options = {}) => reviewChatService.dismissMemory(options));
 
   ipcMain.handle("contract:import", async (_event, options = {}) => {
     const filePath = options.filePath;

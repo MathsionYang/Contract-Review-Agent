@@ -207,6 +207,13 @@ export const defaultSettings = {
   blockScannedPdfWithoutOcr: true,
   checkSensitiveInfo: true,
   legalSourceAllowlist: [],
+  chatPermissions: {
+    sessionAccess: "local_user",
+    memoryWrite: "confirm_only",
+    toolExecution: "confirm",
+    allowExternalModelSensitiveData: false,
+    allowRestrictedLocalMemory: false
+  },
   compactMode: false,
   showStatusBar: true
 };

@@ -45,6 +45,30 @@ export const electronApi = {
     if (!bridge?.onReviewProgress) return () => {};
     return bridge.onReviewProgress(callback);
   },
+  chatReview(payload) {
+    if (!bridge?.chatReview) return Promise.reject(new Error("当前页面未连接 Electron 对话审核能力"));
+    return bridge.chatReview(toCloneable(payload));
+  },
+  retryChat(payload) {
+    if (!bridge?.retryChat) return Promise.reject(new Error("当前页面未连接 Electron 对话重试能力"));
+    return bridge.retryChat(toCloneable(payload));
+  },
+  cancelChat(payload) {
+    if (!bridge?.cancelChat) return Promise.reject(new Error("当前页面未连接 Electron 对话取消能力"));
+    return bridge.cancelChat(toCloneable(payload));
+  },
+  confirmMemory(payload) {
+    if (!bridge?.confirmMemory) return Promise.reject(new Error("当前页面未连接企业记忆确认能力"));
+    return bridge.confirmMemory(toCloneable(payload));
+  },
+  dismissMemory(payload) {
+    if (!bridge?.dismissMemory) return Promise.reject(new Error("当前页面未连接企业记忆放弃能力"));
+    return bridge.dismissMemory(toCloneable(payload));
+  },
+  onChatEvent(callback) {
+    if (!bridge?.onChatEvent) return () => {};
+    return bridge.onChatEvent(callback);
+  },
   loadState() {
     return bridge?.loadState ? bridge.loadState() : Promise.resolve(readBrowserState());
   },

@@ -62,41 +62,100 @@ async function invokeModel(options = {}) {
     model: String(model.modelId),
     messages: Array.isArray(options.messages) ? options.messages : [],
     temperature: 0.1,
-    response_format: { type: "json_object" }
+    response_format: { type: "json_object" },
+    ...(Number(model.maxTokens) > 0 ? { max_tokens: Number(model.maxTokens) } : {}),
+    ...(options.stream ? { stream: true } : {})
   };
   const retries = Math.min(Math.max(Number(model.retries ?? 0), 0), MAX_RETRIES);
   const timeoutMs = Math.min(Math.max(Number(model.timeoutMs || DEFAULT_TIMEOUT_MS), 1000), 120000);
   let lastFailure = null;
+  let emittedDelta = false;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     const startedAt = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let requestSignal = controller.signal;
+    if (options.signal) {
+      if (typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") requestSignal = AbortSignal.any([controller.signal, options.signal]);
+      else if (options.signal.aborted) controller.abort();
+      else options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
     try {
       const response = await fetchImpl(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: options.signal || controller.signal
+        signal: requestSignal
       });
       if (!response?.ok) {
         const status = Number(response?.status || 0);
         throw gatewayError("MODEL_REQUEST_FAILED", `模型请求失败（HTTP ${status || "unknown"}）`);
       }
-      const payload = await response.json();
-      const data = parseStructuredContent(responseContent(payload));
+      let payload;
+      let content;
+      let usage = null;
+      if (options.stream && response.body && typeof response.body.getReader === "function") {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let streamedContent = "";
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          buffer += decoder.decode(chunk.value, { stream: true });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            const value = line.replace(/^data:\s*/i, "").trim();
+            if (!value || value === "[DONE]") continue;
+            let part;
+            try { part = JSON.parse(value); } catch (_error) { continue; }
+            const delta = part?.choices?.[0]?.delta?.content ?? part?.choices?.[0]?.message?.content ?? part?.output;
+            if (typeof delta === "string") {
+              streamedContent += delta;
+              emittedDelta = true;
+              if (typeof options.onDelta === "function") options.onDelta(delta);
+            }
+            if (part?.usage) usage = { ...part.usage };
+          }
+        }
+        if (buffer.trim() && buffer.trim() !== "[DONE]") {
+          const value = buffer.replace(/^data:\s*/i, "").trim();
+          try {
+            const part = JSON.parse(value);
+            const delta = part?.choices?.[0]?.delta?.content ?? part?.choices?.[0]?.message?.content ?? part?.output;
+            if (typeof delta === "string") {
+              streamedContent += delta;
+              emittedDelta = true;
+              if (typeof options.onDelta === "function") options.onDelta(delta);
+            }
+            if (part?.usage) usage = { ...part.usage };
+          } catch (_error) {}
+        }
+        content = streamedContent;
+        payload = { usage };
+      } else {
+        payload = await response.json();
+        content = responseContent(payload);
+        if (typeof options.onDelta === "function" && typeof content === "string") {
+          emittedDelta = Boolean(options.stream);
+          options.onDelta(content);
+        }
+      }
+      const data = parseStructuredContent(content);
       return {
         ok: true,
         data,
-        usage: payload?.usage ? { ...payload.usage } : null,
+        usage: usage || (payload?.usage ? { ...payload.usage } : null),
         latencyMs: Date.now() - startedAt,
         errorCode: null,
         message: "模型调用成功"
       };
     } catch (error) {
       lastFailure = error?.name === "AbortError"
-        ? gatewayError("MODEL_REQUEST_FAILED", "模型请求超时", error)
+        ? gatewayError(options.signal?.aborted ? "MODEL_REQUEST_CANCELLED" : "MODEL_REQUEST_FAILED", options.signal?.aborted ? "模型请求已取消" : "模型请求超时", error)
         : error;
-      if (lastFailure.code === "MODEL_OUTPUT_INVALID" || attempt >= retries) break;
+      if (lastFailure.code === "MODEL_OUTPUT_INVALID" || attempt >= retries || emittedDelta || controller.signal.aborted || options.signal?.aborted) break;
     } finally {
       clearTimeout(timer);
     }

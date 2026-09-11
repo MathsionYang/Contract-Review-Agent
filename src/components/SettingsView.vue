@@ -23,6 +23,12 @@ async function updateSetting(key, value) {
   await store.updateSettings({ [key]: value });
 }
 
+async function updateChatPermission(key, value) {
+  const permissions = { ...(store.state.settings?.chatPermissions || defaultSettings.chatPermissions), [key]: value };
+  settings.chatPermissions = permissions;
+  await updateSetting("chatPermissions", permissions);
+}
+
 async function saveLegalAllowlist() {
   const allowlist = legalAllowlistText.value.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
   await updateSetting("legalSourceAllowlist", allowlist);
@@ -94,6 +100,14 @@ function clearLocalCache() {
         <label class="toggle-row"><span><strong>扫描 PDF 无 OCR 时阻断</strong><small>不伪造文本、页码或定位信息</small></span><input v-model="settings.blockScannedPdfWithoutOcr" type="checkbox" @change="updateSetting('blockScannedPdfWithoutOcr', settings.blockScannedPdfWithoutOcr)" /></label>
         <label class="toggle-row"><span><strong>检查敏感信息</strong><small>阻止疑似密钥和认证信息进入导出结果</small></span><input v-model="settings.checkSensitiveInfo" type="checkbox" @change="updateSetting('checkSensitiveInfo', settings.checkSensitiveInfo)" /></label>
         <div class="setting-control-row setting-control-column"><label for="legal-source-allowlist">实时法律来源白名单</label><textarea id="legal-source-allowlist" v-model="legalAllowlistText" class="text-area" rows="3" placeholder="每行填写一个 https:// 来源地址" @change="saveLegalAllowlist"></textarea><small class="setting-help">未配置白名单时不会发起实时法律来源请求。</small></div>
+      </section>
+
+      <section class="panel settings-card">
+        <div class="settings-card-heading"><div class="settings-card-icon"><LockKeyhole :size="19" /></div><div><h2>对话与记忆权限</h2><p>控制会话可见范围、企业记忆写入和 MCP / Skill 执行策略。</p></div></div>
+        <div class="setting-control-row setting-control-column"><label for="session-access">会话访问</label><select id="session-access" class="settings-select" :value="settings.chatPermissions?.sessionAccess || 'local_user'" @change="updateChatPermission('sessionAccess', $event.target.value)"><option value="local_user">仅当前本地用户</option><option value="workspace">本地工作区用户</option></select></div>
+        <div class="setting-control-row setting-control-column"><label for="memory-write">企业记忆写入</label><select id="memory-write" class="settings-select" :value="settings.chatPermissions?.memoryWrite || 'confirm_only'" @change="updateChatPermission('memoryWrite', $event.target.value)"><option value="confirm_only">必须人工确认</option><option value="deny">禁止写入</option></select></div>
+        <div class="setting-control-row setting-control-column"><label for="tool-execution">MCP / Skill 执行</label><select id="tool-execution" class="settings-select" :value="settings.chatPermissions?.toolExecution || 'confirm'" @change="updateChatPermission('toolExecution', $event.target.value)"><option value="confirm">每次确认</option><option value="allow">允许已授权工具</option><option value="deny">禁止执行</option></select></div>
+        <label class="toggle-row"><span><strong>外部模型允许敏感记忆</strong><small>关闭后外部模型只接收公开记忆</small></span><input :checked="settings.chatPermissions?.allowExternalModelSensitiveData === true" type="checkbox" @change="updateChatPermission('allowExternalModelSensitiveData', $event.target.checked)" /></label>
       </section>
 
       <section class="panel settings-card">

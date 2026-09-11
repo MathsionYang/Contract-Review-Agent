@@ -14,7 +14,20 @@ export const useReviewStore = defineStore("review", () => {
   const toasts = ref([]);
   const validatorResult = ref(null);
   const reviewProgress = ref(null);
+  const chatBusy = ref(false);
+  const chatRequestId = ref(null);
+  const chatStreamText = ref("");
+  const selectedChatModel = ref("");
+  const chatContextPreferences = ref({
+    includeCurrentPage: true,
+    includeSelection: true,
+    includeCurrentRisk: true,
+    includeKnowledge: true,
+    includeMemory: true,
+    contextScope: "adjacent_clauses"
+  });
   let stopReviewProgress = null;
+  let stopChatEvents = null;
 
   const activeProject = computed(() => state.value.projects.find((item) => item.project_id === state.value.activeProjectId) || state.value.projects[0] || null);
   const review = computed(() => activeProject.value ? state.value.reviews[activeProject.value.project_id] || null : null);
@@ -24,6 +37,13 @@ export const useReviewStore = defineStore("review", () => {
   const selectedRules = computed(() => (state.value.knowledge?.rules || []).filter((item) => item.selected).map((item) => item.file));
   const selectedPolicies = computed(() => (state.value.knowledge?.policies || []).filter((item) => item.selected).map((item) => item.file));
   const reviewExecution = computed(() => review.value?.config?.execution || buildReviewExecutionConfig(state.value.capabilities || {}));
+  const activeAnalysisModels = computed(() => (state.value.capabilities?.models || []).filter((model) => (
+    model.status === "active" && model.role === "analysis" && model.testStatus === "passed" && model.modelId && model.endpoint
+  )));
+  const chatSessions = computed(() => review.value?.chat_sessions || []);
+  const activeChatSession = computed(() => chatSessions.value.find((session) => session.status === "active") || chatSessions.value[0] || null);
+  const chatMessages = computed(() => activeChatSession.value?.messages || []);
+  const chatMemoryCandidates = computed(() => (activeChatSession.value?.memory_candidates || []).filter((item) => item.status === "candidate"));
 
   function notify(message, type = "ok") {
     const id = `${Date.now()}-${Math.random()}`;
@@ -56,6 +76,16 @@ export const useReviewStore = defineStore("review", () => {
           progress: reviewProgress.value.progress,
           status: reviewProgress.value.status
         };
+      });
+    }
+    if (!stopChatEvents) {
+      stopChatEvents = electronApi.onChatEvent((payload = {}) => {
+        if (payload.type === "start") {
+          chatRequestId.value = payload.requestId || null;
+          chatStreamText.value = "";
+        }
+        if (payload.type === "delta") chatStreamText.value += String(payload.delta || "");
+        if (["complete", "failed", "cancelled"].includes(payload.type)) chatRequestId.value = null;
       });
     }
     try {
@@ -249,6 +279,109 @@ export const useReviewStore = defineStore("review", () => {
     } finally {
       isBusy.value = false;
     }
+  }
+
+  function setChatModel(modelName) {
+    selectedChatModel.value = String(modelName || "");
+  }
+
+  function updateChatContextPreferences(patch) {
+    chatContextPreferences.value = { ...chatContextPreferences.value, ...patch };
+  }
+
+  async function chatReview(options = {}) {
+    if (!review.value || !activeProject.value) return null;
+    if (!activeAnalysisModels.value.length) {
+      notify("请先配置并启用通过校验的 analysis 模型", "warn");
+      return null;
+    }
+    chatBusy.value = true;
+    chatStreamText.value = "";
+    try {
+      const result = await electronApi.chatReview({
+        projectId: activeProject.value.project_id,
+        modelName: options.modelName || selectedChatModel.value || reviewExecution.value.models?.analysis?.name,
+        currentPage: selectedPage.value,
+        activeRiskId: activeRiskId.value,
+        selectionRef: options.selectionRef,
+        selection: options.selection,
+        userInput: options.userInput,
+        contextPreferences: { ...chatContextPreferences.value, ...(options.contextPreferences || {}) },
+        tokenBudget: options.tokenBudget
+      });
+      if (result?.state) state.value = result.state;
+      if (result?.requestId) chatRequestId.value = result.requestId;
+      if (!result?.ok) {
+        notify(result.message || "对话审核未完成，可重试", "warn");
+        return result;
+      }
+      if (result.response?.risk_refs?.length) selectRisk(result.response.risk_refs[0]);
+      notify(result.response?.intent === "create_risk" ? `已加入 ${result.response.risk_refs.length} 条待核验风险` : result.response?.intent === "local_review" ? "已生成局部审查候选" : "对话审核完成", "ok");
+      return result;
+    } catch (error) {
+      notify(error.message || "对话审核失败", "warn");
+      throw error;
+    } finally {
+      chatBusy.value = false;
+      chatRequestId.value = null;
+    }
+  }
+
+  async function retryChat(options = {}) {
+    if (!activeProject.value) return null;
+    chatBusy.value = true;
+    chatStreamText.value = "";
+    try {
+      const result = await electronApi.retryChat({
+        projectId: activeProject.value.project_id,
+        sessionId: options.sessionId || activeChatSession.value?.chat_session_id,
+        messageId: options.messageId,
+        modelName: options.modelName || selectedChatModel.value,
+        tokenBudget: options.tokenBudget
+      });
+      if (result?.state) state.value = result.state;
+      if (!result?.ok) notify(result.message || "对话重试未完成", "warn");
+      else notify("已使用相同上下文重新审核", "ok");
+      return result;
+    } finally {
+      chatBusy.value = false;
+      chatRequestId.value = null;
+    }
+  }
+
+  async function cancelChat() {
+    if (!chatRequestId.value) return null;
+    try { return await electronApi.cancelChat({ requestId: chatRequestId.value }); } catch (error) { notify(error.message || "无法停止对话审核", "warn"); return null; }
+  }
+
+  async function confirmMemoryCandidate(options = {}) {
+    if (!activeProject.value || !activeChatSession.value) return null;
+    const result = await electronApi.confirmMemory({
+      projectId: activeProject.value.project_id,
+      sessionId: activeChatSession.value.chat_session_id,
+      candidateId: options.candidateId,
+      edited: options.edited,
+      resolution: options.resolution,
+      actorId: "local-user"
+    });
+    if (result?.state) state.value = result.state;
+    if (result?.ok) notify(result.keptExisting ? "已保留现有企业记忆" : "企业记忆已确认并写入本地知识库", "ok");
+    else notify(result?.message || "企业记忆仍需处理", "warn");
+    return result;
+  }
+
+  async function dismissMemoryCandidate(candidateId, reason = "用户放弃") {
+    if (!activeProject.value || !activeChatSession.value) return null;
+    const result = await electronApi.dismissMemory({
+      projectId: activeProject.value.project_id,
+      sessionId: activeChatSession.value.chat_session_id,
+      candidateId,
+      reason,
+      actorId: "local-user"
+    });
+    if (result?.state) state.value = result.state;
+    if (result?.ok) notify("已放弃该企业记忆候选", "ok");
+    return result;
   }
 
   async function importKnowledgeFiles(kind, files) {
@@ -550,10 +683,12 @@ export const useReviewStore = defineStore("review", () => {
 
   return {
     state, isReady, isBusy, activeRiskId, selectedPage, zoom, toasts, validatorResult, reviewProgress,
+    chatBusy, chatRequestId, chatStreamText, selectedChatModel, chatContextPreferences,
     activeProject, review, risks, activeRisk, pendingRiskCount, selectedRules, selectedPolicies, reviewExecution,
+    activeAnalysisModels, chatSessions, activeChatSession, chatMessages, chatMemoryCandidates,
     bootstrap, persist, notify, selectRisk, clearRisk, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract, runReview, importKnowledgeFiles, importLegalSnapshot, verifyLegalRealtime,
     saveConfig, updateLegalSnapshot, updateEnterpriseMemory, toggleKnowledge, addKnowledge, updateKnowledge, deleteKnowledge, saveModel, deleteModel,
-    saveSelectionAnnotation, reviewSelection,
+    saveSelectionAnnotation, reviewSelection, setChatModel, updateChatContextPreferences, chatReview, retryChat, cancelChat, confirmMemoryCandidate, dismissMemoryCandidate,
     toggleModel, validateModel, toggleSkill, updateSettings, runValidator, runExport, resetSample
   };
 });
