@@ -10,6 +10,7 @@
 |---|---|
 | 需求基线 | 《合同审查 Agent 需求说明》v0.4 |
 | 实现阶段 | P0 真实审查主链路 + P1-P2 对话审核与上下文记忆基础 |
+| 代码基线 | `ed7133a`（2026-09-11） |
 | 前端技术 | Vue 3、Vite、Pinia、lucide-vue-next |
 | 桌面技术 | Electron，主进程 CommonJS |
 | 运行边界 | 本地文件系统和 Electron 用户数据目录 |
@@ -551,6 +552,7 @@ ReviewWorkspace.vue
 - [x] **对话风险与局部审查**：支持 `answer/create_risk/local_review/clarify` 结构化结果；对话风险和局部审查均进入既有 `review.risks`、人工复核和 Validator 流程，不能自动确认。
 - [x] **企业记忆闭环基础**：按正式状态、有效期、作用域、敏感等级和模型策略召回；候选经敏感扫描、冲突比较、人工确认/放弃后才写入正式记忆并生成版本和审计。
 
+- [ ] **对话交互收尾**：增加独立的“重新审查此选区”快捷操作，并在聊天结果中补充企业记忆来源和有效期展示；当前可通过自然语言复用选区，候选卡已展示作用域、类型和置信度。
 - [ ] **复杂文档解析**：接入 OCR，支持扫描 PDF 文本和置信度；补充 PDF 坐标映射、Word 原始版式、表格、脚注、附件和引用关系解析。
 - [ ] **Agent 执行编排**：实现 Plan-and-Execute、Trace/Span/Event、Artifact、Checkpoint、幂等键和断点恢复，完善 `queued/running/waiting_confirmation/partial/failed/completed` 状态机。
 - [ ] **MCP Tool 执行器**：统一输入输出 Schema、权限上下文、错误码和执行记录已经具备；仍需注册真实 Tool、超时/重试/幂等策略和 Artifact 引用，并接入规则、检索、模型和实时核验工具。
@@ -610,10 +612,11 @@ node --check scripts/launch-electron.cjs
 
 测试覆盖了本地状态读写、原始文件版本复制、DOCX/PDF 解析、导出门禁、四种格式导出、模型和 Skill 执行快照、知识文件版本和条款解析、规则三态、知识检索、模型网关、法律快照导入、白名单核验、真实审查编排、选区文本快照、局部审查风险候选、上下文预算和选区扩圈、记忆召回/敏感扫描/冲突确认、SSE 增量与取消、Tool 协议阻断、对话风险/局部审查持久化、Vue 响应式 IPC 克隆转换和 Electron 启动环境隔离。
 
-## 14. 本次 P0 交付与同步
+## 14. 本次 P0-P2 阶段交付与同步
 
 - 源码交付目录：`D:\项目\CheckMCP\Doc\合同审批`。
 - Electron 主进程、预加载白名单、知识文件服务、规则引擎、模型网关、法律来源核验和审查编排代码已纳入同一版本。
+- `context-assembler.cjs`、`memory-service.cjs`、`review-chat.cjs` 和 `tool-protocol.cjs` 已分别承载上下文组装、企业记忆闭环、对话审核及 MCP/Skill 协议与审计边界。
 - `scripts/launch-electron.cjs` 统一 Electron 启动入口，启动前清除宿主环境中的 `ELECTRON_RUN_AS_NODE`，避免桌面端误以 Node 模式运行。
 - `src/services/clonePayload.mjs` 统一处理 Vue/Pinia 响应式对象到 Electron IPC 的可克隆数据转换，覆盖状态保存、审查执行、知识导入、Validator 和导出调用。
 - `npm run build` 生成的 `dist/` 已与当前 Vue 3 源码同步，作为生产构建产物一并交付。
