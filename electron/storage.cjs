@@ -40,6 +40,7 @@ function createStorage(rootDir) {
   const stateDirectory = ensureDirectory(path.join(root, "state"));
   const statePath = path.join(stateDirectory, "state.json");
   const projectDirectory = ensureDirectory(path.join(root, "projects"));
+  const knowledgeDirectory = ensureDirectory(path.join(root, "knowledge"));
 
   function loadState() {
     if (!fs.existsSync(statePath)) return cloneState(DEFAULT_STATE);
@@ -104,7 +105,33 @@ function createStorage(rootDir) {
     };
   }
 
-  return { loadState, saveState, saveProjectFile, statePath, rootDir: root };
+  function saveKnowledgeFile({ kind, versionId, sourcePath, fileName }) {
+    if (!sourcePath || !fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
+      const error = new Error("知识文件不存在");
+      error.code = "KNOWLEDGE_FILE_NOT_FOUND";
+      throw error;
+    }
+    const safeKind = safeSegment(kind, "knowledge");
+    const safeVersion = safeSegment(versionId, "version");
+    const versionPath = ensureDirectory(path.join(knowledgeDirectory, safeKind, safeVersion));
+    const originalName = safeSegment(path.basename(fileName || sourcePath), "knowledge-file");
+    const uniqueName = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${originalName}`;
+    const storedPath = path.join(versionPath, uniqueName);
+    fs.copyFileSync(sourcePath, storedPath, fs.constants.COPYFILE_EXCL);
+    const buffer = fs.readFileSync(storedPath);
+    const stats = fs.statSync(storedPath);
+    return {
+      storedPath,
+      fileName: originalName,
+      sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+      sizeBytes: stats.size,
+      kind: safeKind,
+      versionId: safeVersion,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  return { loadState, saveState, saveProjectFile, saveKnowledgeFile, statePath, rootDir: root };
 }
 
 module.exports = { createStorage };

@@ -78,7 +78,7 @@ async function startImport() {
   }
 }
 function openConfig() {
-  configForm.snapshotId = store.review?.config?.snapshot?.id || "CN-2026-09";
+  configForm.snapshotId = store.review?.config?.snapshot?.id || snapshots.value.find((item) => item.status === "published")?.id || "";
   configForm.reviewMode = store.activeProject?.review_mode || "standard";
   modal.value = "config";
 }

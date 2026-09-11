@@ -11,6 +11,17 @@ if (process.versions.electron) {
 const api = {
   selectContractFile: () => ipcRenderer.invoke("contract:select-file"),
   importContract: (options) => ipcRenderer.invoke("contract:import", options),
+  selectKnowledgeFiles: (kind) => ipcRenderer.invoke("knowledge:select-files", { kind }),
+  importKnowledgeFiles: (payload) => ipcRenderer.invoke("knowledge:import-files", payload),
+  importLegalSnapshot: (payload) => ipcRenderer.invoke("legal:import-snapshot", payload),
+  verifyLegalRealtime: (payload) => ipcRenderer.invoke("legal:verify-realtime", payload),
+  runReview: (payload) => ipcRenderer.invoke("review:run", payload),
+  onReviewProgress: (callback) => {
+    if (typeof callback !== "function" || !ipcRenderer) return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("review:progress", listener);
+    return () => ipcRenderer.removeListener("review:progress", listener);
+  },
   loadState: () => ipcRenderer.invoke("state:load"),
   saveState: (state) => ipcRenderer.invoke("state:save", state),
   validateExport: (payload) => ipcRenderer.invoke("review:validate-export", payload),

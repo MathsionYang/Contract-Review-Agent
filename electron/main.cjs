@@ -7,6 +7,9 @@ const { createStorage } = require("./storage.cjs");
 const { parseContract } = require("./parser.cjs");
 const { validateReview } = require("./validator.cjs");
 const { exportReview } = require("./exporter.cjs");
+const { buildKnowledgeItem, parseKnowledgeFile, parseLegalSnapshotFile, validateKnowledgeFile } = require("./knowledge.cjs");
+const { runReview } = require("./review-runner.cjs");
+const { verifyLegalSource } = require("./legal-source.cjs");
 
 let mainWindow;
 let storage;
@@ -49,6 +52,17 @@ function auditEntry(action, resource, result, detail = "") {
   };
 }
 
+// 进度事件只传递任务标识和阶段信息，避免把模型响应、合同正文或凭据带入渲染层事件。
+function sendReviewProgress(projectId, progress) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("review:progress", {
+    projectId,
+    step: String(progress?.step || ""),
+    progress: Math.min(Math.max(Number(progress?.progress) || 0, 0), 100),
+    status: String(progress?.status || "running")
+  });
+}
+
 async function chooseContractFile() {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "选择合同文件",
@@ -62,6 +76,65 @@ async function chooseContractFile() {
   return { filePath: result.filePaths[0], fileName: path.basename(result.filePaths[0]) };
 }
 
+async function chooseKnowledgeFiles(kind) {
+  const title = kind === "rules" ? "选择确定性规则文件" : kind === "policies" ? "选择企业制度文件" : "选择法律快照文件";
+  const extensions = kind === "legalSnapshots" ? ["json", "md", "txt"] : ["docx", "pdf", "md", "txt", "json"];
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title,
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "知识文件", extensions }, { name: "全部文件", extensions: ["*"] }]
+  });
+  if (result.canceled) return { canceled: true, files: [] };
+  return { canceled: false, files: result.filePaths.map((filePath) => ({ filePath, fileName: path.basename(filePath) })) };
+}
+
+function ensureKnowledgeState(state) {
+  state.knowledge = state.knowledge && typeof state.knowledge === "object" ? state.knowledge : {};
+  state.knowledge.rules = Array.isArray(state.knowledge.rules) ? state.knowledge.rules : [];
+  state.knowledge.policies = Array.isArray(state.knowledge.policies) ? state.knowledge.policies : [];
+  state.knowledge.legalSnapshots = Array.isArray(state.knowledge.legalSnapshots) ? state.knowledge.legalSnapshots : [];
+  state.knowledge.memory = Array.isArray(state.knowledge.memory) ? state.knowledge.memory : [];
+  return state;
+}
+
+// 首次启动时主进程状态可能还没有治理配置，只接收渲染层的三个配置域，避免覆盖主进程项目和审计数据。
+function mergeBootstrapContext(state, bootstrapState) {
+  const next = state && typeof state === "object" ? state : {};
+  const context = bootstrapState && typeof bootstrapState === "object" ? bootstrapState : {};
+  for (const key of ["knowledge", "capabilities", "settings"]) {
+    if (next[key] === undefined && context[key] !== undefined) next[key] = context[key];
+  }
+  return next;
+}
+
+function relativeStoragePath(filePath) {
+  return path.relative(storage.rootDir, filePath).split(path.sep).join("/");
+}
+
+async function importKnowledgeFile(filePath, kind, options = {}) {
+  const metadata = validateKnowledgeFile(filePath, kind);
+  const parsed = await parseKnowledgeFile(metadata.filePath, kind);
+  const versionId = `${kind}_${metadata.sha256.slice(0, 16)}`;
+  const saved = storage.saveKnowledgeFile({ kind, versionId, sourcePath: metadata.filePath, fileName: metadata.fileName });
+  return buildKnowledgeItem({
+    kind,
+    fileName: metadata.fileName,
+    summary: options.summary || `${parsed.clauses.length} 个可检索条款 · ${metadata.sha256.slice(0, 12)}`,
+    type: options.type || (kind === "rules" ? "导入规则" : "企业制度"),
+    version: options.version || "v1.0",
+    priority: options.priority || "high",
+    status: kind === "rules" ? "active" : "published",
+    selected: false,
+    fileVersionId: versionId,
+    sourcePathRef: relativeStoragePath(saved.storedPath),
+    size: saved.sizeBytes,
+    sha256: saved.sha256,
+    clauses: parsed.clauses,
+    text: parsed.text,
+    parseStatus: parsed.parseStatus
+  });
+}
+
 function mergeAudit(state, entry) {
   const next = state && typeof state === "object" ? state : {};
   next.auditRecords = Array.isArray(next.auditRecords) ? next.auditRecords : [];
@@ -71,6 +144,102 @@ function mergeAudit(state, entry) {
 
 function registerIpc() {
   ipcMain.handle("contract:select-file", chooseContractFile);
+
+  ipcMain.handle("knowledge:select-files", (_event, options = {}) => chooseKnowledgeFiles(options.kind || "policies"));
+
+  ipcMain.handle("knowledge:import-files", async (_event, options = {}) => {
+    const kind = options.kind;
+    const files = Array.isArray(options.files) ? options.files : [];
+    if (!["rules", "policies"].includes(kind)) throw new Error("只能导入确定性规则或企业制度文件");
+    let state = ensureKnowledgeState(mergeBootstrapContext(storage.loadState(), options.bootstrapState));
+    const items = [];
+    const errors = [];
+    for (const file of files) {
+      try {
+        const item = await importKnowledgeFile(file.filePath, kind, file);
+        if (state.knowledge[kind].some((current) => current.sha256 && current.sha256 === item.sha256)) continue;
+        state.knowledge[kind].unshift(item);
+        items.push(item);
+        state.auditRecords.unshift(auditEntry(
+          kind === "rules" ? "上传确定性规则" : "上传企业制度",
+          item.file,
+          "成功",
+          `${item.file_version_id} · ${item.clauses.length} 个条款`
+        ));
+      } catch (error) {
+        errors.push({ fileName: file.fileName || path.basename(file.filePath || ""), code: error.code || "KNOWLEDGE_PARSE_FAILED", message: error.message });
+      }
+    }
+    storage.saveState(state);
+    return { items, errors, state };
+  });
+
+  ipcMain.handle("legal:import-snapshot", async (_event, options = {}) => {
+    let filePath = options.filePath;
+    if (!filePath) {
+      const selected = await dialog.showOpenDialog(mainWindow, {
+        title: "导入法律快照",
+        properties: ["openFile"],
+        filters: [{ name: "法律快照", extensions: ["json", "md", "txt"] }]
+      });
+      if (selected.canceled || !selected.filePaths[0]) return { canceled: true, state: storage.loadState() };
+      filePath = selected.filePaths[0];
+    }
+    const parsed = await parseLegalSnapshotFile(filePath);
+    let state = ensureKnowledgeState(mergeBootstrapContext(storage.loadState(), options.bootstrapState));
+    if (state.knowledge.legalSnapshots.some((snapshot) => snapshot.id === parsed.id)) {
+      const error = new Error("同 ID 法律快照已经存在");
+      error.code = "LEGAL_SNAPSHOT_DUPLICATE";
+      throw error;
+    }
+    const saved = storage.saveKnowledgeFile({
+      kind: "legalSnapshots",
+      versionId: parsed.fileVersionId,
+      sourcePath: parsed.sourcePath,
+      fileName: parsed.fileName
+    });
+    const snapshot = { ...parsed, source_path_ref: relativeStoragePath(saved.storedPath) };
+    delete snapshot.sourcePath;
+    state.knowledge.legalSnapshots.unshift(snapshot);
+    state.auditRecords.unshift(auditEntry("导入法律快照", snapshot.id, "成功", `${snapshot.name} · ${snapshot.clauses.length} 个条款`));
+    storage.saveState(state);
+    return { canceled: false, snapshot, state };
+  });
+
+  ipcMain.handle("legal:verify-realtime", async (_event, options = {}) => {
+    const state = storage.loadState();
+    const result = await verifyLegalSource({
+      url: options.url,
+      query: options.query,
+      allowlist: state.settings?.legalSourceAllowlist || [],
+      timeoutMs: options.timeoutMs
+    });
+    const nextState = ensureKnowledgeState(state);
+    nextState.auditRecords.unshift(auditEntry("实时法律来源核验", options.query || "未填写查询", result.status === "verified" ? "成功" : result.errorCode || "未完成", result.message || ""));
+    storage.saveState(nextState);
+    return { ...result, state: nextState };
+  });
+
+  ipcMain.handle("review:run", async (_event, options = {}) => {
+    const stored = ensureKnowledgeState(storage.loadState());
+    const projectId = options.projectId || options.review?.project?.project_id || stored.activeProjectId;
+    const review = options.review || stored.reviews?.[projectId];
+    if (!review) throw new Error("当前项目没有可执行的审查版本");
+    const result = await runReview({
+      review,
+      state: stored,
+      onProgress: (progress) => sendReviewProgress(projectId, progress)
+    });
+    const nextState = {
+      ...stored,
+      activeProjectId: projectId,
+      projects: (stored.projects || []).map((project) => project.project_id === projectId ? { ...project, updated_at: new Date().toISOString() } : project),
+      reviews: { ...(stored.reviews || {}), [projectId]: result.review },
+      auditRecords: [auditEntry("执行合同审查", projectId, result.review.task.status === "completed" ? "成功" : "部分完成", `${result.review.risks.length} 条风险 · ${result.review.task.status}`), ...(stored.auditRecords || [])]
+    };
+    storage.saveState(nextState);
+    return { ...result, state: nextState };
+  });
 
   ipcMain.handle("contract:import", async (_event, options = {}) => {
     const filePath = options.filePath;
@@ -104,19 +273,25 @@ function registerIpc() {
       humanRevisions: [],
       exportRecords: [],
       config: {
-        snapshot: { id: "CN-2026-09", status: "published" },
-        rules: ["contract-common@1.0"],
+        snapshot: { id: "", status: "draft" },
+        rules: [],
         policies: []
       },
       task: {
         task_id: `task_${projectId}`,
-        status: "waiting_confirmation",
-        progress: 16,
+        status: "queued",
+        current_step: "parse",
+        progress: 0,
         checkpoint_id: `ckpt_${Date.now()}`,
-        idempotency_key: `idem_${parsed.sha256.slice(0, 16)}`
+        idempotency_key: `idem_${parsed.sha256.slice(0, 16)}`,
+        errors: []
       }
     };
-    const current = storage.loadState();
+    const current = ensureKnowledgeState(mergeBootstrapContext(storage.loadState(), options.bootstrapState));
+    const publishedSnapshot = current.knowledge.legalSnapshots.find((snapshot) => snapshot.status === "published");
+    review.config.snapshot = publishedSnapshot ? { id: publishedSnapshot.id, status: publishedSnapshot.status } : review.config.snapshot;
+    review.config.rules = current.knowledge.rules.filter((item) => item.selected && item.status === "active").map((item) => item.file);
+    review.config.policies = current.knowledge.policies.filter((item) => item.selected && item.status === "published").map((item) => item.file);
     const nextState = {
       ...current,
       activeProjectId: projectId,

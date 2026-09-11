@@ -1,21 +1,30 @@
 <script setup>
-import { reactive, watch } from "vue";
+import { reactive, ref, watch } from "vue";
 import { Check, FolderOpen, HardDrive, LockKeyhole, RotateCcw, Save, ShieldCheck, Trash2 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
 import { defaultSettings } from "../data/sampleData";
 
 const store = useReviewStore();
 const settings = reactive({ ...defaultSettings });
+const legalAllowlistText = ref("");
 const exportOptions = ["DOCX", "PDF", "XLSX", "JSON"];
 
 watch(
   () => store.state.settings,
-  (value) => Object.assign(settings, defaultSettings, value || {}),
+  (value) => {
+    Object.assign(settings, defaultSettings, value || {});
+    legalAllowlistText.value = (value?.legalSourceAllowlist || []).join("\n");
+  },
   { deep: true, immediate: true }
 );
 
 async function updateSetting(key, value) {
   await store.updateSettings({ [key]: value });
+}
+
+async function saveLegalAllowlist() {
+  const allowlist = legalAllowlistText.value.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+  await updateSetting("legalSourceAllowlist", allowlist);
 }
 
 async function updateExportFormat(format, checked) {
@@ -83,6 +92,7 @@ function clearLocalCache() {
         <div class="settings-card-heading"><div class="settings-card-icon"><ShieldCheck :size="19" /></div><div><h2>安全策略</h2><p>把不可验证的内容明确挡在导出门禁之外。</p></div></div>
         <label class="toggle-row"><span><strong>扫描 PDF 无 OCR 时阻断</strong><small>不伪造文本、页码或定位信息</small></span><input v-model="settings.blockScannedPdfWithoutOcr" type="checkbox" @change="updateSetting('blockScannedPdfWithoutOcr', settings.blockScannedPdfWithoutOcr)" /></label>
         <label class="toggle-row"><span><strong>检查敏感信息</strong><small>阻止疑似密钥和认证信息进入导出结果</small></span><input v-model="settings.checkSensitiveInfo" type="checkbox" @change="updateSetting('checkSensitiveInfo', settings.checkSensitiveInfo)" /></label>
+        <div class="setting-control-row setting-control-column"><label for="legal-source-allowlist">实时法律来源白名单</label><textarea id="legal-source-allowlist" v-model="legalAllowlistText" class="text-area" rows="3" placeholder="每行填写一个 https:// 来源地址" @change="saveLegalAllowlist"></textarea><small class="setting-help">未配置白名单时不会发起实时法律来源请求。</small></div>
       </section>
 
       <section class="panel settings-card">

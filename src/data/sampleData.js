@@ -206,6 +206,7 @@ export const defaultSettings = {
   forceValidator: true,
   blockScannedPdfWithoutOcr: true,
   checkSensitiveInfo: true,
+  legalSourceAllowlist: [],
   compactMode: false,
   showStatusBar: true
 };

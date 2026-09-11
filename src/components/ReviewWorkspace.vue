@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import {
-  Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, Cpu, FileCog, FileDown, Flag, Highlighter, ListChecks, Maximize2, Minus, Plus, ScanSearch, Search, Settings2, SquarePen, Trash2, X
+  Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, Cpu, FileCog, FileDown, Flag, Highlighter, ListChecks, LoaderCircle, Maximize2, Minus, Plus, RotateCcw, ScanSearch, Search, Settings2, SquarePen, Trash2, X
 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
 import { riskCategories, riskLevels } from "../data/sampleData";
@@ -52,6 +52,40 @@ const executionModels = computed(() => [
   { key: "rerank", label: "结果重排" }
 ]);
 const executionReady = computed(() => Boolean(execution.value.models?.analysis && execution.value.models?.extraction));
+const task = computed(() => store.review?.task || {});
+const taskStatus = computed(() => task.value.status || "queued");
+const taskStatusLabels = {
+  queued: "排队中",
+  running: "执行中",
+  waiting_confirmation: "等待人工复核",
+  partial: "部分完成",
+  failed: "执行失败",
+  validating: "校验中",
+  completed: "审查完成"
+};
+const taskStepLabels = {
+  parse: "解析合同",
+  rules: "执行确定性规则",
+  retrieve: "检索知识依据",
+  model: "调用审查模型",
+  validate: "校验审查结果",
+  persist: "保存审查版本"
+};
+const taskStatusClass = computed(() => "task-" + taskStatus.value);
+const taskStatusLabel = computed(() => taskStatusLabels[taskStatus.value] || taskStatus.value);
+const taskStepLabel = computed(() => taskStepLabels[task.value.current_step] || "准备执行");
+const taskProgress = computed(() => Math.min(Math.max(Number(task.value.progress) || 0, 0), 100));
+const taskErrors = computed(() => Array.isArray(task.value.errors) ? task.value.errors : []);
+const taskCanRetry = computed(() => ["partial", "failed"].includes(taskStatus.value) && !store.isBusy);
+const taskDescription = computed(() => ({
+  queued: "审查任务已创建，等待开始执行。",
+  running: "正在按解析、规则、检索、模型和校验顺序执行。",
+  waiting_confirmation: "结果已生成，风险需要人工确认后才能导出。",
+  partial: "部分步骤未完成，已有结果已保留，可重新执行失败任务。",
+  failed: "审查没有形成可用结果，请检查文件和执行配置后重试。",
+  validating: "正在检查风险、依据和定位是否满足导出条件。",
+  completed: "审查结果已保存，可继续人工复核或执行导出门禁。"
+}[taskStatus.value] || "任务状态已更新。"));
 const searchMatchCount = computed(() => {
   if (!searchQuery.value.trim()) return 0;
   return (currentPage.value.text.match(new RegExp(escapeRegExp(searchQuery.value.trim()), "gi")) || []).length;
@@ -232,6 +266,13 @@ const selectionMenuStyle = computed(() => {
 
 onMounted(() => window.addEventListener("keydown", handleEscape));
 onBeforeUnmount(() => window.removeEventListener("keydown", handleEscape));
+async function retryReview() {
+  try {
+    await store.runReview();
+  } catch (_error) {
+    // store 已将执行错误转换为顶部通知。
+  }
+}
 async function handleRiskAction(action) {
   if (!currentRisk.value) return;
   await store.applyRiskAction(currentRisk.value.risk_id, action);
@@ -278,6 +319,22 @@ function displaySize(bytes) {
       <div class="runtime-skill-count"><ListChecks :size="15" /><b>{{ execution.skills?.length || 0 }}</b><span>个 Skill</span></div>
       <button class="icon-button small" type="button" title="查看并调整执行配置" aria-label="查看并调整执行配置" @click="emit('configure')"><Settings2 :size="14" /></button>
     </div>
+    <section class="review-task-card" :class="taskStatusClass">
+      <div class="task-heading">
+        <div class="task-heading-main">
+          <span class="task-state-icon">
+            <LoaderCircle v-if="taskStatus === 'running'" class="spin" :size="17" />
+            <Check v-else-if="taskStatus === 'completed'" :size="17" />
+            <X v-else-if="taskStatus === 'failed'" :size="17" />
+            <Clock3 v-else :size="17" />
+          </span>
+          <div><strong>审查任务 · {{ taskStatusLabel }}</strong><span>{{ taskDescription }}</span></div>
+        </div>
+        <button v-if="taskCanRetry" class="icon-button small" type="button" title="重试审查任务" aria-label="重试审查任务" @click="retryReview"><RotateCcw :size="14" /></button>
+      </div>
+      <div class="task-progress-row"><div class="task-progress-track"><span :style="{ width: taskProgress + '%' }"></span></div><strong>{{ taskProgress }}%</strong><span>{{ taskStepLabel }}</span></div>
+      <div v-if="taskErrors.length" class="task-error-list"><span v-for="error in taskErrors" :key="error.code + '-' + error.message"><b>{{ error.code || "TASK_ERROR" }}</b>{{ error.message }}</span></div>
+    </section>
 
     <div class="workspace-grid">
       <section class="document-panel">

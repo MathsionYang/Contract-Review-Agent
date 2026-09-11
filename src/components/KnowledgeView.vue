@@ -1,11 +1,12 @@
 <script setup>
 import { computed, reactive, ref } from "vue";
 import {
-  BookOpenCheck, Check, Eye, FileText, Filter, History, LockKeyhole, Pencil, Plus, Search, Settings2, Trash2, X
+  BookOpenCheck, Check, Eye, FileText, Filter, History, LockKeyhole, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, Upload, X
 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
 import { knowledgeData } from "../data/sampleData";
 import Modal from "./Modal.vue";
+import { electronApi } from "../services/electronApi";
 
 const store = useReviewStore();
 const activeTab = ref("rules");
@@ -21,6 +22,7 @@ const snapshotView = ref(null);
 const editingSnapshotId = ref("");
 const memoryFormOpen = ref(false);
 const editingMemoryContent = ref("");
+const uploadBusy = ref(false);
 const tabs = [
   { id: "snapshots", label: "法律快照", icon: BookOpenCheck },
   { id: "rules", label: "确定性规则库", icon: Settings2 },
@@ -42,7 +44,8 @@ const snapshotForm = reactive({
   status: "draft",
   coverage: "",
   sources: 0,
-  publishedAt: ""
+  publishedAt: "",
+  source_url: ""
 });
 const memoryForm = reactive({
   content: "",
@@ -91,6 +94,14 @@ function statusClass(status) {
   }[status] || "badge-muted";
 }
 
+function verificationStatusLabel(status) {
+  return {
+    verified: "已核验",
+    unavailable: "来源不可用",
+    unauthorized: "未授权"
+  }[status] || "未核验";
+}
+
 function setActiveTab(tab) {
   activeTab.value = tab;
   statusFilter.value = "all";
@@ -130,9 +141,7 @@ function resetForm(item = null) {
 }
 
 function openCreate() {
-  editingFile.value = "";
-  resetForm();
-  formOpen.value = true;
+  uploadKnowledgeFiles();
 }
 
 function openEdit(item) {
@@ -143,6 +152,41 @@ function openEdit(item) {
 
 function closeForm() {
   formOpen.value = false;
+}
+
+async function uploadKnowledgeFiles() {
+  if (!isFileTab.value || uploadBusy.value) return;
+  uploadBusy.value = true;
+  try {
+    const picked = await electronApi.selectKnowledgeFiles(activeTab.value);
+    if (picked?.canceled || !picked?.files?.length) return;
+    await store.importKnowledgeFiles(activeTab.value, picked.files);
+  } catch (error) {
+    store.notify(error.message || "知识文件上传失败", "warn");
+  } finally {
+    uploadBusy.value = false;
+  }
+}
+
+async function importSnapshot() {
+  try {
+    await store.importLegalSnapshot();
+  } catch (_error) {
+    // store 已将错误转换为顶部通知，这里只负责结束交互。
+  }
+}
+
+async function verifySnapshot(snapshot) {
+  const url = snapshot.source_url || store.state.settings?.legalSourceAllowlist?.[0];
+  if (!url) {
+    store.notify("请先在系统设置中配置法律来源白名单", "warn");
+    return;
+  }
+  try {
+    await store.verifyLegalRealtime({ snapshotId: snapshot.id, url, query: snapshot.name });
+  } catch (_error) {
+    // store 已将错误转换为顶部通知。
+  }
 }
 
 function openSnapshotView(snapshot) {
@@ -161,7 +205,8 @@ function resetSnapshotForm(snapshot) {
     status: snapshot?.status || "draft",
     coverage: snapshot?.coverage || "",
     sources: Number(snapshot?.sources || 0),
-    publishedAt: snapshot?.publishedAt || ""
+    publishedAt: snapshot?.publishedAt || "",
+    source_url: snapshot?.source_url || ""
   });
 }
 
@@ -216,12 +261,16 @@ async function submitForm() {
     if (editingFile.value) {
       await store.updateKnowledge(activeTab.value, editingFile.value, { ...knowledgeForm });
     } else {
-      await store.addKnowledge(activeTab.value, { ...knowledgeForm });
+      await uploadKnowledgeFiles();
     }
     closeForm();
   } catch (error) {
     store.notify(error.message || "知识文件保存失败", "warn");
   }
+}
+
+function parseStatusLabel(status) {
+  return { parsed: "已解析", failed: "解析失败", pending: "待解析" }[status] || status || "未记录";
 }
 
 function askDelete(files) {
@@ -267,20 +316,27 @@ function formatDate(value) {
     </div>
 
     <section v-if="activeTab === 'snapshots'" class="panel">
-      <div class="panel-header"><div><h2>法律快照版本</h2><p>审查只能绑定已发布快照，草稿与历史版本可查看但不能直接使用。</p></div><span class="badge badge-primary">当前：{{ store.review?.config?.snapshot?.id || "未绑定" }}</span></div>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>版本</th><th>状态</th><th>覆盖范围</th><th>来源数</th><th>发布时间</th><th>摘要</th><th class="action-column">操作</th></tr></thead><tbody><tr v-for="snapshot in (store.state.knowledge?.legalSnapshots || knowledgeData.legalSnapshots)" :key="snapshot.id"><td><strong>{{ snapshot.name }}</strong><span class="table-subtext mono">{{ snapshot.hash }}</span></td><td><span class="badge" :class="statusClass(snapshot.status)">{{ statusLabel(snapshot.status) }}</span></td><td>{{ snapshot.coverage }}</td><td>{{ snapshot.sources }}</td><td class="muted-text">{{ snapshot.publishedAt }}</td><td class="muted-text">已纳入版本化法律来源</td><td class="action-column"><div class="row-actions"><button class="icon-button small" type="button" title="查看法律快照" :aria-label="`查看 ${snapshot.name}`" @click="openSnapshotView(snapshot)"><Eye :size="14" /></button><button class="icon-button small" type="button" title="编辑法律快照" :aria-label="`编辑 ${snapshot.name}`" @click="openSnapshotEdit(snapshot)"><Pencil :size="14" /></button><button class="icon-button small" type="button" :title="snapshot.status === 'published' ? '绑定此快照' : '不可绑定草稿或历史版本'" :disabled="snapshot.status !== 'published'" @click="selectSnapshot(snapshot)"><Check :size="14" /></button></div></td></tr></tbody></table></div>
-    </section>
+      <div class="panel-header"><div><h2>法律快照版本</h2><p>审查只能绑定已发布快照，草稿与历史版本可查看但不能直接使用。</p></div><div class="panel-header-actions"><span class="badge badge-primary">当前：{{ store.review?.config?.snapshot?.id || "未绑定" }}</span><button class="button small-button" type="button" :disabled="store.isBusy" @click="importSnapshot"><Upload :size="14" />导入快照</button></div></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>版本</th><th>状态</th><th>覆盖范围</th><th>来源数</th><th>发布时间</th><th>摘要</th><th class="action-column">操作</th></tr></thead><tbody><tr v-for="snapshot in (store.state.knowledge?.legalSnapshots || knowledgeData.legalSnapshots)" :key="snapshot.id"><td><strong>{{ snapshot.name }}</strong><span class="table-subtext mono">{{ snapshot.hash }}</span></td><td><span class="badge" :class="statusClass(snapshot.status)">{{ statusLabel(snapshot.status) }}</span></td><td>{{ snapshot.coverage }}</td><td>{{ snapshot.sources }}</td><td class="muted-text">{{ snapshot.publishedAt }}</td><td class="muted-text">{{ snapshot.clauses?.length ? `${snapshot.clauses.length} 个可检索条款` : "已纳入版本化法律来源" }}</td><td class="action-column"><div class="row-actions"><button class="icon-button small" type="button" title="查看法律快照" :aria-label="`查看 ${snapshot.name}`" @click="openSnapshotView(snapshot)"><Eye :size="14" /></button><button class="icon-button small" type="button" title="编辑法律快照" :aria-label="`编辑 ${snapshot.name}`" @click="openSnapshotEdit(snapshot)"><Pencil :size="14" /></button><button class="icon-button small" type="button" title="实时核验法律来源" :aria-label="`实时核验 ${snapshot.name}`" :disabled="store.isBusy" @click="verifySnapshot(snapshot)"><ShieldCheck :size="14" /></button><button class="icon-button small" type="button" :title="snapshot.status === 'published' ? '绑定此快照' : '不可绑定草稿或历史版本'" :disabled="snapshot.status !== 'published'" @click="selectSnapshot(snapshot)"><Check :size="14" /></button></div></td></tr></tbody></table></div>
+       <div v-if="(store.state.knowledge?.legalSnapshots || knowledgeData.legalSnapshots).some((snapshot) => snapshot.source_url || snapshot.realtime_verification)" class="snapshot-summary-band">
+         <div v-for="snapshot in (store.state.knowledge?.legalSnapshots || knowledgeData.legalSnapshots)" :key="snapshot.id" class="snapshot-summary-item">
+           <strong>{{ snapshot.name }}</strong>
+           <span v-if="snapshot.source_url" class="endpoint-text" :title="snapshot.source_url">{{ snapshot.source_url }}</span>
+           <span v-if="snapshot.realtime_verification" :class="snapshot.realtime_verification.status === 'verified' ? 'success-text' : 'danger-text'">最近核验：{{ verificationStatusLabel(snapshot.realtime_verification.status) }}</span>
+         </div>
+       </div>
+     </section>
 
-    <section v-else-if="activeTab === 'rules' || activeTab === 'policies'" class="panel">
+     <section v-else-if="activeTab === 'rules' || activeTab === 'policies'" class="panel">
       <div class="panel-header">
         <div><h2>{{ activeTab === "rules" ? "确定性规则库" : "企业制度" }}</h2><p>按文件粒度选择本次审查引用内容，支持大量文件的检索、批量勾选和维护。</p></div>
         <div class="panel-header-actions">
           <div class="selection-summary">已选 <strong>{{ selectedCount }}</strong> / {{ sourceItems.length }}<span v-if="visibleSelectedCount !== selectedCount">（当前筛选 {{ visibleSelectedCount }}）</span></div>
-          <button class="button small-button" type="button" @click="openCreate"><Plus :size="14" />新增文件</button>
+          <button class="button small-button" type="button" :disabled="uploadBusy || store.isBusy" @click="openCreate"><Upload :size="14" />{{ uploadBusy ? "上传中" : "上传文件" }}</button>
           <button class="icon-button danger" type="button" title="批量删除已选文件" aria-label="批量删除已选文件" :disabled="selectedCount === 0" @click="askDelete(sourceItems.filter((item) => item.selected).map((item) => item.file))"><Trash2 :size="15" /></button>
         </div>
       </div>
-      <div class="table-wrap"><table class="data-table file-table"><thead><tr><th class="check-column"><input type="checkbox" :checked="allVisibleSelected" :aria-label="allVisibleSelected ? '取消全选当前筛选' : '全选当前筛选'" @change="toggleVisibleSelection" /></th><th>文件名</th><th>文件摘要</th><th>类型 / 版本</th><th>状态</th><th class="action-column">操作</th></tr></thead><tbody><tr v-for="item in tableItems" :key="item.file"><td class="check-column"><input type="checkbox" :checked="item.selected" :aria-label="`选择 ${item.file}`" @change="toggle(activeTab, item)" /></td><td><div class="file-name"><FileText :size="16" /><strong>{{ item.file }}</strong></div></td><td class="summary-cell">{{ item.summary }}</td><td><span class="table-subtext">{{ item.type || "企业制度" }}</span><span class="table-subtext">{{ item.version || (item.priority === "blocker" ? "阻断级" : "高优先级") }}</span></td><td><span class="badge" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span></td><td class="action-column"><div class="row-actions"><button class="icon-button small" type="button" title="编辑文件摘要和元数据" :aria-label="`编辑 ${item.file}`" @click="openEdit(item)"><Pencil :size="14" /></button><button class="icon-button small danger" type="button" title="删除文件" :aria-label="`删除 ${item.file}`" @click="askDeleteOne(item)"><Trash2 :size="14" /></button></div></td></tr><tr v-if="!tableItems.length"><td colspan="6" class="empty-cell">没有匹配的知识文件</td></tr></tbody></table></div>
+      <div class="table-wrap"><table class="data-table file-table"><thead><tr><th class="check-column"><input type="checkbox" :checked="allVisibleSelected" :aria-label="allVisibleSelected ? '取消全选当前筛选' : '全选当前筛选'" @change="toggleVisibleSelection" /></th><th>文件名</th><th>文件摘要</th><th>类型 / 版本</th><th>解析</th><th>状态</th><th class="action-column">操作</th></tr></thead><tbody><tr v-for="item in tableItems" :key="item.file"><td class="check-column"><input type="checkbox" :checked="item.selected" :aria-label="`选择 ${item.file}`" @change="toggle(activeTab, item)" /></td><td><div class="file-name"><FileText :size="16" /><strong>{{ item.file }}</strong></div><span v-if="item.source_path_ref" class="table-subtext mono">{{ item.file_version_id }}</span></td><td class="summary-cell">{{ item.summary }}</td><td><span class="table-subtext">{{ item.type || "企业制度" }}</span><span class="table-subtext">{{ item.version || (item.priority === "blocker" ? "阻断级" : "高优先级") }}</span></td><td><span class="badge" :class="item.parse_status === 'parsed' ? 'badge-success' : item.parse_status === 'failed' ? 'badge-danger' : 'badge-warning'">{{ parseStatusLabel(item.parse_status) }}</span></td><td><span class="badge" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span></td><td class="action-column"><div class="row-actions"><button class="icon-button small" type="button" title="编辑文件摘要和元数据" :aria-label="`编辑 ${item.file}`" @click="openEdit(item)"><Pencil :size="14" /></button><button class="icon-button small danger" type="button" title="删除文件" :aria-label="`删除 ${item.file}`" @click="askDeleteOne(item)"><Trash2 :size="14" /></button></div></td></tr><tr v-if="!tableItems.length"><td colspan="7" class="empty-cell">没有匹配的知识文件</td></tr></tbody></table></div>
     </section>
 
     <section v-else-if="activeTab === 'memory'" class="panel">
@@ -295,7 +351,7 @@ function formatDate(value) {
   </div>
 
   <Modal :open="formOpen" :title="formTitle" :wide="true" @close="closeForm">
-    <template #subtitle><p class="modal-subtitle">知识库列表只维护引用元数据，不会删除合同原始文件。</p></template>
+    <template #subtitle><p class="modal-subtitle">当前窗口用于编辑已上传文件的引用元数据；上传请使用列表中的“上传文件”按钮。</p></template>
     <div class="form-grid two-columns">
       <div class="form-field"><label>文件名 <span>*</span></label><input v-model="knowledgeForm.file" class="text-input" placeholder="例如：amount-arithmetic-rules@1.2" /></div>
       <div class="form-field"><label>{{ activeTab === "rules" ? "规则类型" : "制度类型" }}</label><input v-model="knowledgeForm.type" class="text-input" :placeholder="activeTab === 'rules' ? '金额计算 / 日期逻辑' : '采购制度 / 授权制度'" /></div>
@@ -309,10 +365,13 @@ function formatDate(value) {
   </Modal>
 
   <Modal :open="snapshotViewOpen" title="查看法律快照" @close="closeSnapshotView">
-    <div v-if="snapshotView" class="snapshot-detail">
+       <div v-if="snapshotView" class="snapshot-detail">
       <div class="snapshot-detail-heading"><div><strong>{{ snapshotView.name }}</strong><span class="table-subtext mono">{{ snapshotView.id }}</span></div><span class="badge" :class="statusClass(snapshotView.status)">{{ statusLabel(snapshotView.status) }}</span></div>
-      <div class="snapshot-detail-grid"><div><small>覆盖范围</small><strong>{{ snapshotView.coverage }}</strong></div><div><small>法律来源数</small><strong>{{ snapshotView.sources }}</strong></div><div><small>发布时间</small><strong>{{ snapshotView.publishedAt || "未发布" }}</strong></div><div><small>内容哈希</small><strong class="mono">{{ snapshotView.hash || "未记录" }}</strong></div></div>
-      <div class="snapshot-detail-copy"><small>使用说明</small><p>该快照作为版本化法律来源参与合同审查；只有已发布状态可以绑定到审查配置。</p></div>
+       <div class="snapshot-detail-grid"><div><small>覆盖范围</small><strong>{{ snapshotView.coverage }}</strong></div><div><small>法律来源数</small><strong>{{ snapshotView.sources }}</strong></div><div><small>发布时间</small><strong>{{ snapshotView.publishedAt || "未发布" }}</strong></div><div><small>内容哈希</small><strong class="mono">{{ snapshotView.hash || "未记录" }}</strong></div></div>
+       <div class="snapshot-detail-grid"><div><small>来源地址</small><strong class="endpoint-text" :title="snapshotView.source_url">{{ snapshotView.source_url || "未配置" }}</strong></div><div><small>解析状态 / 条款</small><strong>{{ snapshotView.parse_status || snapshotView.parseStatus || "未记录" }} · {{ snapshotView.clauses?.length || 0 }} 条</strong></div></div>
+       <div v-if="snapshotView.realtime_verification" class="snapshot-verification"><div><small>最近一次实时核验</small><strong :class="snapshotView.realtime_verification.status === 'verified' ? 'success-text' : 'danger-text'">{{ verificationStatusLabel(snapshotView.realtime_verification.status) }}</strong><span>{{ snapshotView.realtime_verification.message || snapshotView.realtime_verification.error_code || "未返回附加信息" }}</span></div><div v-if="snapshotView.realtime_verification.sources?.length" class="verification-source-list"><div v-for="source in snapshotView.realtime_verification.sources" :key="source.source_id"><strong>{{ source.title }}</strong><span>{{ source.clause_no || "未标明条款" }} · {{ source.excerpt || "未返回条款原文" }}</span></div></div></div>
+       <div v-if="snapshotView.clauses?.length" class="snapshot-clauses"><small>快照条款摘录</small><div v-for="clause in snapshotView.clauses.slice(0, 6)" :key="clause.clause_no + clause.title"><strong>{{ clause.clause_no }} {{ clause.title }}</strong><span>{{ clause.text }}</span></div></div>
+       <div class="snapshot-detail-copy"><small>使用说明</small><p>该快照作为版本化法律来源参与合同审查；只有已发布状态可以绑定到审查配置。</p></div>
     </div>
     <template #footer><button class="button" type="button" @click="closeSnapshotView"><X :size="15" />关闭</button></template>
   </Modal>
@@ -324,7 +383,8 @@ function formatDate(value) {
       <div class="form-field"><label>状态 <span>*</span></label><select v-model="snapshotForm.status" class="text-input"><option value="published">已发布</option><option value="draft">草稿</option><option value="historical">历史</option></select></div>
       <div class="form-field field-span-2"><label>覆盖范围 <span>*</span></label><textarea v-model="snapshotForm.coverage" class="text-area" rows="3" placeholder="例如：采购、服务、销售、租赁、软件开发"></textarea></div>
       <div class="form-field"><label>法律来源数 <span>*</span></label><input v-model.number="snapshotForm.sources" class="number-input" type="number" min="0" step="1" /></div>
-      <div class="form-field"><label>发布时间</label><input v-model="snapshotForm.publishedAt" class="text-input" placeholder="例如：2026-09-05 18:30" /></div>
+       <div class="form-field"><label>发布时间</label><input v-model="snapshotForm.publishedAt" class="text-input" placeholder="例如：2026-09-05 18:30" /></div>
+       <div class="form-field field-span-2"><label>实时来源地址</label><input v-model="snapshotForm.source_url" class="text-input" placeholder="https://legal.example/search" /></div>
     </div>
     <template #footer><button class="button" type="button" @click="closeSnapshotEdit"><X :size="15" />取消</button><button class="button button-primary" type="button" @click="submitSnapshotForm"><Check :size="15" />保存快照</button></template>
   </Modal>

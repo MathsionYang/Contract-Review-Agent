@@ -7,9 +7,15 @@ test("preload 只暴露约定的本地桌面端 API", () => {
   assert.deepEqual(exposedApiKeys().sort(), [
     "exportReview",
     "importContract",
+    "importKnowledgeFiles",
+    "importLegalSnapshot",
     "loadState",
+    "onReviewProgress",
+    "runReview",
     "saveState",
     "selectContractFile",
-    "validateExport"
+    "selectKnowledgeFiles",
+    "validateExport",
+    "verifyLegalRealtime"
   ]);
 });

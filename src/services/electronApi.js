@@ -19,6 +19,30 @@ export const electronApi = {
     if (!bridge?.importContract) return Promise.reject(new Error("当前页面未连接 Electron 文件导入能力"));
     return bridge.importContract(options);
   },
+  selectKnowledgeFiles(kind) {
+    if (!bridge?.selectKnowledgeFiles) return Promise.reject(new Error("当前页面未连接 Electron 知识文件选择能力"));
+    return bridge.selectKnowledgeFiles(kind);
+  },
+  importKnowledgeFiles(payload) {
+    if (!bridge?.importKnowledgeFiles) return Promise.reject(new Error("当前页面未连接 Electron 知识文件导入能力"));
+    return bridge.importKnowledgeFiles(payload);
+  },
+  importLegalSnapshot(payload) {
+    if (!bridge?.importLegalSnapshot) return Promise.reject(new Error("当前页面未连接 Electron 法律快照导入能力"));
+    return bridge.importLegalSnapshot(payload);
+  },
+  verifyLegalRealtime(payload) {
+    if (!bridge?.verifyLegalRealtime) return Promise.reject(new Error("当前页面未连接 Electron 法律来源核验能力"));
+    return bridge.verifyLegalRealtime(payload);
+  },
+  runReview(payload) {
+    if (!bridge?.runReview) return Promise.reject(new Error("当前页面未连接 Electron 审查执行能力"));
+    return bridge.runReview(payload);
+  },
+  onReviewProgress(callback) {
+    if (!bridge?.onReviewProgress) return () => {};
+    return bridge.onReviewProgress(callback);
+  },
   loadState() {
     return bridge?.loadState ? bridge.loadState() : Promise.resolve(readBrowserState());
   },

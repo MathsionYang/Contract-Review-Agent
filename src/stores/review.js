@@ -13,6 +13,8 @@ export const useReviewStore = defineStore("review", () => {
   const zoom = ref(1);
   const toasts = ref([]);
   const validatorResult = ref(null);
+  const reviewProgress = ref(null);
+  let stopReviewProgress = null;
 
   const activeProject = computed(() => state.value.projects.find((item) => item.project_id === state.value.activeProjectId) || state.value.projects[0] || null);
   const review = computed(() => activeProject.value ? state.value.reviews[activeProject.value.project_id] || null : null);
@@ -38,6 +40,24 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function bootstrap() {
+    if (!stopReviewProgress) {
+      stopReviewProgress = electronApi.onReviewProgress((payload = {}) => {
+        const projectId = String(payload.projectId || "");
+        if (!projectId || projectId !== activeProject.value?.project_id || !review.value) return;
+        reviewProgress.value = {
+          projectId,
+          step: String(payload.step || review.value.task?.current_step || ""),
+          progress: Math.min(Math.max(Number(payload.progress) || 0, 0), 100),
+          status: String(payload.status || "running")
+        };
+        review.value.task = {
+          ...(review.value.task || {}),
+          current_step: reviewProgress.value.step,
+          progress: reviewProgress.value.progress,
+          status: reviewProgress.value.status
+        };
+      });
+    }
     try {
       const saved = await electronApi.loadState();
       if (saved && Array.isArray(saved.projects) && saved.projects.length) {
@@ -178,7 +198,14 @@ export const useReviewStore = defineStore("review", () => {
   async function importContract(options) {
     isBusy.value = true;
     try {
-      const result = await electronApi.importContract(options);
+      const result = await electronApi.importContract({
+        ...options,
+        bootstrapState: {
+          knowledge: state.value.knowledge,
+          capabilities: state.value.capabilities,
+          settings: state.value.settings
+        }
+      });
       state.value = result.state;
       state.value.knowledge = state.value.knowledge || JSON.parse(JSON.stringify(knowledgeData));
       state.value.capabilities = state.value.capabilities || JSON.parse(JSON.stringify(capabilityData));
@@ -186,10 +213,116 @@ export const useReviewStore = defineStore("review", () => {
       await persist();
       activeRiskId.value = null;
       selectedPage.value = 1;
-      notify(`已导入 ${result.project.file_name}，解析 ${result.review.document.pageCount} 页`, "ok");
+      notify(`已导入 ${result.project.file_name}，开始执行本地审查`, "ok");
+      await runReview();
       return result;
     } catch (error) {
       notify(error.message || "合同导入失败", "warn");
+      throw error;
+    } finally {
+      isBusy.value = false;
+    }
+  }
+
+  async function runReview() {
+    if (!review.value) return null;
+    isBusy.value = true;
+    try {
+      const result = await electronApi.runReview({
+        projectId: activeProject.value?.project_id,
+        review: review.value
+      });
+      if (result.state) state.value = result.state;
+      else if (result.review && activeProject.value) state.value.reviews[activeProject.value.project_id] = result.review;
+      const status = result.review?.task?.status;
+      reviewProgress.value = result.review ? {
+        projectId: result.review.project?.project_id || activeProject.value?.project_id,
+        step: result.review.task?.current_step || "persist",
+        progress: Number(result.review.task?.progress || 0),
+        status: status || "unknown"
+      } : null;
+      notify(status === "completed" ? `审查完成，生成 ${result.review.risks?.length || 0} 条风险` : `审查${status === "partial" ? "部分完成" : "未完成"}，请查看任务状态`, status === "completed" ? "ok" : "warn");
+      return result;
+    } catch (error) {
+      notify(error.message || "合同审查执行失败", "warn");
+      throw error;
+    } finally {
+      isBusy.value = false;
+    }
+  }
+
+  async function importKnowledgeFiles(kind, files) {
+    if (!Array.isArray(files) || !files.length) return null;
+    isBusy.value = true;
+    try {
+      const result = await electronApi.importKnowledgeFiles({
+        kind,
+        files,
+        bootstrapState: {
+          knowledge: state.value.knowledge,
+          capabilities: state.value.capabilities,
+          settings: state.value.settings
+        }
+      });
+      if (result.state) state.value = result.state;
+      if (result.errors?.length) {
+        notify(`已导入 ${result.items?.length || 0} 个文件，${result.errors.length} 个文件失败`, "warn");
+      } else {
+        notify(`已导入 ${result.items?.length || 0} 个知识文件`, "ok");
+      }
+      return result;
+    } catch (error) {
+      notify(error.message || "知识文件导入失败", "warn");
+      throw error;
+    } finally {
+      isBusy.value = false;
+    }
+  }
+
+  async function importLegalSnapshot(options = {}) {
+    isBusy.value = true;
+    try {
+      const result = await electronApi.importLegalSnapshot({
+        ...options,
+        bootstrapState: {
+          knowledge: state.value.knowledge,
+          capabilities: state.value.capabilities,
+          settings: state.value.settings
+        }
+      });
+      if (result.state) state.value = result.state;
+      if (!result.canceled) notify(`已导入法律快照 ${result.snapshot?.name || ""}`, "ok");
+      return result;
+    } catch (error) {
+      notify(error.message || "法律快照导入失败", "warn");
+      throw error;
+    } finally {
+      isBusy.value = false;
+    }
+  }
+
+  async function verifyLegalRealtime(options = {}) {
+    isBusy.value = true;
+    try {
+      const result = await electronApi.verifyLegalRealtime(options);
+      if (result.state) state.value = result.state;
+      if (options.snapshotId) {
+        const snapshot = (state.value.knowledge?.legalSnapshots || []).find((item) => item.id === options.snapshotId);
+        if (snapshot) {
+          snapshot.realtime_verification = {
+            status: result.status,
+            error_code: result.errorCode || null,
+            message: result.message || "",
+            verified_at: new Date().toISOString(),
+            sources: Array.isArray(result.sources) ? result.sources : []
+          };
+          await persist();
+        }
+      }
+      notify(result.status === "verified" ? "实时法律来源核验完成" : (result.message || "实时法律来源未完成"), result.status === "verified" ? "ok" : "warn");
+      return result;
+    } catch (error) {
+      notify(error.message || "实时法律来源核验失败", "warn");
       throw error;
     } finally {
       isBusy.value = false;
@@ -412,12 +545,13 @@ export const useReviewStore = defineStore("review", () => {
     activeRiskId.value = null;
     selectedPage.value = 1;
     validatorResult.value = null;
+    reviewProgress.value = null;
   }
 
   return {
-    state, isReady, isBusy, activeRiskId, selectedPage, zoom, toasts, validatorResult,
+    state, isReady, isBusy, activeRiskId, selectedPage, zoom, toasts, validatorResult, reviewProgress,
     activeProject, review, risks, activeRisk, pendingRiskCount, selectedRules, selectedPolicies, reviewExecution,
-    bootstrap, persist, notify, selectRisk, clearRisk, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract,
+    bootstrap, persist, notify, selectRisk, clearRisk, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract, runReview, importKnowledgeFiles, importLegalSnapshot, verifyLegalRealtime,
     saveConfig, updateLegalSnapshot, updateEnterpriseMemory, toggleKnowledge, addKnowledge, updateKnowledge, deleteKnowledge, saveModel, deleteModel,
     saveSelectionAnnotation, reviewSelection,
     toggleModel, validateModel, toggleSkill, updateSettings, runValidator, runExport, resetSample
