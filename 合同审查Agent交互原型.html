@@ -348,6 +348,24 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns
 .req-risk-actions .btn{flex:1;min-width:72px;justify-content:center}
 .req-detail-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
 .req-detail-actions .btn{justify-content:center}
+.col-detail{background:#f8fafc}
+#detailArea{display:flex;flex:1;min-height:0;flex-direction:column;background:#f8fafc}
+.req-detail-head{background:var(--surface);padding:14px 16px 12px}
+.req-detail-kicker{font-family:var(--mono);font-size:10.5px;color:var(--text-3);margin-bottom:3px}
+.req-detail-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.req-detail-actionbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;padding:10px 16px 12px;background:var(--surface);border-bottom:1px solid var(--border)}
+.req-detail-actionbar .btn{height:32px;padding:0 8px;justify-content:center;border-radius:7px}
+.req-detail-actionbar .btn.primary{box-shadow:none}
+.req-detail-body{flex:1;min-height:0;overflow:auto;padding:14px 16px 16px}
+.req-detail-section{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px}
+.req-detail-section h4{margin-bottom:8px}
+.req-detail-section .quote{background:#fbfcff}
+.req-detail-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.req-detail-meta .k{background:#fbfcff;border:1px solid var(--border);border-radius:7px;padding:8px 9px;min-width:0}
+.req-detail-meta .kl{font-size:10.5px;color:var(--text-3);margin-bottom:2px}
+.req-detail-meta .kv-val{font-size:12px;font-weight:500;overflow-wrap:anywhere}
+.req-detail-proposal{background:var(--ok-soft);border-color:#cdeedd;color:#175c3b}
+.req-revision-list{display:grid;gap:8px}
 .req-source{display:flex;align-items:flex-start;gap:7px;border:1px solid var(--border);border-radius:7px;padding:9px 10px;margin-bottom:7px;background:var(--surface)}
 .req-source .source-body{flex:1;min-width:0}
 .req-source .source-title{font-size:12px;font-weight:600;line-height:1.45}
@@ -368,8 +386,18 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns
 .req-version-pill.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary)}
 .req-task-panel{margin-top:16px}
 .req-task-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:14px}
+.req-task-panel{display:none}
+.req-task-utility{display:flex;align-items:center;gap:6px}
+.req-summary-badge{font-family:var(--mono);font-size:10.5px}
+.req-utility-btn{width:32px;min-width:32px;height:30px;padding:0;justify-content:center}
+.req-utility-btn svg{width:15px;height:15px}
+.req-utility-btn:hover{background:var(--primary-soft);border-color:var(--primary-ring);color:var(--primary)}
 .req-task-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
 .req-task-actions .btn{min-width:94px}
+.req-task-actions .req-icon-btn{width:40px;min-width:40px;height:34px;padding:0;justify-content:center}
+.req-task-actions .req-icon-btn svg{width:16px;height:16px}
+.req-task-actions .req-icon-btn:hover{background:var(--primary-soft);border-color:var(--primary-ring);color:var(--primary)}
+.req-task-actions .req-icon-btn.danger:hover{background:#fdf1f0;border-color:#e8a7a2;color:var(--critical)}
 .req-state-flow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:8px}
 .req-state-flow span{font-size:10px;padding:2px 6px;border-radius:4px;background:#eef1f6;color:var(--text-3)}
 .req-state-flow span.done{background:var(--ok-soft);color:#0e8a52}
@@ -498,6 +526,11 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns
 
         <div class="panel" data-page-node-id="Pgvt01Ex6JqSiWB1gA2ECT">
           <div class="panel-head" data-page-node-id="STmLHe9MsDIqTwAoARi2nK"><h2 data-page-node-id="r31KdetlRYje70P4lggGYB">审查任务</h2><span class="hint" data-page-node-id="QDVnY3oYiLrWHVMNzT51L1">按状态与合同类型筛选</span><span class="spacer" data-page-node-id="0wePvzOvBU199v26dlggIw"></span>
+            <div class="req-task-utility" id="taskUtilityTools">
+              <span class="badge b-warn req-summary-badge" id="taskStateBadgeCompact"><span class="dot"></span>waiting_confirmation</span>
+              <button class="btn req-icon-btn req-utility-btn" title="查看任务状态与 Checkpoint" aria-label="查看任务状态与 Checkpoint" onclick="openTaskStatusModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="M7 4.5l-2 2"/></svg></button>
+              <button class="btn req-icon-btn req-utility-btn" title="查看 Validator 与错误码" aria-label="查看 Validator 与错误码" onclick="openValidatorModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5h6"/><path d="M9 3h6v4H9z"/><path d="M6 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1"/><path d="M7 12l2 2 4-4M7 17h7"/></svg></button>
+            </div>
             <div class="filters" id="taskFilters" data-page-node-id="Rg4vFu16e2wr4FhicO2Adg">
               <div class="filter-chip active" data-f="all" data-page-node-id="BxnOp9JUwAa5eXD553FX1e">全部</div>
               <div class="filter-chip" data-f="working" data-page-node-id="E5G35moYs0HDTT81iFT1ak">进行中</div>
@@ -523,13 +556,13 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns
               </div>
               <div class="req-state-flow" id="stateFlow"></div>
               <div class="req-task-actions">
-                <button class="btn" onclick="transitionTask('input_required')">暂停 / 待补充</button>
-                <button class="btn" onclick="transitionTask('working')">继续</button>
-                <button class="btn" onclick="transitionTask('validating')">校验</button>
-                <button class="btn" onclick="transitionTask('completed')">确认完成</button>
-                <button class="btn" onclick="transitionTask('failed')">模拟失败</button>
-                <button class="btn danger" onclick="transitionTask('cancelled')">取消</button>
-                <button class="btn" onclick="restoreCheckpoint()">Checkpoint 恢复</button>
+                <button class="btn req-icon-btn" title="暂停 / 待补充" aria-label="暂停 / 待补充" onclick="transitionTask('input_required')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 4H6v16h4V4zM18 4h-4v16h4V4z"/></svg></button>
+                <button class="btn req-icon-btn" title="继续" aria-label="继续" onclick="transitionTask('working')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5v14l11-7z"/></svg></button>
+                <button class="btn req-icon-btn" title="校验" aria-label="校验" onclick="transitionTask('validating')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/><path d="M3 3h18v18H3z"/></svg></button>
+                <button class="btn req-icon-btn" title="确认完成" aria-label="确认完成" onclick="transitionTask('completed')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16.5 9"/></svg></button>
+                <button class="btn req-icon-btn" title="模拟失败" aria-label="模拟失败" onclick="transitionTask('failed')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg></button>
+                <button class="btn danger req-icon-btn" title="取消" aria-label="取消" onclick="transitionTask('cancelled')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></button>
+                <button class="btn req-icon-btn" title="Checkpoint 恢复" aria-label="Checkpoint 恢复" onclick="restoreCheckpoint()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg></button>
               </div>
             </div>
           </div>
@@ -545,6 +578,24 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns
         </div>
       </div>
     </div>
+
+<!-- 任务状态弹窗 -->
+<div class="overlay" id="ov-task-status">
+  <div class="modal wide">
+    <div class="modal-head"><h3>任务状态与 Checkpoint</h3><span class="hint" style="color:var(--text-3)">状态迁移、幂等键与失败恢复</span><div class="x" onclick="closeOv('task-status')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></div></div>
+    <div class="modal-body" id="taskStatusModalBody"></div>
+    <div class="modal-foot"><button class="btn" onclick="closeOv('task-status')">关闭</button></div>
+  </div>
+</div>
+
+<!-- Validator 弹窗 -->
+<div class="overlay" id="ov-validator">
+  <div class="modal wide">
+    <div class="modal-head"><h3>Validator 与错误码</h3><span class="hint" style="color:var(--text-3)">导出前强制执行</span><div class="x" onclick="closeOv('validator')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></div></div>
+    <div class="modal-body" id="validatorModalBody"></div>
+    <div class="modal-foot"><button class="btn" onclick="closeOv('validator')">关闭</button><button class="btn primary" onclick="runExport()">导出</button></div>
+  </div>
+</div>
 
     <!-- ===== 视图：审查工作区 ===== -->
     <div class="view" id="view-review" style="display:none;flex-direction:column;padding:0" data-page-node-id="nWTfAXZyFz0Ctw4B0eLgjY">
@@ -1261,6 +1312,1580 @@ function toast(msg,type='ok'){
 
 /* ================= 初始化 ================= */
 renderTasks(); renderRisks(); renderDetail('risk_001');
+</script>
+<style id="requirements-app-overrides">
+#ov-upload #upType{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+#ov-upload #upType .radio-card{min-width:0;padding:8px 10px;border-radius:7px}
+#ov-upload #upType .radio-card .r-title{font-size:12.5px;line-height:1.3}
+#ov-upload #upType .radio-card .r-desc{font-size:10.5px;margin-top:2px;line-height:1.35}
+#ov-upload #upMode .radio-card{min-width:168px;padding:9px 11px}
+#ov-upload .upload-zone{padding:18px}
+.risk-tools{height:auto;min-height:52px;padding:9px 12px;align-items:flex-start}
+.risk-tools .count{padding-top:5px}
+.req-filter-set{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.req-filter-set .filter-chip{font-size:11px}
+.req-filter-select,.req-filter-input{height:30px;border:1px solid var(--border);border-radius:7px;background:var(--surface);padding:0 8px;font-size:11.5px;color:var(--text-2)}
+.req-filter-select{max-width:130px}
+.req-filter-input{width:148px;padding:0 9px}
+.req-filter-input:focus,.req-filter-select:focus{outline:2px solid var(--primary-ring);border-color:var(--primary)}
+.risk-card.is-deleted{opacity:.58}
+.req-risk-topic{font-family:var(--mono);font-size:10.5px;color:var(--text-3);margin-top:3px}
+.req-risk-flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.req-risk-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px dashed var(--border)}
+.req-risk-actions .btn{flex:1;min-width:68px;justify-content:center}
+.req-detail-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.req-detail-actions .btn{justify-content:center}
+.req-source{display:flex;align-items:flex-start;gap:7px;border:1px solid var(--border);border-radius:7px;padding:9px 10px;margin-bottom:7px;background:var(--surface)}
+.req-source .source-body{flex:1;min-width:0}
+.req-source .source-title{font-size:12px;font-weight:600;line-height:1.45}
+.req-source .source-meta{font-size:11px;color:var(--text-3);margin-top:3px;line-height:1.45}
+.req-source.l3{background:#fffaf0;border-color:#f1dfaa}
+.req-source.l4{background:#f6f3ff;border-color:#ddd4ff}
+.req-source.l5{background:#f4f6f8;border-color:#dce1e8}
+.req-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.req-field-grid .k{min-width:0}
+.req-field-grid .kv-val{overflow-wrap:anywhere}
+.req-callout{border:1px solid var(--primary-ring);background:var(--primary-soft);border-radius:8px;padding:10px 12px;font-size:12px;color:#3b4f9b;line-height:1.6}
+.req-warning{border-color:#f1dd9a;background:var(--warn-soft);color:#8a6a1a}
+.req-danger{border-color:#f0c2bf;background:#fff6f5;color:#8f2e26}
+.req-version-strip{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-2);padding:7px 16px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px;color:var(--text-3)}
+.req-version-strip strong{color:var(--text-2)}
+.req-version-pill{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:3px 8px}
+.req-version-pill.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary)}
+.req-page-label{font-family:var(--mono);font-size:11px;color:var(--text-3);text-indent:0!important;border-top:1px dashed var(--border);padding-top:12px;margin-top:22px}
+.doc-paper .req-search-hit{background:#fff8d8;box-shadow:0 0 0 4px #fff8d8;border-radius:4px}
+.doc-paper mark.req-generated{background:#e7f7ef;border-bottom:2px solid #9bd8b7}
+.req-config-table-wrap{border:1px solid var(--border);border-radius:8px;overflow:auto;max-height:214px;background:var(--surface)}
+.req-config-table th,.req-config-table td{padding:9px 10px;font-size:12px}
+.req-config-table th:first-child,.req-config-table td:first-child{width:84px;text-align:center}
+.req-config-table td:nth-child(2){font-weight:600;color:var(--text)}
+.req-config-summary{font-size:11.5px;color:var(--text-3);line-height:1.55}
+.req-config-search{display:flex;gap:8px;margin-bottom:8px}
+.req-config-search .inp{height:32px}
+.req-export-records{margin-top:12px;border:1px solid var(--border);border-radius:8px;overflow:auto;max-height:180px}
+.req-export-records th,.req-export-records td{font-size:11px;padding:7px 8px}
+.req-format-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.req-format-card{border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--surface);display:flex;gap:8px;align-items:flex-start}
+.req-format-card input{margin-top:2px;accent-color:var(--primary)}
+.req-format-card b{font-size:12px;display:block}
+.req-format-card span{font-size:11px;color:var(--text-3)}
+.req-health-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border-bottom:1px solid var(--border);padding:8px 0}
+.req-health-row:last-child{border-bottom:0}
+.req-health-row small{display:block;color:var(--text-3);margin-top:2px}
+.req-kb-toolbar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.req-kb-toolbar .spacer{flex:1}
+.req-audit-table td,.req-audit-table th{font-size:11.5px}
+/* Compact risk detail actions: keep review controls in the first visual row. */
+.req-detail-head{padding:12px 14px 10px}
+.req-detail-head .t{min-width:0}
+.req-detail-head h3{font-size:15px;line-height:1.35;margin-bottom:0}
+.req-detail-badges{margin-top:7px}
+.req-detail-actionbar{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:5px;
+  padding:8px 14px 9px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+}
+.req-detail-actionbar .btn{
+  width:30px;
+  min-width:30px;
+  height:30px;
+  padding:0;
+  gap:0;
+  justify-content:center;
+  border-radius:7px;
+  font-size:0;
+}
+.req-detail-actionbar .btn svg{width:15px;height:15px}
+.req-detail-actionbar .btn.primary{color:#fff;box-shadow:none}
+.req-detail-actionbar .btn.danger{color:var(--critical)}
+.req-detail-actionbar .btn:hover{transform:translateY(-1px)}
+.req-detail-actionbar .req-action-divider{
+  width:1px;
+  height:18px;
+  margin:0 2px;
+  background:var(--border);
+}
+.req-detail-body{padding:12px 14px 14px}
+.req-detail-section{padding:11px;margin-bottom:10px}
+.req-detail-section h4{font-size:12.5px;margin-bottom:7px}
+.req-detail-section .quote{line-height:1.65}
+.ver-trace{
+  max-height:40px;
+  overflow:hidden;
+  padding:7px 12px;
+  gap:4px 10px;
+  font-size:10px;
+  line-height:1.35;
+}
+.statusbar .state,
+.statusbar .item[data-runtime-field="task-id"],
+.statusbar .item[data-runtime-field="checkpoint"],
+.statusbar .item[data-runtime-field="last-error"]{display:none}
+@media (max-width:860px){
+  .req-filter-input{max-width:none;flex:1}
+  .req-format-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .req-field-grid{grid-template-columns:1fr}
+  .req-detail-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .req-detail-body{padding-left:12px;padding-right:12px}
+  .req-detail-meta{grid-template-columns:1fr 1fr}
+  .req-task-utility{order:3;width:100%;margin-top:4px}
+  .req-summary-badge{margin-left:auto}
+}
+@media (max-width:540px){
+  .req-detail-actionbar{gap:5px}
+  .req-detail-meta{grid-template-columns:1fr}
+}
+</style>
+<script id="requirements-app">
+(function(){
+  "use strict";
+
+  const doc = document;
+  const $ = (id) => doc.getElementById(id);
+  const pad = (n) => String(n).padStart(2, "0");
+  const nowText = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+  const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[c]));
+
+  const labels = {
+    level:{
+      critical:["严重","b-lv-critical"],
+      high:["高","b-lv-high"],
+      medium:["中","b-lv-medium"],
+      low:["低","b-lv-low"],
+      info:["提示","b-lv-info"]
+    },
+    category:{
+      legal:"法律风险",
+      commercial:"商业风险",
+      company_policy:"企业制度",
+      text_quality:"文本质量",
+      evidence:"证据问题"
+    },
+    categoryColor:{
+      legal:"#7c5cff",
+      commercial:"#e8590c",
+      company_policy:"#2b6cb0",
+      text_quality:"#0e8a52",
+      evidence:"#64748b"
+    },
+    conclusion:{
+      candidate:["候选","b-muted"],
+      confirmed:["已确认","b-ok"],
+      needs_verification:["需核验","b-warn"],
+      rejected:["已驳回","b-err"]
+    },
+    evidence:{
+      verified:["证据已验证","b-ok"],
+      partially_verified:["证据部分验证","b-warn"],
+      unverified:["证据未验证","b-muted"],
+      invalid:["证据无效","b-err"],
+      not_applicable:["不适用","b-muted"]
+    },
+    realtime:{
+      not_requested:["未请求","b-muted"],
+      verified:["实时已核验","b-ok"],
+      realtime_unverified:["实时未核验","b-warn"],
+      unavailable:["来源不可用","b-err"]
+    },
+    human:{
+      pending_review:["待复核","b-warn"],
+      accepted:["已接受","b-ok"],
+      modified:["已修改","b-primary"],
+      false_positive:["误报","b-err"],
+      deferred:["暂不处理","b-muted"],
+      added_by_human:["人工新增","b-primary"],
+      deleted:["已删除","b-muted"]
+    },
+    task:{
+      submitted:["已提交","b-muted"],
+      working:["进行中","b-primary"],
+      input_required:["待补充输入","b-warn"],
+      validating:["校验中","b-warn"],
+      waiting_confirmation:["待确认","b-warn"],
+      completed:["已完成","b-ok"],
+      partial:["部分完成","b-muted"],
+      failed:["失败","b-err"],
+      cancelled:["已取消","b-muted"]
+    }
+  };
+
+  const badge = (kind, value) => {
+    const found = labels[kind]?.[value] || [value, "b-muted"];
+    return `<span class="badge ${found[1]}"><span class="dot"></span>${escapeHtml(found[0])}</span>`;
+  };
+  const categoryBadge = (value) => {
+    const color = labels.categoryColor[value] || "#64748b";
+    return `<span class="badge b-cat" style="background:${color}14;color:${color};border-color:${color}30">${escapeHtml(labels.category[value] || value)}</span>`;
+  };
+  const compactTime = () => nowText().slice(11,16);
+
+  const project = {
+    project_id:"project_hd_supply_20260910",
+    project_name:"华东供应链设备采购合同",
+    file_name:"华东供应链设备采购合同_v3.pdf",
+    file_version_id:"contract_v3",
+    page_count:12,
+    contract_type:"procurement",
+    review_version_id:"RV-2026-0910-03",
+    task_id:"task_20260910_hdsc_001",
+    checkpoint_id:"ckpt_20260910_153240",
+    idempotency_key:"idem_hdsc_contract_v3"
+  };
+
+  const state = {
+    task_status:"waiting_confirmation",
+    last_error_code:"SOURCE_UNAVAILABLE",
+    checkpoint:{checkpoint_id:project.checkpoint_id,state:"waiting_confirmation",state_version:3},
+    currentReviewVersion:project.review_version_id,
+    activeRisk:"risk_001",
+    currentPage:8,
+    zoom:1,
+    filters:{level:"all",category:"all",human:"all",conclusion:"all",keyword:""},
+    selectedConfig:{
+      snapshot:"CN-2026-09",
+      rules:["procurement-rules@2.1","contract-common@1.0"],
+      policies:["公司采购管理制度_v3.2.pdf","合同授权与用印管理办法_v2.0.pdf"]
+    },
+    humanRevisions:[
+      {
+        review_version_id:"RV-2026-0910-HR-01",
+        source_type:"human_revision",
+        base_review_version_id:project.review_version_id,
+        risk_id:"risk_004",
+        created_by:"法务用户",
+        created_at:"2026-09-10 15:42:18",
+        reason:"补充采购订单交付日期证据",
+        changes:[{field:"evidence_status",before:"unverified",after:"partially_verified"}]
+      }
+    ],
+    exportRecords:[],
+    auditRecords:[
+      ["2026-09-10 15:42:18","法务用户","修改风险证据状态","risk_004","成功","10.8.2.14"],
+      ["2026-09-10 15:34:02","系统","实时来源核验失败","risk_005","SOURCE_UNAVAILABLE","internal"],
+      ["2026-09-10 15:32:40","系统","创建 Checkpoint",project.checkpoint_id,"成功","internal"],
+      ["2026-09-10 15:12:03","法务用户","打开审查版本",project.review_version_id,"成功","10.8.2.14"]
+    ]
+  };
+
+  const risks = [
+    {
+      risk_id:"risk_001",
+      risk_level:"high",
+      risk_category:"legal",
+      risk_topic:"breach_liability",
+      title:"违约责任范围过宽",
+      conclusion_status:"candidate",
+      evidence_status:"verified",
+      realtime_verification_status:"not_requested",
+      human_status:"pending_review",
+      contract_location:{file_version_id:project.file_version_id,page:8,clause_no:"7.2",char_range:[4230,4388],quote:"违约方应赔偿守约方因此遭受的全部损失，包括但不限于间接损失、可得利益损失、律师费、调查费等，且赔偿责任不受合同总价限制。"},
+      location_confidence:0.94,
+      analysis:"条款将赔偿范围扩大到间接损失和可得利益损失，并取消责任上限。该表述会扩大双方争议时的损失计算范围，也可能导致甲方在自身违约时暴露过高赔偿风险。",
+      suggestion:"建议将赔偿范围限定为直接损失，并约定合理责任上限。律师费、调查费等费用可保留为需经生效裁判或双方确认的合理费用。",
+      confidence:0.88,
+      legal_basis:[
+        {source_level:"l1",title:"《中华人民共和国民法典》第五百七十七条",source_id:"law-civil-code-577",snapshot_id:"CN-2026-09",status:"published",retrieved_at:"2026-09-10 15:20:31",excerpt:"当事人一方不履行合同义务或者履行合同义务不符合约定的，应当承担违约责任。"},
+        {source_level:"l1",title:"《中华人民共和国民法典》第五百八十五条",source_id:"law-civil-code-585",snapshot_id:"CN-2026-09",status:"published",retrieved_at:"2026-09-10 15:20:31",excerpt:"约定的违约金过分高于造成的损失的，人民法院或者仲裁机构可以根据请求予以适当减少。"}
+      ],
+      company_basis:[
+        {source_level:"l3",title:"合同授权与用印管理办法 v2.0",source_id:"policy-seal-v2",status:"published",excerpt:"重大责任上限调整需提交法务复核。"}
+      ],
+      provenance:{rule_id:"contract.liability.scope.v1",rule_version:"v1",skill_version:"contract-common-review@1.3.0",model_config_ref:"analysis/hunyuan-pro@cfg-v3",knowledge_snapshot_ids:["CN-2026-09"],trace_id:"trace-risk-001"}
+    },
+    {
+      risk_id:"risk_002",
+      risk_level:"high",
+      risk_category:"commercial",
+      risk_topic:"acceptance_condition",
+      title:"自动验收且异议期不足",
+      conclusion_status:"candidate",
+      evidence_status:"verified",
+      realtime_verification_status:"not_requested",
+      human_status:"pending_review",
+      contract_location:{file_version_id:project.file_version_id,page:6,clause_no:"5.3",char_range:[3192,3298],quote:"甲方应在设备到货后三日内完成验收，逾期未提出书面异议的，视为全部设备验收合格。"},
+      location_confidence:0.91,
+      analysis:"设备采购通常需要外观、数量、上电、联调和稳定性测试。三日异议期不足，且直接触发全部设备视为验收合格，会削弱甲方发现隐蔽质量问题后的主张空间。",
+      suggestion:"建议区分到货清点、初验和终验，将技术验收期限调整为不少于十五个工作日，并明确未验收不当然代表质量合格。",
+      confidence:0.86,
+      legal_basis:[
+        {source_level:"l1",title:"《中华人民共和国民法典》第六百二十条",source_id:"law-civil-code-620",snapshot_id:"CN-2026-09",status:"published",retrieved_at:"2026-09-10 15:21:07",excerpt:"买受人收到标的物时应当在约定的检验期限内检验。"}
+      ],
+      company_basis:[
+        {source_level:"l3",title:"公司采购管理制度 v3.2",source_id:"policy-procurement-v3.2",status:"published",excerpt:"关键设备采购应设置不少于十五个工作日的技术验收期。"}
+      ],
+      provenance:{rule_id:"procurement.acceptance.condition.v1",rule_version:"v1",skill_version:"procurement-contract-review@1.2.0",model_config_ref:"analysis/hunyuan-pro@cfg-v3",knowledge_snapshot_ids:["CN-2026-09"],trace_id:"trace-risk-002"}
+    },
+    {
+      risk_id:"risk_003",
+      risk_level:"high",
+      risk_category:"legal",
+      risk_topic:"ip_ownership",
+      title:"知识产权归属不明确",
+      conclusion_status:"candidate",
+      evidence_status:"verified",
+      realtime_verification_status:"not_requested",
+      human_status:"pending_review",
+      contract_location:{file_version_id:project.file_version_id,page:9,clause_no:"8.1",char_range:[4490,4604],quote:"项目相关方案、接口文档、配置脚本及二次开发成果归乙方所有，甲方仅在合同期内享有使用权。"},
+      location_confidence:0.9,
+      analysis:"合同标的包含部署方案、配置脚本和接口文档。若所有成果均归乙方且甲方仅在合同期内使用，可能影响后续维护、迁移、二次开发和供应商替换。",
+      suggestion:"建议区分乙方既有知识产权与为本项目交付的文档、配置和二次开发成果，明确甲方永久、不可撤销、可维护使用的权利范围。",
+      confidence:0.84,
+      legal_basis:[
+        {source_level:"l1",title:"《中华人民共和国民法典》第八百六十一条",source_id:"law-civil-code-861",snapshot_id:"CN-2026-09",status:"published",retrieved_at:"2026-09-10 15:22:44",excerpt:"技术开发合同相关成果归属可以由当事人约定。"}
+      ],
+      company_basis:[
+        {source_level:"l3",title:"信息系统交付物管理规范 v1.6",source_id:"policy-it-delivery-v1.6",status:"published",excerpt:"项目交付物应包含可运维文档、配置清单和必要脚本。"}
+      ],
+      provenance:{rule_id:"contract.ip.ownership.v1",rule_version:"v1",skill_version:"software-development-contract-review@1.0.0",model_config_ref:"analysis/hunyuan-pro@cfg-v3",knowledge_snapshot_ids:["CN-2026-09"],trace_id:"trace-risk-003"}
+    },
+    {
+      risk_id:"risk_004",
+      risk_level:"medium",
+      risk_category:"text_quality",
+      risk_topic:"cross_document_conflict",
+      title:"合同与采购订单交付日期冲突",
+      conclusion_status:"candidate",
+      evidence_status:"partially_verified",
+      realtime_verification_status:"not_requested",
+      human_status:"pending_review",
+      contract_location:{file_version_id:project.file_version_id,page:4,clause_no:"3.2",char_range:[2108,2186],quote:"乙方应于 2026 年 10 月 15 日前完成全部设备交付；采购订单 PO-2026-088 载明交付日期为 2026 年 09 月 30 日。"},
+      location_confidence:0.87,
+      analysis:"正文交付日期与采购订单交付日期不一致。若未配置来源优先级，系统只能报告差异，不能自行认定哪一日期为正确日期。",
+      suggestion:"建议由业务确认交付日期，并在合同中明确附件和订单不一致时的优先级；若以订单为准，应同步修订合同正文。",
+      confidence:0.76,
+      legal_basis:[],
+      company_basis:[
+        {source_level:"l4",title:"采购订单 PO-2026-088",source_id:"po-2026-088",status:"temporary",excerpt:"交付日期为 2026 年 09 月 30 日。"},
+        {source_level:"l3",title:"公司采购管理制度 v3.2",source_id:"policy-procurement-v3.2",status:"published",excerpt:"合同正文、订单和附件关键交易条件应保持一致。"}
+      ],
+      provenance:{rule_id:"contract.date.cross_document.v1",rule_version:"v1",skill_version:"contract-common-review@1.3.0",model_config_ref:"extraction/extract-fast@cfg-v2",knowledge_snapshot_ids:["CN-2026-09"],trace_id:"trace-risk-004"}
+    },
+    {
+      risk_id:"risk_005",
+      risk_level:"medium",
+      risk_category:"legal",
+      risk_topic:"dispute_resolution",
+      title:"争议解决机构为空",
+      conclusion_status:"needs_verification",
+      evidence_status:"unverified",
+      realtime_verification_status:"realtime_unverified",
+      human_status:"pending_review",
+      contract_location:{file_version_id:project.file_version_id,page:10,clause_no:"10.1",char_range:[5030,5098],quote:"因本合同引起的争议，双方协商不成的，提交____仲裁委员会仲裁。"},
+      location_confidence:0.96,
+      analysis:"争议解决机构为空，导致条款无法直接执行。该项需要人工确认拟选择仲裁还是诉讼，并补全机构名称或法院管辖。",
+      suggestion:"建议补全明确且存在的仲裁委员会名称；如选择诉讼，应删除仲裁表述并约定有管辖权的人民法院。",
+      confidence:0.73,
+      legal_basis:[
+        {source_level:"l1",title:"《中华人民共和国仲裁法》第十六条",source_id:"law-arbitration-16",snapshot_id:"CN-2026-09",status:"published",retrieved_at:"2026-09-10 15:23:30",excerpt:"仲裁协议应当具有请求仲裁的意思表示、仲裁事项和选定的仲裁委员会。"}
+      ],
+      company_basis:[],
+      provenance:{rule_id:"contract.dispute.arbitration_body.v1",rule_version:"v1",skill_version:"contract-common-review@1.3.0",model_config_ref:"analysis/hunyuan-pro@cfg-v3",knowledge_snapshot_ids:["CN-2026-09"],trace_id:"trace-risk-005"}
+    },
+    {
+      risk_id:"risk_006",
+      risk_level:"low",
+      risk_category:"text_quality",
+      risk_topic:"definition_consistency",
+      title:"术语定义不一致",
+      conclusion_status:"candidate",
+      evidence_status:"verified",
+      realtime_verification_status:"not_requested",
+      human_status:"pending_review",
+      contract_location:{file_version_id:project.file_version_id,page:2,clause_no:"1.4",char_range:[1260,1338],quote:"本合同中“设备”“货物”“产品”具有相同含义，但附件一仍使用“服务产品”表述。"},
+      location_confidence:0.89,
+      analysis:"正文将多个术语约定为同义，但附件仍出现未定义的“服务产品”。虽然风险较低，但会影响自动抽取、附件比对和后续解释一致性。",
+      suggestion:"建议统一使用“设备”，并在定义条款中删除未使用或未定义术语。",
+      confidence:0.64,
+      legal_basis:[],
+      company_basis:[
+        {source_level:"l3",title:"合同模板文本规范 v5.0",source_id:"template-standard-v5",status:"published",excerpt:"同一合同内应保持主体、标的、日期、金额和关键术语一致。"}
+      ],
+      provenance:{rule_id:"contract.definition.consistency.v1",rule_version:"v1",skill_version:"contract-common-review@1.3.0",model_config_ref:"extraction/extract-fast@cfg-v2",knowledge_snapshot_ids:["CN-2026-09"],trace_id:"trace-risk-006"}
+    }
+  ];
+
+  const tasks = [
+    {name:project.project_name,type:"procurement",status:"waiting_confirmation",progress:86,risks:6,high:3,time:"15:42"},
+    {name:"湖畔办公房屋租赁合同",type:"property_lease",status:"working",progress:48,risks:0,high:0,time:"14:30"},
+    {name:"云启 SaaS 软件开发合同",type:"software",status:"partial",progress:100,risks:9,high:2,time:"11:08"},
+    {name:"智联供应商服务合同",type:"supplier_service",status:"completed",progress:100,risks:5,high:0,time:"昨天"},
+    {name:"华辰销售客户服务合同",type:"sales",status:"completed",progress:100,risks:3,high:0,time:"昨天"}
+  ];
+  const contractTypes = {procurement:"采购合同",supplier_service:"供应商服务",sales:"销售/客户服务",property_lease:"房屋租赁",software:"软件开发"};
+
+  const legalSnapshots = [
+    {id:"CN-2026-09",name:"法律快照 CN-2026-09",status:"published",sources:128,hash:"sha256:9f3a8c2e1",published_at:"2026-09-05 18:30",coverage:"采购、服务、销售、租赁、软件开发"},
+    {id:"CN-2026-10-draft",name:"法律快照 CN-2026-10-draft",status:"draft",sources:132,hash:"sha256:7b1d88aa",published_at:"校验中",coverage:"新增建工解释二校验样本"},
+    {id:"CN-2026-07",name:"法律快照 CN-2026-07",status:"historical",sources:120,hash:"sha256:41c207fe",published_at:"2026-07-20 09:00",coverage:"历史归档"}
+  ];
+  const ruleFiles = [
+    {file:"procurement-rules@2.1",summary:"采购合同通用规则集。覆盖预付款、验收、交付、质保、付款节点和来源优先级。",selected:true,status:"active",type:"procurement",priority:"blocker"},
+    {file:"contract-common@1.0",summary:"通用合同结构和文本规则。覆盖主体、金额、日期、争议解决、责任边界和条款缺失。",selected:true,status:"active",type:"common",priority:"blocker"},
+    {file:"consistency-rules@0.9",summary:"跨文件一致性规则草稿。比较采购订单、报价单、设备清单与合同正文的金额和日期。",selected:false,status:"draft",type:"cross_document",priority:"high"},
+    {file:"date-logic-rules@1.4",summary:"日期逻辑规则。校验签署、生效、交付、验收、付款、质保和终止日期顺序。",selected:false,status:"active",type:"date_logic",priority:"high"},
+    {file:"amount-arithmetic-rules@1.2",summary:"金额和比例计算规则。校验税率、大小写金额、付款比例合计和质保金比例。",selected:false,status:"active",type:"arithmetic",priority:"blocker"},
+    {file:"ip-deliverable-rules@1.0",summary:"技术交付与知识产权规则。适用于软件开发和含技术成果的采购合同。",selected:false,status:"active",type:"ip",priority:"high"}
+  ];
+  const policyFiles = [
+    {file:"公司采购管理制度_v3.2.pdf",summary:"L3 企业制度。约束采购立项、预付款比例、验收流程、供应商评价和例外审批。",selected:true,status:"published",version:"v3.2"},
+    {file:"合同授权与用印管理办法_v2.0.pdf",summary:"L3 企业制度。约束合同权限、责任上限、用印流程、重大条款复核和归档要求。",selected:true,status:"published",version:"v2.0"},
+    {file:"供应商准入与评估制度_v1.8.pdf",summary:"L3 企业制度。约束供应商资质、黑名单、履约评分和风险供应商审批。",selected:false,status:"draft",version:"v1.8"},
+    {file:"信息系统交付物管理规范_v1.6.pdf",summary:"L3 企业制度。约束技术文档、脚本、配置清单和知识转移交付。",selected:false,status:"published",version:"v1.6"},
+    {file:"合同模板文本规范_v5.0.docx",summary:"企业模板。约束术语一致性、条款顺序、附件引用、空白项和编号规范。",selected:false,status:"published",version:"v5.0"},
+    {file:"数据出域与模型调用白名单_v1.1.pdf",summary:"安全策略。约束外部模型、第三方 API 和敏感合同数据处理边界。",selected:false,status:"published",version:"v1.1"}
+  ];
+  const memoryRows = [
+    {content:"采购合同预付款比例超过 30% 时，需标记为高风险并检查审批依据。",scope:"组织级",type:"企业偏好",status:"正式",confidence:"0.95"},
+    {content:"YY 信息技术历史交付延迟样本需在验收和违约责任中提高关注权重。",scope:"合同类型级",type:"历史经验",status:"候选",confidence:"0.72"},
+    {content:"房屋租赁合同需额外检查装修恢复原状与提前解约条款。",scope:"合同类型级",type:"审查经验",status:"正式",confidence:"0.90"},
+    {content:"旧版实际施工人口径已撤销，仅可用于历史说明。",scope:"历史级",type:"失效记忆",status:"已撤销",confidence:"-"}
+  ];
+  const skillRows = [
+    {name:"contract-common-review",version:"1.3.0",scope:"全部合同",description:"合同通用结构、一致性、争议解决和责任边界审查。",status:"enabled",icon:"shield"},
+    {name:"procurement-contract-review",version:"1.2.0",scope:"采购合同",description:"采购专项审查，覆盖付款、交付、验收、质保和供应商义务。",status:"enabled",icon:"cart"},
+    {name:"selected-text-review",version:"1.0.0",scope:"全部合同",description:"人工划词、划句和划段局部审查。",status:"enabled",icon:"cursor"},
+    {name:"legal-source-verification",version:"1.0.0",scope:"全部合同",description:"法律来源版本、状态、原文和快照核验。",status:"validating",icon:"book"},
+    {name:"software-development-contract-review",version:"1.0.0",scope:"软件开发",description:"软件开发交付物、知识产权、验收和运维条款审查。",status:"enabled",icon:"code"},
+    {name:"external-skill-upload-demo",version:"0.8.0",scope:"隔离区",description:"待校验 Skill 包，尚未允许进入审查任务。",status:"isolated",icon:"file"}
+  ];
+  const skillStatus = {
+    enabled:["enabled","b-ok"],
+    disabled:["disabled","b-muted"],
+    validating:["validating","b-warn"],
+    isolated:["isolated","b-err"]
+  };
+  const modelRows = [
+    {id:"model-analysis-hunyuan",provider_name:"企业模型网关",provider_type:"internal_gateway",base_url:"https://internal-gw.example.local/v1",model_id:"hunyuan-pro",model_role:"analysis",credential_ref:"cred://model-gw/prod",capabilities:["structured_output","long_context"],context_length:"128k",output_limit:"8k",data_policy:"internal_only",config_version:"cfg-v3",health_status:"healthy",status:"active"},
+    {id:"model-extract-fast",provider_name:"企业模型网关",provider_type:"internal_gateway",base_url:"https://internal-gw.example.local/v1",model_id:"extract-fast",model_role:"extraction",credential_ref:"cred://model-gw/prod",capabilities:["json_schema","layout_text"],context_length:"64k",output_limit:"4k",data_policy:"internal_only",config_version:"cfg-v2",health_status:"healthy",status:"active"},
+    {id:"model-embed-bge",provider_name:"本地向量服务",provider_type:"local_model",base_url:"http://10.8.0.15:8080",model_id:"bge-m3",model_role:"embedding",credential_ref:"not_required",capabilities:["embedding"],context_length:"8k",output_limit:"vector",data_policy:"local_only",config_version:"cfg-v1",health_status:"healthy",status:"active"},
+    {id:"model-rerank-bge",provider_name:"本地重排序服务",provider_type:"local_model",base_url:"http://10.8.0.15:8081",model_id:"bge-reranker",model_role:"rerank",credential_ref:"not_required",capabilities:["rerank"],context_length:"8k",output_limit:"score_list",data_policy:"local_only",config_version:"cfg-v1",health_status:"healthy",status:"active"},
+    {id:"model-third-fallback",provider_name:"第三方兼容接口",provider_type:"openai_compatible",base_url:"https://api.approved.example/v1",model_id:"fallback-glm4",model_role:"analysis",credential_ref:"cred://third-party/fallback",capabilities:["structured_output"],context_length:"32k",output_limit:"4k",data_policy:"approved_external",config_version:"cfg-v1",health_status:"degraded",status:"disabled"},
+    {id:"model-legacy",provider_name:"历史第三方接口",provider_type:"third_party_api",base_url:"https://legacy.example/v1",model_id:"legacy-gpt4",model_role:"analysis",credential_ref:"cred://legacy/expired",capabilities:["text"],context_length:"8k",output_limit:"2k",data_policy:"external_blocked",config_version:"cfg-v2",health_status:"credential_expired",status:"test_failed"}
+  ];
+  const modelStatus = {
+    draft:["draft","b-muted"],
+    testing:["testing","b-warn"],
+    active:["active","b-ok"],
+    disabled:["disabled","b-muted"],
+    test_failed:["test_failed","b-err"],
+    credential_expired:["credential_expired","b-warn"],
+    unhealthy:["unhealthy","b-err"]
+  };
+
+  function riskById(id){ return risks.find((risk) => risk.risk_id === id); }
+  function selectedRules(){ return ruleFiles.filter((item) => item.selected).map((item) => item.file); }
+  function selectedPolicies(){ return policyFiles.filter((item) => item.selected).map((item) => item.file); }
+  function addAudit(action, resource, result, ip){
+    state.auditRecords.unshift([nowText(),"法务用户",action,resource,result,ip || "10.8.2.14"]);
+    renderAudit();
+  }
+  function createHumanRevision(risk, reason, changes){
+    const seq = state.humanRevisions.length + 1;
+    const reviewVersion = `RV-2026-0910-HR-${pad(seq + 1)}`;
+    state.humanRevisions.unshift({
+      review_version_id:reviewVersion,
+      source_type:"human_revision",
+      base_review_version_id:state.currentReviewVersion,
+      risk_id:risk?.risk_id || "*",
+      created_by:"法务用户",
+      created_at:nowText(),
+      reason,
+      changes
+    });
+    state.currentReviewVersion = reviewVersion;
+    renderVersionStrip();
+  }
+
+  function renderContract(){
+    $("docPaper").innerHTML = `
+      <h3 class="doc-title">${project.project_name}</h3>
+      <p class="no-indent" style="font-size:12.5px;color:#8a94ab;text-indent:0">文件：${project.file_name} · 文件版本：${project.file_version_id} · 页数：${project.page_count}</p>
+      <p class="no-indent" style="font-size:12.5px;color:#8a94ab;text-indent:0">甲方（采购方）：华东供应链有限公司　　乙方（供货方）：YY 信息技术有限公司</p>
+      <p class="req-page-label">第 2 / 12 页</p>
+      <p class="clause">第一条　定义与合同文件</p>
+      <p>1.4 本合同中 <mark class="hl-low" data-risk="risk_006" data-page="2">“设备”“货物”“产品”具有相同含义，但附件一仍使用“服务产品”表述</mark>。合同正文、采购订单、报价单和设备清单均为本合同组成部分。</p>
+      <p class="req-page-label">第 4 / 12 页</p>
+      <p class="clause">第三条　交付</p>
+      <p>3.2 <mark class="hl-medium" data-risk="risk_004" data-page="4">乙方应于 2026 年 10 月 15 日前完成全部设备交付；采购订单 PO-2026-088 载明交付日期为 2026 年 09 月 30 日</mark>。双方应按项目现场进度完成安装。</p>
+      <p class="req-page-label">第 6 / 12 页</p>
+      <p class="clause">第五条　验收</p>
+      <p>5.3 <mark class="hl-high" data-risk="risk_002" data-page="6">甲方应在设备到货后三日内完成验收，逾期未提出书面异议的，视为全部设备验收合格</mark>。验收完成后甲方支付到货验收款。</p>
+      <p class="req-page-label">第 8 / 12 页</p>
+      <p class="clause">第七条　违约责任</p>
+      <p>7.2 <mark class="hl-high" data-risk="risk_001" data-page="8">违约方应赔偿守约方因此遭受的全部损失，包括但不限于间接损失、可得利益损失、律师费、调查费等，且赔偿责任不受合同总价限制</mark>。</p>
+      <p class="req-page-label">第 9 / 12 页</p>
+      <p class="clause">第八条　知识产权与交付物</p>
+      <p>8.1 <mark class="hl-high" data-risk="risk_003" data-page="9">项目相关方案、接口文档、配置脚本及二次开发成果归乙方所有，甲方仅在合同期内享有使用权</mark>。乙方既有技术成果仍由乙方保留。</p>
+      <p class="req-page-label">第 10 / 12 页</p>
+      <p class="clause">第十条　争议解决</p>
+      <p>10.1 <mark class="hl-medium" data-risk="risk_005" data-page="10">因本合同引起的争议，双方协商不成的，提交____仲裁委员会仲裁</mark>。仲裁裁决为终局，对双方均有约束力。</p>
+      <p class="clause">第十一条　其他</p>
+      <p>11.1 本合同自双方授权代表签字并加盖公章之日起生效，一式肆份，双方各执贰份。</p>
+      <p style="text-indent:0;margin-top:40px;color:#8a94ab;font-size:12px">（以下无正文）</p>`;
+    $("docPaper").style.fontSize = `${14 * state.zoom}px`;
+    $("docPaper").addEventListener("click", (event) => {
+      const mark = event.target.closest("mark[data-risk]");
+      if(mark) window.selectRisk(mark.dataset.risk);
+    });
+  }
+
+  function updateHeader(){
+    const name = $("wsDocName");
+    const type = $("wsDocType");
+    if(name) name.textContent = `${project.project_name} · ${project.file_name}`;
+    if(type) type.textContent = contractTypes[project.contract_type];
+    const uploadName = $("upName");
+    if(uploadName) uploadName.placeholder = "例如：华东供应链设备采购合同";
+    const heroTitle = doc.querySelector(".hero h2");
+    const heroCopy = doc.querySelector(".hero p");
+    if(heroTitle) heroTitle.textContent = "合同审查工作台";
+    if(heroCopy) heroCopy.innerHTML = `当前项目为 <b style="color:#fff">${project.project_name}</b>，AI 初审已生成 6 条结构化风险，等待法务确认、修订和导出。`;
+    const navCount = $("navRiskCount");
+    if(navCount) navCount.textContent = risks.length;
+  }
+
+  function renderTaskFilters(){
+    const old = $("taskFilters");
+    if(!old) return;
+    const next = old.cloneNode(false);
+    next.id = "taskFilters";
+    next.className = "filters";
+    next.innerHTML = `
+      <div class="filter-chip active" data-f="all">全部</div>
+      <div class="filter-chip" data-f="working">进行中</div>
+      <div class="filter-chip" data-f="input_required">待补充</div>
+      <div class="filter-chip" data-f="waiting_confirmation">待确认</div>
+      <div class="filter-chip" data-f="completed">已完成</div>
+      <div class="filter-chip" data-f="partial">部分完成</div>
+      <div class="filter-chip" data-f="failed">失败</div>`;
+    old.parentNode.replaceChild(next, old);
+    next.addEventListener("click", (event) => {
+      const chip = event.target.closest(".filter-chip");
+      if(!chip) return;
+      next.querySelectorAll(".filter-chip").forEach((item) => item.classList.remove("active"));
+      chip.classList.add("active");
+      renderTasks(chip.dataset.f);
+    });
+  }
+
+  function renderTasks(filter = "all"){
+    const table = $("taskTable");
+    if(!table) return;
+    table.innerHTML = tasks.filter((task) => filter === "all" || task.status === filter).map((task) => {
+      const status = labels.task[task.status] || [task.status, "b-muted"];
+      return `<tr>
+        <td><div class="link" onclick="goReview()">${escapeHtml(task.name)}</div><div class="req-config-summary">文件版本 ${project.file_version_id} · 审查版本 ${state.currentReviewVersion}</div></td>
+        <td>${categoryBadge("commercial")} <span class="badge b-cat">${escapeHtml(contractTypes[task.type] || task.type)}</span></td>
+        <td><span class="badge ${status[1]}"><span class="dot"></span>${escapeHtml(status[0])}</span></td>
+        <td style="width:150px"><div class="progress"><div class="bar" style="width:${task.progress}%"></div></div></td>
+        <td><span style="color:${task.high ? "var(--high)" : "var(--text-2)"}">${task.risks} 条</span></td>
+        <td class="mono" style="color:var(--text-3)">${escapeHtml(task.time)}</td>
+        <td><span class="link" onclick="goReview()">打开</span></td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderRiskFilters(){
+    const old = $("riskFilters");
+    if(!old) return;
+    const next = old.cloneNode(false);
+    next.id = "riskFilters";
+    next.className = "req-filter-set";
+    next.innerHTML = `
+      <div class="filter-chip active" data-level="all">全部</div>
+      <div class="filter-chip" data-level="high">高</div>
+      <div class="filter-chip" data-level="medium">中</div>
+      <div class="filter-chip" data-level="low">低</div>
+      <select class="req-filter-select" data-filter="category">
+        <option value="all">全部类别</option>
+        <option value="legal">法律</option>
+        <option value="commercial">商业</option>
+        <option value="company_policy">企业制度</option>
+        <option value="text_quality">文本质量</option>
+        <option value="evidence">证据</option>
+      </select>
+      <select class="req-filter-select" data-filter="human">
+        <option value="all">全部人工状态</option>
+        <option value="pending_review">待复核</option>
+        <option value="accepted">已接受</option>
+        <option value="modified">已修改</option>
+        <option value="false_positive">误报</option>
+        <option value="deferred">暂不处理</option>
+        <option value="added_by_human">人工新增</option>
+        <option value="deleted">已删除</option>
+      </select>
+      <select class="req-filter-select" data-filter="conclusion">
+        <option value="all">全部结论</option>
+        <option value="candidate">候选</option>
+        <option value="confirmed">已确认</option>
+        <option value="needs_verification">需核验</option>
+        <option value="rejected">已驳回</option>
+      </select>
+      <input class="req-filter-input" data-filter="keyword" placeholder="搜索风险">`;
+    old.parentNode.replaceChild(next, old);
+    next.addEventListener("click", (event) => {
+      const chip = event.target.closest(".filter-chip");
+      if(!chip) return;
+      state.filters.level = chip.dataset.level;
+      next.querySelectorAll(".filter-chip").forEach((item) => item.classList.remove("active"));
+      chip.classList.add("active");
+      renderRisks();
+    });
+    next.addEventListener("change", (event) => {
+      const filter = event.target.dataset.filter;
+      if(filter) {
+        state.filters[filter] = event.target.value;
+        renderRisks();
+      }
+    });
+    next.addEventListener("input", (event) => {
+      if(event.target.dataset.filter === "keyword") {
+        state.filters.keyword = event.target.value.trim();
+        renderRisks();
+      }
+    });
+  }
+
+  function filteredRisks(){
+    const keyword = state.filters.keyword.toLowerCase();
+    return risks.filter((risk) => {
+      if(state.filters.level !== "all" && risk.risk_level !== state.filters.level) return false;
+      if(state.filters.category !== "all" && risk.risk_category !== state.filters.category) return false;
+      if(state.filters.human !== "all" && risk.human_status !== state.filters.human) return false;
+      if(state.filters.conclusion !== "all" && risk.conclusion_status !== state.filters.conclusion) return false;
+      if(keyword && !`${risk.risk_id} ${risk.title} ${risk.risk_topic} ${risk.analysis}`.toLowerCase().includes(keyword)) return false;
+      return true;
+    });
+  }
+
+  function renderRisks(){
+    const list = filteredRisks();
+    const count = $("riskCount");
+    if(count) count.textContent = `${list.length} / ${risks.length} 条风险`;
+    const riskList = $("riskList");
+    if(!riskList) return;
+    if(!list.length){
+      riskList.innerHTML = `<div class="empty">当前筛选条件下没有风险项</div>`;
+      return;
+    }
+    riskList.innerHTML = list.map((risk) => `
+      <div class="risk-card lv-${risk.risk_level} ${risk.risk_id===state.activeRisk ? "active" : ""} ${risk.human_status==="deleted" ? "is-deleted" : ""}" data-id="${risk.risk_id}" onclick="selectRisk('${risk.risk_id}')">
+        <div class="rc-top">
+          ${badge("level", risk.risk_level)}
+          ${categoryBadge(risk.risk_category)}
+          <span class="badge b-muted mono">${escapeHtml(risk.risk_id)}</span>
+        </div>
+        <div class="rc-title">${escapeHtml(risk.title)}</div>
+        <div class="req-risk-topic">${escapeHtml(risk.risk_topic)} · 第 ${escapeHtml(risk.contract_location.clause_no)} 条 · P${risk.contract_location.page}</div>
+        <div class="req-risk-flags">
+          ${badge("conclusion", risk.conclusion_status)}
+          ${badge("evidence", risk.evidence_status)}
+          ${badge("realtime", risk.realtime_verification_status)}
+          ${badge("human", risk.human_status)}
+        </div>
+        <div class="rc-foot">
+          <span class="conf">模型置信度 <b>${Math.round(risk.confidence*100)}%</b></span>
+          <span class="conf">定位 <b>${Math.round(risk.location_confidence*100)}%</b></span>
+          <span class="human">
+            <button class="hm-btn ok" title="接受" onclick="event.stopPropagation();actRisk('${risk.risk_id}','accepted')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></button>
+            <button class="hm-btn no" title="误报" onclick="event.stopPropagation();actRisk('${risk.risk_id}','false_positive')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+          </span>
+        </div>
+      </div>`).join("");
+  }
+
+  function renderVersionStrip(){
+    const detailArea = $("detailArea");
+    if(!detailArea) return;
+    let strip = $("reviewVersionStrip");
+    if(!strip){
+      strip = doc.createElement("div");
+      strip.id = "reviewVersionStrip";
+      strip.className = "req-version-strip";
+      detailArea.parentNode.insertBefore(strip, detailArea);
+    }
+    const humanCount = state.humanRevisions.length;
+    strip.innerHTML = `
+      <strong>审查版本</strong>
+      <span class="req-version-pill">${project.review_version_id} · AI 原始</span>
+      <span class="req-version-pill active">${escapeHtml(state.currentReviewVersion)} · human_revision</span>
+      <span class="badge b-muted">人工修订 ${humanCount}</span>`;
+  }
+
+  function renderSourceList(items, emptyText){
+    if(!items || !items.length) return `<div class="req-callout req-warning">${escapeHtml(emptyText)}</div>`;
+    return items.map((item) => `
+      <div class="req-source ${escapeHtml(item.source_level || "")}">
+        <span class="lvl-tag lvl-${String(item.source_level || "l5").replace("l","")}">${String(item.source_level || "l5").toUpperCase()}</span>
+        <div class="source-body">
+          <div class="source-title">${escapeHtml(item.title)}</div>
+          <div class="source-meta">${escapeHtml(item.source_id || "")} · ${escapeHtml(item.snapshot_id || item.status || "")} · ${escapeHtml(item.retrieved_at || item.status || "")}</div>
+          <div class="source-meta">${escapeHtml(item.excerpt || "")}</div>
+        </div>
+      </div>`).join("");
+  }
+
+  function renderDetail(id = state.activeRisk){
+    const risk = riskById(id) || risks[0];
+    if(!risk) return;
+    state.activeRisk = risk.risk_id;
+    const revisions = state.humanRevisions.filter((revision) => revision.risk_id === risk.risk_id || revision.risk_id === "*");
+    const loc = risk.contract_location;
+    $("detailArea").innerHTML = `
+      <div class="detail-head req-detail-head lv-${risk.risk_level}">
+        <div class="lv-bar"></div>
+        <div class="t">
+          <div class="req-detail-kicker">${escapeHtml(risk.risk_id)} · ${escapeHtml(risk.risk_topic)}</div>
+          <h3>${escapeHtml(risk.title)}</h3>
+          <div class="req-detail-badges">
+            ${badge("level", risk.risk_level)}
+            ${categoryBadge(risk.risk_category)}
+          </div>
+        </div>
+      </div>
+      <div class="req-detail-actionbar">
+        <button class="btn primary" title="接受" aria-label="接受" onclick="actRisk('${risk.risk_id}','accepted')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></button>
+        <button class="btn" title="修改" aria-label="修改" onclick="actRisk('${risk.risk_id}','modified')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg></button>
+        <button class="btn" title="标记误报" aria-label="标记误报" onclick="actRisk('${risk.risk_id}','false_positive')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></button>
+        <button class="btn" title="暂不处理" aria-label="暂不处理" onclick="actRisk('${risk.risk_id}','deferred')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
+        <span class="req-action-divider" aria-hidden="true"></span>
+        <button class="btn danger" title="删除风险" aria-label="删除风险" onclick="actRisk('${risk.risk_id}','deleted')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+        <button class="btn" title="实时核验" aria-label="实时核验" onclick="actRisk('${risk.risk_id}','realtime')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0 1 4"/><path d="M20 4v7h-7"/><path d="M12 8v4l2.5 2"/></svg></button>
+        <button class="btn" title="人工新增" aria-label="人工新增" onclick="addHumanRisk()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c.5-3.2 2.5-5 6-5s5.5 1.8 6 5"/><path d="M18 8v6M15 11h6"/></svg></button>
+        <button class="btn" title="定位原文" aria-label="定位原文" onclick="highlightDoc('${risk.risk_id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+      </div>
+      <div class="detail-body req-detail-body">
+        <div class="d-section req-detail-section"><h4>合同定位<span class="ln"></span></h4>
+          <div class="quote"><span class="q-loc">文件版本 ${project.file_version_id} · P${loc.page} · 第 ${escapeHtml(loc.clause_no)} 条 · 字符 [${loc.char_range.join(", ")}]</span>${escapeHtml(loc.quote)}</div>
+          <div class="req-detail-meta">
+            <div class="k"><div class="kl">定位置信度</div><div class="kv-val">${Math.round(risk.location_confidence*100)}%</div></div>
+            <div class="k"><div class="kl">模型置信度</div><div class="kv-val">${Math.round(risk.confidence*100)}%</div></div>
+            <div class="k"><div class="kl">审查版本</div><div class="kv-val mono">${escapeHtml(state.currentReviewVersion)}</div></div>
+          </div>
+        </div>
+        <div class="d-section req-detail-section"><h4>风险分析<span class="ln"></span></h4><div style="font-size:13px;color:var(--text-2);line-height:1.85">${escapeHtml(risk.analysis)}</div></div>
+        <div class="d-section req-detail-section"><h4>修改建议<span class="ln"></span></h4><div class="req-callout req-detail-proposal">${escapeHtml(risk.suggestion)}</div></div>
+        <div class="d-section req-detail-section"><h4>法律依据<span class="ln"></span></h4>${renderSourceList(risk.legal_basis, "暂无直接法律依据，导出时将标注为企业制度或文本质量判断。")}</div>
+        <div class="d-section req-detail-section"><h4>企业制度与资料依据<span class="ln"></span></h4>${renderSourceList(risk.company_basis, "暂无企业制度依据。")}</div>
+        <div class="d-section req-detail-section"><h4>人工修订版本<span class="ln"></span></h4>
+          <div class="req-revision-list">
+            ${revisions.length ? revisions.map((revision) => `<div class="basis-item">
+              <div class="b-head"><span class="badge b-primary">${escapeHtml(revision.review_version_id)}</span><span class="b-title">${escapeHtml(revision.reason)}</span></div>
+              <div class="b-src">${escapeHtml(revision.created_by)} · ${escapeHtml(revision.created_at)} · base ${escapeHtml(revision.base_review_version_id)}</div>
+              <div class="b-body">${revision.changes.map((change) => `${escapeHtml(change.field)}: ${escapeHtml(change.before)} -> ${escapeHtml(change.after)}`).join("<br>")}</div>
+            </div>`).join("") : `<div class="req-callout req-warning">当前风险尚无人工修订版本，AI 原始版本保持不可变。</div>`}
+          </div>
+        </div>
+      </div>`;
+    $("verTrace").innerHTML = `
+      <span>规则 <span class="mono">${escapeHtml(risk.provenance.rule_id)}@${escapeHtml(risk.provenance.rule_version)}</span></span>
+      <span>Skill <span class="mono">${escapeHtml(risk.provenance.skill_version)}</span></span>
+      <span>模型 <span class="mono">${escapeHtml(risk.provenance.model_config_ref)}</span></span>
+      <span>快照 <span class="mono">${escapeHtml(risk.provenance.knowledge_snapshot_ids.join(","))}</span></span>
+      <span>trace <span class="mono">${escapeHtml(risk.provenance.trace_id)}</span></span>`;
+  }
+
+  function highlightDoc(id = state.activeRisk){
+    const risk = riskById(id);
+    doc.querySelectorAll("#docPaper mark").forEach((mark) => mark.classList.toggle("active", mark.dataset.risk === id));
+    const mark = doc.querySelector(`#docPaper mark[data-risk="${id}"]`);
+    if(mark) {
+      state.currentPage = Number(mark.dataset.page || risk?.contract_location.page || 1);
+      updateDocTools();
+      mark.scrollIntoView({behavior:"smooth",block:"center"});
+    }
+  }
+
+  function selectRisk(id){
+    const risk = riskById(id);
+    if(!risk) return;
+    state.activeRisk = id;
+    state.currentPage = risk.contract_location.page;
+    renderRisks();
+    renderDetail(id);
+    highlightDoc(id);
+  }
+
+  function actRisk(id, action){
+    const risk = riskById(id);
+    if(!risk) return;
+    const before = {
+      human_status:risk.human_status,
+      conclusion_status:risk.conclusion_status,
+      evidence_status:risk.evidence_status,
+      realtime_verification_status:risk.realtime_verification_status,
+      suggestion:risk.suggestion
+    };
+    let reason = "";
+    if(action === "accepted"){
+      risk.human_status = "accepted";
+      risk.conclusion_status = risk.conclusion_status === "needs_verification" ? "needs_verification" : "confirmed";
+      reason = "人工接受 AI 风险结论";
+    } else if(action === "modified"){
+      risk.human_status = "modified";
+      risk.conclusion_status = "confirmed";
+      risk.suggestion = `${risk.suggestion}（人工修订：提交业务确认后写入最终报告。）`;
+      reason = "人工修改风险建议和结论状态";
+    } else if(action === "false_positive"){
+      risk.human_status = "false_positive";
+      risk.conclusion_status = "rejected";
+      reason = "人工标记为误报，保留 AI 原始结果";
+    } else if(action === "deferred"){
+      risk.human_status = "deferred";
+      reason = "暂不处理，等待业务补充材料";
+    } else if(action === "deleted"){
+      risk.human_status = "deleted";
+      risk.conclusion_status = "rejected";
+      reason = "人工删除当前风险项";
+    } else if(action === "realtime"){
+      if(risk.risk_id === "risk_005"){
+        risk.realtime_verification_status = "unavailable";
+        risk.conclusion_status = "needs_verification";
+        state.last_error_code = "SOURCE_UNAVAILABLE";
+        reason = "实时核验失败，来源不可用";
+      } else {
+        risk.realtime_verification_status = "verified";
+        risk.evidence_status = "verified";
+        reason = "完成实时法律来源核验";
+      }
+    }
+    const changes = Object.keys(before)
+      .filter((key) => before[key] !== risk[key])
+      .map((key) => ({field:key,before:before[key],after:risk[key]}));
+    if(changes.length) createHumanRevision(risk, reason, changes);
+    addAudit(reason || "人工操作", risk.risk_id, action === "realtime" && risk.risk_id === "risk_005" ? "SOURCE_UNAVAILABLE" : "成功");
+    toast(reason || "已保存人工操作", action === "false_positive" || action === "deleted" || action === "realtime" && risk.risk_id === "risk_005" ? "warn" : "ok");
+    renderRisks();
+    renderDetail(id);
+    renderDashboardValidators();
+    updateTaskStatusUI();
+  }
+
+  function addHumanRisk(seedText){
+    const selected = seedText || (window.getSelection ? window.getSelection().toString().trim() : "");
+    const seq = risks.length + 1;
+    const id = `risk_${pad(seq)}`;
+    const quote = selected || "人工补充：附件服务响应时间未与合同正文 SLA 对齐。";
+    const risk = {
+      risk_id:id,
+      risk_level:"medium",
+      risk_category:"text_quality",
+      risk_topic:"manual_selected_review",
+      title:selected ? "局部审查新增风险" : "人工新增风险",
+      conclusion_status:"confirmed",
+      evidence_status:selected ? "partially_verified" : "unverified",
+      realtime_verification_status:"not_requested",
+      human_status:"added_by_human",
+      contract_location:{file_version_id:project.file_version_id,page:state.currentPage,clause_no:"人工选区",char_range:[0,quote.length],quote},
+      location_confidence:selected ? 0.82 : 0.4,
+      analysis:selected ? "用户划词后触发局部审查，系统将选区作为当前审查上下文并生成可追溯风险项。" : "用户人工新增风险，需在最终导出前补充定位或说明无法定位原因。",
+      suggestion:"建议补充业务确认意见，并在导出前完成必填字段和依据状态校验。",
+      confidence:0.7,
+      legal_basis:[],
+      company_basis:[{source_level:"l5",title:"人工输入",source_id:"human-input",status:"draft",excerpt:"该风险由人工新增，不自动改变线上规则或知识库。"}],
+      provenance:{rule_id:"human.manual.added",rule_version:"v1",skill_version:"selected-text-review@1.0.0",model_config_ref:"analysis/hunyuan-pro@cfg-v3",knowledge_snapshot_ids:[state.selectedConfig.snapshot],trace_id:`trace-${id}`}
+    };
+    risks.unshift(risk);
+    state.activeRisk = id;
+    createHumanRevision(risk, "人工新增风险项", [{field:"risk_item",before:"none",after:id}]);
+    addAudit("人工新增风险", id, "成功");
+    renderRisks();
+    renderDetail(id);
+    renderDashboardValidators();
+    updateHeader();
+    toast("已新增人工风险，并创建 human_revision 版本", "ok");
+  }
+
+  function openSelect(){
+    const text = window.getSelection ? window.getSelection().toString().trim() : "";
+    const quote = $("selQuote");
+    if(quote) quote.textContent = text || "（未选中文本）";
+    const loc = doc.querySelector("#ov-select .kv-val.mono");
+    if(loc) loc.textContent = `P${state.currentPage} · 人工选区`;
+    hideSelMenu();
+    showOverlay("select");
+  }
+
+  function runSelectReview(){
+    const text = $("selQuote")?.textContent?.trim();
+    closeOverlay("select");
+    addHumanRisk(text && text !== "（未选中文本）" ? text : "");
+    toast("局部审查完成，结果已合并为人工新增风险", "ok");
+  }
+
+  function updateDocTools(){
+    const pg = doc.querySelector(".doc-tools .pg");
+    if(pg) pg.textContent = `第 ${state.currentPage} / ${project.page_count} 页 · ${Math.round(state.zoom*100)}%`;
+  }
+
+  function searchDoc(term){
+    const query = (term || "").trim();
+    const paragraphs = Array.from(doc.querySelectorAll("#docPaper p"));
+    paragraphs.forEach((p) => p.classList.remove("req-search-hit"));
+    if(!query) return;
+    const found = paragraphs.find((p) => p.textContent.includes(query));
+    if(found){
+      found.classList.add("req-search-hit");
+      found.scrollIntoView({behavior:"smooth",block:"center"});
+      toast("已定位到正文匹配项", "ok");
+    } else {
+      toast("未找到正文匹配项", "warn");
+    }
+  }
+
+  function wireDocTools(){
+    doc.querySelectorAll(".doc-tools .tool").forEach((tool) => {
+      const title = tool.getAttribute("title");
+      tool.onclick = () => {
+        if(title === "放大") state.zoom = Math.min(1.35, Number((state.zoom + 0.05).toFixed(2)));
+        if(title === "缩小") state.zoom = Math.max(0.8, Number((state.zoom - 0.05).toFixed(2)));
+        if(title === "上一页") state.currentPage = Math.max(1, state.currentPage - 1);
+        if(title === "下一页") state.currentPage = Math.min(project.page_count, state.currentPage + 1);
+        if(title === "目录") highlightDoc(state.activeRisk);
+        $("docPaper").style.fontSize = `${14 * state.zoom}px`;
+        updateDocTools();
+      };
+    });
+    const input = doc.querySelector(".doc-tools .search input");
+    if(input){
+      input.addEventListener("keydown", (event) => {
+        if(event.key === "Enter") searchDoc(event.target.value);
+      });
+      input.addEventListener("change", (event) => searchDoc(event.target.value));
+    }
+    updateDocTools();
+  }
+
+  function showOverlay(id){ const overlay = $("ov-" + id); if(overlay) overlay.classList.add("show"); }
+  function closeOverlay(id){ const overlay = $("ov-" + id); if(overlay) overlay.classList.remove("show"); }
+  function hideSelMenu(){ const menu = $("selMenu"); if(menu) menu.style.display = "none"; }
+  function openUpload(){ showOverlay("upload"); }
+  function startReview(){
+    closeOverlay("upload");
+    state.task_status = "submitted";
+    tasks[0].status = "submitted";
+    tasks[0].progress = 12;
+    updateTaskStatusUI();
+    renderTasks();
+    toast("合同已提交，开始解析与规则检查", "ok");
+    setTimeout(() => {
+      state.task_status = "working";
+      tasks[0].status = "working";
+      tasks[0].progress = 48;
+      updateTaskStatusUI();
+      renderTasks();
+      window.goReview();
+    }, 450);
+  }
+
+  function renderConfigModal(){
+    const overlay = $("ov-config");
+    if(!overlay) return;
+    const body = overlay.querySelector(".modal-body");
+    const foot = overlay.querySelector(".modal-foot");
+    const ruleRows = ruleFiles.map((item) => `
+      <tr data-config-row="rules">
+        <td><input type="checkbox" data-config-kind="rules" data-config-file="${escapeHtml(item.file)}" ${item.selected ? "checked" : ""}></td>
+        <td class="mono">${escapeHtml(item.file)}</td>
+        <td><div class="req-config-summary">${escapeHtml(item.summary)}<br><span class="badge ${item.status === "active" ? "b-ok" : "b-warn"}">${escapeHtml(item.status)}</span> <span class="badge b-muted">${escapeHtml(item.type)}</span> <span class="badge b-muted">${escapeHtml(item.priority)}</span></div></td>
+      </tr>`).join("");
+    const policyRows = policyFiles.map((item) => `
+      <tr data-config-row="policies">
+        <td><input type="checkbox" data-config-kind="policies" data-config-file="${escapeHtml(item.file)}" ${item.selected ? "checked" : ""}></td>
+        <td class="mono">${escapeHtml(item.file)}</td>
+        <td><div class="req-config-summary">${escapeHtml(item.summary)}<br><span class="badge ${item.status === "published" ? "b-ok" : "b-warn"}">${escapeHtml(item.status)}</span> <span class="badge b-muted">${escapeHtml(item.version)}</span></div></td>
+      </tr>`).join("");
+    body.innerHTML = `
+      <div class="kv" style="grid-template-columns:1fr 1fr;margin-bottom:8px">
+        <div class="k"><div class="kl">合同类型</div><div class="kv-val">采购合同（procurement）</div></div>
+        <div class="k"><div class="kl">分析模型</div><div class="kv-val">hunyuan-pro · cfg-v3</div></div>
+      </div>
+      <div class="field"><label>审查模式</label>
+        <div class="radio-row">
+          <div class="radio-card active"><div class="r-title">标准审查</div><div class="r-desc">离线快照 + 企业知识库，稳定可复现</div></div>
+          <div class="radio-card"><div class="r-title">深度审查</div><div class="r-desc">启用实时核验与多模型交叉</div></div>
+        </div>
+      </div>
+      <div class="sect-label">法律快照<span class="ln"></span><span class="hint" style="color:var(--text-3)">选择本次绑定版本</span></div>
+      <div class="radio-row">
+        ${legalSnapshots.slice(0,2).map((snapshot) => `<div class="radio-card ${snapshot.id === state.selectedConfig.snapshot ? "active" : ""}" data-snapshot="${escapeHtml(snapshot.id)}" style="flex:none;min-width:210px"><div class="r-title">${escapeHtml(snapshot.id)}</div><div class="r-desc">${snapshot.sources} 部法规 · ${escapeHtml(snapshot.status)}</div></div>`).join("")}
+      </div>
+      <div class="sect-label">确定性规则库<span class="ln"></span><span class="hint" style="color:var(--text-3)">文件可能较多，使用表格选择</span></div>
+      <div class="req-config-search"><input class="inp" data-config-search="rules" placeholder="搜索规则文件名或摘要"><button class="btn sm" data-config-all="rules">全选已发布</button></div>
+      <div class="req-config-table-wrap">
+        <table class="req-config-table">
+          <thead><tr><th>勾选状态</th><th>文件名</th><th>文件摘要</th></tr></thead>
+          <tbody>${ruleRows}</tbody>
+        </table>
+      </div>
+      <div class="sect-label">企业制度<span class="ln"></span><span class="hint" style="color:var(--text-3)">勾选本次引用制度</span></div>
+      <div class="req-config-search"><input class="inp" data-config-search="policies" placeholder="搜索制度文件名或摘要"><button class="btn sm" data-config-all="policies">全选已发布</button></div>
+      <div class="req-config-table-wrap">
+        <table class="req-config-table">
+          <thead><tr><th>勾选状态</th><th>文件名</th><th>文件摘要</th></tr></thead>
+          <tbody>${policyRows}</tbody>
+        </table>
+      </div>
+      <div class="sect-label">辅助资料<span class="ln"></span><span class="badge b-warn">仅本次生效</span></div>
+      <div class="req-callout req-warning">临时资料仅本次审查生效，审查结束自动解绑，不会写入全局知识库。</div>
+      <div class="mat-item">
+        <div class="mi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></div>
+        <div class="mi-info"><b>供应商报价单 · YY 信息技术</b><span>订单/报价 · v1.0 · 临时上传</span></div>
+        <button class="btn sm" onclick="toast('已移除临时资料','warn')">移除</button>
+      </div>
+      <div class="mat-item">
+        <div class="mi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></div>
+        <div class="mi-info"><b>设备清单（附件一）</b><span>技术资料 · v1.1 · 临时上传</span></div>
+        <button class="btn sm" onclick="toast('已移除临时资料','warn')">移除</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm" onclick="toast('从知识库选择资料（原型演示）','ok')">从知识库选择</button><button class="btn sm" onclick="toast('上传临时资料（原型演示）','ok')">上传临时资料</button></div>`;
+    if(foot){
+      foot.innerHTML = `<button class="btn" onclick="closeOv('config')">取消</button><button class="btn primary" onclick="saveReviewConfig()">保存配置</button>`;
+    }
+    body.querySelectorAll("[data-snapshot]").forEach((card) => {
+      card.addEventListener("click", () => {
+        state.selectedConfig.snapshot = card.dataset.snapshot;
+        body.querySelectorAll("[data-snapshot]").forEach((item) => item.classList.toggle("active", item === card));
+      });
+    });
+    body.querySelectorAll("[data-config-kind]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const list = input.dataset.configKind === "rules" ? ruleFiles : policyFiles;
+        const item = list.find((row) => row.file === input.dataset.configFile);
+        if(item) item.selected = input.checked;
+      });
+    });
+    body.querySelectorAll("[data-config-search]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const kind = input.dataset.configSearch;
+        const term = input.value.trim().toLowerCase();
+        body.querySelectorAll(`[data-config-row="${kind}"]`).forEach((row) => {
+          row.style.display = row.textContent.toLowerCase().includes(term) ? "" : "none";
+        });
+      });
+    });
+    body.querySelectorAll("[data-config-all]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const kind = button.dataset.configAll;
+        const list = kind === "rules" ? ruleFiles : policyFiles;
+        list.forEach((item) => { if(item.status === "active" || item.status === "published") item.selected = true; });
+        renderConfigModal();
+      });
+    });
+  }
+
+  function saveReviewConfig(){
+    state.selectedConfig.rules = selectedRules();
+    state.selectedConfig.policies = selectedPolicies();
+    closeOverlay("config");
+    addAudit("保存知识库配置", `${state.selectedConfig.snapshot} · ${state.selectedConfig.rules.length} rules · ${state.selectedConfig.policies.length} policies`, "成功");
+    renderStatusbar();
+    toast("已保存本次审查知识库配置", "ok");
+  }
+
+  function renderKnowledge(){
+    $("kbSnapshot").innerHTML = `
+      <div class="panel-head"><h2>法律知识快照</h2><span class="hint">标准审查须绑定 published 快照</span><span class="spacer"></span><span class="badge b-primary">当前 ${escapeHtml(state.selectedConfig.snapshot)}</span></div>
+      <div class="panel-body"><table>
+        <thead><tr><th>快照版本</th><th>状态</th><th>来源数量</th><th>覆盖范围</th><th>发布时间</th><th>内容哈希</th><th>操作</th></tr></thead>
+        <tbody>${legalSnapshots.map((item) => `<tr>
+          <td class="mono link">${escapeHtml(item.id)}</td>
+          <td><span class="badge ${item.status === "published" ? "b-ok" : item.status === "draft" ? "b-warn" : "b-muted"}"><span class="dot"></span>${escapeHtml(item.status)}</span></td>
+          <td>${item.sources} 个来源</td>
+          <td>${escapeHtml(item.coverage)}</td>
+          <td>${escapeHtml(item.published_at)}</td>
+          <td class="mono">${escapeHtml(item.hash)}</td>
+          <td><span class="link" onclick="toast('查看快照清单','ok')">查看</span> · <span class="link" onclick="toast('已设为默认快照','ok')">设为默认</span></td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+    $("kbRules").innerHTML = `
+      <div class="panel-head"><h2>确定性规则库</h2><span class="hint">规则命中、未命中、无法判断均带 rule_id 与版本</span></div>
+      <div class="panel-body"><table>
+        <thead><tr><th>规则 ID</th><th>规则类型</th><th>适用合同类型</th><th>优先级</th><th>版本</th><th>状态</th></tr></thead>
+        <tbody>${ruleFiles.map((item) => `<tr>
+          <td class="mono">${escapeHtml(item.file.replace("@",".v"))}</td>
+          <td><span class="badge b-muted">${escapeHtml(item.type)}</span></td>
+          <td>${item.type === "procurement" ? "采购合同" : "全部合同"}</td>
+          <td><span class="badge ${item.priority === "blocker" ? "b-err" : "b-warn"}">${escapeHtml(item.priority)}</span></td>
+          <td class="mono">${escapeHtml(item.file.split("@")[1] || "v1")}</td>
+          <td><span class="badge ${item.status === "active" ? "b-ok" : "b-warn"}">${escapeHtml(item.status)}</span></td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+    $("kbPolicy").innerHTML = `
+      <div class="panel-head"><h2>企业制度库</h2><span class="hint">L3 来源，不得冒充国家法律</span></div>
+      <div class="panel-body"><table>
+        <thead><tr><th>企业制度名称</th><th>版本</th><th>生效期</th><th>发布状态</th><th>摘要</th><th>操作</th></tr></thead>
+        <tbody>${policyFiles.map((item) => `<tr>
+          <td>${escapeHtml(item.file)}</td>
+          <td class="mono">${escapeHtml(item.version)}</td>
+          <td>2026-01-01 起</td>
+          <td><span class="badge ${item.status === "published" ? "b-ok" : "b-warn"}">${escapeHtml(item.status)}</span></td>
+          <td class="req-config-summary">${escapeHtml(item.summary)}</td>
+          <td><span class="link" onclick="toast('查看制度详情','ok')">查看</span></td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+    $("kbMemory").innerHTML = `
+      <div class="panel-head"><h2>记忆列表</h2><span class="spacer"></span><div class="filters"><div class="filter-chip active">全部</div><div class="filter-chip">正式</div><div class="filter-chip">候选</div><div class="filter-chip">已撤销</div></div></div>
+      <div class="panel-body"><table>
+        <thead><tr><th>记忆内容</th><th>作用域</th><th>类型</th><th>状态</th><th>置信度</th><th>操作</th></tr></thead>
+        <tbody>${memoryRows.map((item, index) => `<tr>
+          <td>${escapeHtml(item.content)}</td>
+          <td>${escapeHtml(item.scope)}</td>
+          <td><span class="badge b-cat">${escapeHtml(item.type)}</span></td>
+          <td><span class="badge ${item.status === "正式" ? "b-ok" : item.status === "候选" ? "b-warn" : "b-err"}">${escapeHtml(item.status)}</span></td>
+          <td>${escapeHtml(item.confidence)}</td>
+          <td><span class="link" onclick="toast('查看记忆','ok')">查看</span> · <span class="link" onclick="toast('编辑记忆','ok')">编辑</span> · <span class="link" onclick="disableMemory(${index})">禁用</span></td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+  }
+
+  function disableMemory(index){
+    if(memoryRows[index]) memoryRows[index].status = "已撤销";
+    renderKnowledge();
+    toast("已禁用该记忆", "warn");
+  }
+
+  const iconPaths = {
+    shield:'<path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/>',
+    cart:'<circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M3 4h2l2.5 11h9L19 7H6"/>',
+    cursor:'<path d="M4 3l7 18 2-8 8-2z"/>',
+    book:'<path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2z"/><path d="M8 7h8M8 11h5"/>',
+    code:'<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>',
+    file:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'
+  };
+
+  function renderCapability(){
+    const skillGrid = $("skillGrid");
+    if(skillGrid){
+      skillGrid.innerHTML = skillRows.map((skill) => {
+        const st = skillStatus[skill.status] || skillStatus.disabled;
+        return `<div class="mcard">
+          <div class="m-head"><div class="m-ico" style="background:#eef1fb;color:#2b4acb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPaths[skill.icon] || iconPaths.shield}</svg></div>
+            <div class="m-name">${escapeHtml(skill.name)}<small>${escapeHtml(skill.description)}</small></div></div>
+          <div class="m-meta"><span class="badge b-cat">v${escapeHtml(skill.version)}</span><span class="badge ${st[1]}"><span class="dot"></span>${escapeHtml(st[0])}</span><span class="badge b-muted">${escapeHtml(skill.scope)}</span></div>
+          <div class="req-callout" style="margin-bottom:10px">结构校验、权限清单、依赖隔离、脚本沙箱与代表性 Eval 均保留报告。</div>
+          <div class="m-foot"><button class="btn sm" onclick="toggleSkill('${escapeHtml(skill.name)}')">${skill.status === "enabled" ? "停用" : "启用"}</button><button class="btn sm" onclick="validateSkill('${escapeHtml(skill.name)}')">校验报告</button><button class="btn sm" onclick="rollbackSkill('${escapeHtml(skill.name)}')">回滚</button></div>
+        </div>`;
+      }).join("");
+    }
+    const modelGrid = $("modelGrid");
+    if(modelGrid){
+      modelGrid.innerHTML = modelRows.map((model) => {
+        const st = modelStatus[model.status] || modelStatus.disabled;
+        return `<div class="mcard">
+          <div class="m-head"><div class="m-ico" style="background:#eef1fb;color:#2b4acb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg></div>
+            <div class="m-name">${escapeHtml(model.model_id)}<small>${escapeHtml(model.provider_name)} · ${escapeHtml(model.provider_type)}</small></div></div>
+          <div class="m-meta"><span class="badge b-cat">${escapeHtml(model.model_role)}</span><span class="badge ${st[1]}"><span class="dot"></span>${escapeHtml(st[0])}</span><span class="badge b-muted">${escapeHtml(model.config_version)}</span><span class="badge ${model.health_status === "healthy" ? "b-ok" : "b-warn"}">${escapeHtml(model.health_status)}</span></div>
+          <div class="req-field-grid" style="margin-bottom:12px">
+            <div class="k"><div class="kl">base_url</div><div class="kv-val mono">${escapeHtml(model.base_url)}</div></div>
+            <div class="k"><div class="kl">credential_ref</div><div class="kv-val mono">${escapeHtml(model.credential_ref)}</div></div>
+            <div class="k"><div class="kl">能力</div><div class="kv-val">${escapeHtml(model.capabilities.join(", "))}</div></div>
+            <div class="k"><div class="kl">上下文 / 输出</div><div class="kv-val">${escapeHtml(model.context_length)} / ${escapeHtml(model.output_limit)}</div></div>
+            <div class="k"><div class="kl">数据策略</div><div class="kv-val mono">${escapeHtml(model.data_policy)}</div></div>
+            <div class="k"><div class="kl">配置版本</div><div class="kv-val mono">${escapeHtml(model.config_version)}</div></div>
+          </div>
+          <div class="m-foot"><button class="btn sm" onclick="testModel('${escapeHtml(model.id)}')">测试连接</button><button class="btn sm" onclick="toggleModel('${escapeHtml(model.id)}')">${model.status === "active" ? "停用" : "启用"}</button><button class="btn sm" onclick="toast('编辑模型配置','ok')">编辑</button><button class="btn sm" onclick="rollbackModel('${escapeHtml(model.id)}')">回滚</button></div>
+        </div>`;
+      }).join("");
+    }
+  }
+
+  function toggleSkill(name){
+    const skill = skillRows.find((item) => item.name === name);
+    if(!skill) return;
+    if(skill.status === "isolated" || skill.status === "validating"){
+      toast("该 Skill 尚未通过校验，不能启用", "warn");
+      return;
+    }
+    skill.status = skill.status === "enabled" ? "disabled" : "enabled";
+    addAudit(`${skill.status === "enabled" ? "启用" : "停用"} Skill`, name, "成功");
+    renderCapability();
+  }
+  function validateSkill(name){
+    const skill = skillRows.find((item) => item.name === name);
+    if(skill && skill.status === "validating") skill.status = "enabled";
+    addAudit("查看 Skill 校验报告", name, "成功");
+    renderCapability();
+    toast("校验报告已更新", "ok");
+  }
+  function rollbackSkill(name){
+    addAudit("回滚 Skill 绑定", name, "成功");
+    toast("已回滚到上一稳定版本", "ok");
+  }
+  function testModel(id){
+    const model = modelRows.find((item) => item.id === id);
+    if(!model) return;
+    model.status = "testing";
+    renderCapability();
+    setTimeout(() => {
+      if(model.health_status === "credential_expired" || model.data_policy === "external_blocked"){
+        model.status = "test_failed";
+        addAudit("模型连接测试", model.model_id, "MODEL_TEST_FAILED");
+        toast("测试失败，禁止启用该模型", "warn");
+      } else {
+        model.status = "active";
+        model.health_status = "healthy";
+        addAudit("模型连接测试", model.model_id, "成功");
+        toast("连接测试通过", "ok");
+      }
+      renderCapability();
+    }, 450);
+  }
+  function toggleModel(id){
+    const model = modelRows.find((item) => item.id === id);
+    if(!model) return;
+    if(model.status === "test_failed"){
+      toast("测试失败时禁止启用", "warn");
+      addAudit("启用模型被阻止", model.model_id, "MODEL_TEST_FAILED");
+      return;
+    }
+    model.status = model.status === "active" ? "disabled" : "active";
+    addAudit(`${model.status === "active" ? "启用" : "停用"}模型`, model.model_id, "成功");
+    renderCapability();
+  }
+  function rollbackModel(id){
+    const model = modelRows.find((item) => item.id === id);
+    if(model) addAudit("回滚模型配置", model.model_id, "成功");
+    toast("已回滚模型配置版本", "ok");
+  }
+
+  function validatorList(){
+    const pending = risks.filter((risk) => risk.human_status === "pending_review").length;
+    const unverified = risks.filter((risk) => risk.realtime_verification_status === "realtime_unverified" || risk.realtime_verification_status === "unavailable").length;
+    return [
+      {name:"定位校验",status:"passed",code:"OK",detail:"所有风险均绑定 file_version、页码、条款号与字符范围"},
+      {name:"法律依据状态校验",status:unverified ? "warning" : "passed",code:unverified ? "REALTIME_UNVERIFIED" : "OK",detail:unverified ? `${unverified} 条风险需要标注实时核验状态` : "法律依据版本和状态完整"},
+      {name:"必填字段校验",status:"passed",code:"OK",detail:"RiskItem 必填字段齐全"},
+      {name:"人工状态校验",status:pending ? "warning" : "passed",code:pending ? "PENDING_HUMAN_REVIEW" : "OK",detail:pending ? `${pending} 条风险仍待复核` : "人工状态均已处理"},
+      {name:"渲染检查",status:"passed",code:"OK",detail:"DOCX/PDF/XLSX/JSON 模板可渲染"},
+      {name:"敏感信息检查",status:"passed",code:"OK",detail:"导出不包含密钥、内部系统提示或越权项目数据"}
+    ];
+  }
+  function renderDashboardValidators(){
+    const rows = $("validatorRows");
+    if(!rows) return;
+    rows.innerHTML = validatorList().map((item) => `<tr>
+      <td>${escapeHtml(item.name)}<div class="req-config-summary">${escapeHtml(item.detail)}</div></td>
+      <td><span class="badge ${item.status === "passed" ? "b-ok" : "b-warn"}">${escapeHtml(item.status)}</span></td>
+      <td class="mono">${escapeHtml(item.code)}</td>
+    </tr>`).join("");
+    renderValidatorModal();
+  }
+
+  function taskActionButtons(){
+    return `
+      <div class="req-task-actions">
+        <button class="btn req-icon-btn" title="暂停 / 待补充" aria-label="暂停 / 待补充" onclick="transitionTask('input_required')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 4H6v16h4V4zM18 4h-4v16h4V4z"/></svg></button>
+        <button class="btn req-icon-btn" title="继续" aria-label="继续" onclick="transitionTask('working')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5v14l11-7z"/></svg></button>
+        <button class="btn req-icon-btn" title="校验" aria-label="校验" onclick="transitionTask('validating')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/><path d="M3 3h18v18H3z"/></svg></button>
+        <button class="btn req-icon-btn" title="确认完成" aria-label="确认完成" onclick="transitionTask('completed')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16.5 9"/></svg></button>
+        <button class="btn req-icon-btn" title="模拟失败" aria-label="模拟失败" onclick="transitionTask('failed')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg></button>
+        <button class="btn danger req-icon-btn" title="取消" aria-label="取消" onclick="transitionTask('cancelled')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></button>
+        <button class="btn req-icon-btn" title="Checkpoint 恢复" aria-label="Checkpoint 恢复" onclick="restoreCheckpoint()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg></button>
+      </div>`;
+  }
+
+  function renderTaskStatusModal(){
+    const body = $("taskStatusModalBody");
+    if(!body) return;
+    const status = labels.task[state.task_status] || [state.task_status, "b-muted"];
+    body.innerHTML = `
+      <div class="req-callout" style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+        <span>当前任务状态</span>
+        <span class="badge ${status[1]}"><span class="dot"></span>${escapeHtml(state.task_status)}</span>
+      </div>
+      <div class="req-field-grid" style="margin-top:12px">
+        <div class="k"><div class="kl">task_id</div><div class="kv-val mono">${escapeHtml(project.task_id)}</div></div>
+        <div class="k"><div class="kl">checkpoint_id</div><div class="kv-val mono">${escapeHtml(state.checkpoint.checkpoint_id)}</div></div>
+        <div class="k"><div class="kl">idempotency_key</div><div class="kv-val mono">${escapeHtml(project.idempotency_key)}</div></div>
+        <div class="k"><div class="kl">last_error_code</div><div class="kv-val mono">${escapeHtml(state.last_error_code || "OK")}</div></div>
+      </div>
+      <div class="d-section" style="margin-top:18px"><h4>状态流转<span class="ln"></span></h4><div class="req-state-flow">${["submitted","working","input_required","validating","waiting_confirmation","completed","partial","failed","cancelled"].map((step) => `<span class="${step === state.task_status ? "current" : ""}">${escapeHtml(step)}</span>`).join("")}</div></div>
+      <div class="d-section"><h4>任务操作<span class="ln"></span></h4>${taskActionButtons()}</div>
+      <div class="req-callout ${state.last_error_code ? "req-warning" : ""}">${state.last_error_code ? `当前错误：${escapeHtml(state.last_error_code)}。可先恢复 Checkpoint 或补充输入。` : "当前没有待处理错误。"}</div>`;
+  }
+
+  function renderValidatorModal(){
+    const body = $("validatorModalBody");
+    if(!body) return;
+    const items = validatorList();
+    body.innerHTML = `
+      <div class="req-callout ${items.some((item) => item.status !== "passed") ? "req-warning" : ""}">校验结果：${items.filter((item) => item.status === "passed").length}/${items.length} 项通过。存在 warning 时，导出文件会保留对应状态标记。</div>
+      <div class="req-export-records" style="margin-top:14px;max-height:none">
+        <table class="req-error-table">
+          <thead><tr><th>校验项</th><th>状态</th><th>错误码</th></tr></thead>
+          <tbody>${items.map((item) => `<tr>
+            <td>${escapeHtml(item.name)}<div class="req-config-summary">${escapeHtml(item.detail)}</div></td>
+            <td><span class="badge ${item.status === "passed" ? "b-ok" : "b-warn"}">${escapeHtml(item.status)}</span></td>
+            <td class="mono">${escapeHtml(item.code)}</td>
+          </tr>`).join("")}</tbody>
+        </table>
+      </div>
+      <div class="req-callout" style="margin-top:14px">导出前会再次执行定位、法律依据、必填字段、人工状态、渲染和敏感信息检查。</div>`;
+  }
+
+  function openTaskStatusModal(){
+    renderTaskStatusModal();
+    showOverlay("task-status");
+  }
+
+  function openValidatorModal(){
+    renderValidatorModal();
+    showOverlay("validator");
+  }
+
+  function syncUtilityModals(){
+    if($("ov-task-status")?.classList.contains("show")) renderTaskStatusModal();
+    if($("ov-validator")?.classList.contains("show")) renderValidatorModal();
+  }
+
+  const transitionMap = {
+    submitted:["working","cancelled"],
+    working:["input_required","validating","partial","failed","cancelled"],
+    input_required:["working","failed","cancelled"],
+    validating:["waiting_confirmation","completed","partial","failed"],
+    waiting_confirmation:["working","input_required","validating","completed","partial","failed","cancelled"],
+    partial:["working","validating","completed","failed","cancelled"],
+    failed:["working","cancelled"],
+    completed:[],
+    cancelled:[]
+  };
+  function transitionTask(target){
+    const from = state.task_status;
+    if(!transitionMap[from]?.includes(target)){
+      state.last_error_code = "INVALID_STATE_TRANSITION";
+      addAudit("任务状态迁移被拒绝", `${from} -> ${target}`, "INVALID_STATE_TRANSITION", "internal");
+      updateTaskStatusUI();
+      toast("非法状态迁移：INVALID_STATE_TRANSITION", "warn");
+      return;
+    }
+    state.task_status = target;
+    state.last_error_code = target === "failed" ? "MODEL_TIMEOUT" : "";
+    tasks[0].status = target;
+    tasks[0].progress = target === "completed" ? 100 : target === "cancelled" ? 0 : target === "validating" ? 92 : target === "working" ? 58 : tasks[0].progress;
+    state.checkpoint = {checkpoint_id:`ckpt_20260910_${Date.now().toString().slice(-6)}`,state:target,state_version:state.checkpoint.state_version+1};
+    addAudit("任务状态迁移", `${from} -> ${target}`, "成功", "internal");
+    updateTaskStatusUI();
+    renderTasks();
+    toast(`任务状态已切换为 ${labels.task[target][0]}`, target === "failed" || target === "cancelled" ? "warn" : "ok");
+  }
+  function restoreCheckpoint(){
+    const before = state.task_status;
+    state.task_status = "waiting_confirmation";
+    tasks[0].status = "waiting_confirmation";
+    tasks[0].progress = 86;
+    state.last_error_code = "";
+    state.checkpoint = {checkpoint_id:`ckpt_restore_${Date.now().toString().slice(-6)}`,state:"waiting_confirmation",state_version:state.checkpoint.state_version+1};
+    addAudit("Checkpoint 恢复", `${before} -> waiting_confirmation`, "成功", "internal");
+    updateTaskStatusUI();
+    renderTasks();
+    toast("已从 Checkpoint 恢复到待确认状态", "ok");
+  }
+  function renderStateFlow(){
+    const flow = $("stateFlow");
+    if(!flow) return;
+    const steps = ["submitted","working","input_required","validating","waiting_confirmation","completed","partial","failed","cancelled"];
+    flow.innerHTML = steps.map((step) => `<span class="${step === state.task_status ? "current" : transitionMap[step] ? "" : ""}">${escapeHtml(step)}</span>`).join("");
+  }
+  function updateTaskStatusUI(){
+    const st = labels.task[state.task_status] || [state.task_status,"b-muted"];
+    const badgeEl = $("taskStateBadge");
+    if(badgeEl) badgeEl.className = `badge ${st[1]}`, badgeEl.innerHTML = `<span class="dot"></span>${escapeHtml(state.task_status)}`;
+    const compactBadge = $("taskStateBadgeCompact");
+    if(compactBadge) compactBadge.className = `badge ${st[1]} req-summary-badge`, compactBadge.innerHTML = `<span class="dot"></span>${escapeHtml(state.task_status)}`;
+    const ws = $("wsTaskState");
+    if(ws) ws.className = `badge ${st[1]}`, ws.innerHTML = `<span class="dot"></span>${escapeHtml(st[0])}`;
+    const checkpointId = $("checkpointId");
+    if(checkpointId) checkpointId.textContent = state.checkpoint.checkpoint_id;
+    const err = $("lastErrorCode");
+    if(err) err.textContent = state.last_error_code || "OK";
+    renderStateFlow();
+    renderStatusbar();
+    syncUtilityModals();
+  }
+  function renderStatusbar(){
+    const statusbar = doc.querySelector("#view-review .statusbar");
+    if(!statusbar) return;
+    statusbar.innerHTML = `
+      <div class="item">法律快照：${escapeHtml(state.selectedConfig.snapshot)}</div>
+      <div class="item">规则集：${escapeHtml(selectedRules().slice(0,2).join(" / "))}</div>
+      <span class="spacer"></span>
+      <div class="item">审查版本：<span class="mono">${escapeHtml(state.currentReviewVersion)}</span></div>
+      <div class="item">实时核验：<span style="color:var(--text-3)">未请求</span></div>`;
+  }
+
+  function renderExportModal(){
+    const overlay = $("ov-export");
+    if(!overlay) return;
+    const body = overlay.querySelector(".modal-body");
+    const foot = overlay.querySelector(".modal-foot");
+    const records = state.exportRecords.map((record) => `<tr>
+      <td class="mono">${escapeHtml(record.export_id)}</td>
+      <td>${escapeHtml(record.format)}</td>
+      <td><span class="badge ${record.status === "completed" ? "b-ok" : "b-warn"}">${escapeHtml(record.status)}</span></td>
+      <td class="mono">${escapeHtml(record.review_version_id)}</td>
+      <td>${escapeHtml(record.created_at)}</td>
+    </tr>`).join("");
+    body.innerHTML = `
+      <div class="field"><label>导出格式</label>
+        <div class="req-format-grid">
+          ${["DOCX","PDF","XLSX","JSON"].map((fmt) => `<label class="req-format-card"><input type="checkbox" data-export-format="${fmt}" ${fmt !== "XLSX" ? "checked" : ""}><span><b>${fmt}</b><span>独立 ExportRecord</span></span></label>`).join("")}
+        </div>
+      </div>
+      <div class="field"><label>导出前校验</label>
+        <table class="req-error-table"><thead><tr><th>校验项</th><th>状态</th><th>错误码</th></tr></thead><tbody>
+          ${validatorList().map((item) => `<tr><td>${escapeHtml(item.name)}<div class="req-config-summary">${escapeHtml(item.detail)}</div></td><td><span class="badge ${item.status === "passed" ? "b-ok" : "b-warn"}">${escapeHtml(item.status)}</span></td><td class="mono">${escapeHtml(item.code)}</td></tr>`).join("")}
+        </tbody></table>
+      </div>
+      <div class="req-callout">导出将分别生成 DOCX、PDF、XLSX、JSON 的 ExportRecord；JSON 会使用 Blob 生成真实下载，其余格式在原型中记录模拟导出。</div>
+      <div class="req-export-records">
+        <table><thead><tr><th>export_id</th><th>format</th><th>status</th><th>review_version_id</th><th>created_at</th></tr></thead><tbody>${records || `<tr><td colspan="5" class="empty">暂无导出记录</td></tr>`}</tbody></table>
+      </div>`;
+    if(foot){
+      foot.innerHTML = `<button class="btn" onclick="closeOv('export')">取消</button><button class="btn primary" onclick="runExport()">导出</button>`;
+    }
+  }
+  function runExport(){
+    const selected = Array.from(doc.querySelectorAll("[data-export-format]:checked")).map((input) => input.dataset.exportFormat);
+    if(!selected.length){
+      toast("请至少选择一种导出格式", "warn");
+      return;
+    }
+    const validation = validatorList();
+    const created = selected.map((format) => ({
+      export_id:`export_${format.toLowerCase()}_${Date.now()}_${Math.random().toString(16).slice(2,6)}`,
+      project_id:project.project_id,
+      review_version_id:state.currentReviewVersion,
+      format,
+      template_version:`template-${format.toLowerCase()}-v1.0`,
+      validation_result:{items:validation,has_warning:validation.some((item) => item.status !== "passed")},
+      status:"completed",
+      requested_by:"user_legal_reviewer",
+      created_at:nowText()
+    }));
+    state.exportRecords.unshift(...created);
+    addAudit("导出审查结果", selected.join(","), "成功");
+    if(selected.includes("JSON")){
+      const payload = {
+        project,
+        review_version_id:state.currentReviewVersion,
+        risks,
+        human_revisions:state.humanRevisions,
+        export_records:created
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json;charset=utf-8"});
+      const url = URL.createObjectURL(blob);
+      const link = doc.createElement("a");
+      link.href = url;
+      link.download = `${project.project_id}_${state.currentReviewVersion}.json`;
+      doc.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    renderExportModal();
+    toast(`已生成 ${created.length} 条 ExportRecord`, "ok");
+  }
+
+  function renderAudit(){
+    const setAudit = $("setAudit");
+    if(!setAudit) return;
+    setAudit.innerHTML = `
+      <div class="panel-head"><h2>审计日志</h2><span class="hint">记录主体、动作、资源、结果和来源</span></div>
+      <div class="panel-body"><table class="req-audit-table">
+        <thead><tr><th>时间</th><th>主体</th><th>动作</th><th>资源</th><th>结果</th><th>IP</th></tr></thead>
+        <tbody>${state.auditRecords.map((row) => `<tr>
+          <td class="mono">${escapeHtml(row[0])}</td>
+          <td>${escapeHtml(row[1])}</td>
+          <td>${escapeHtml(row[2])}</td>
+          <td>${escapeHtml(row[3])}</td>
+          <td><span class="badge ${row[4] === "成功" ? "b-ok" : "b-warn"}">${escapeHtml(row[4])}</span></td>
+          <td class="mono">${escapeHtml(row[5])}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+  }
+
+  function showView(view){
+    ["dashboard","review","knowledge","capability","settings"].forEach((name) => {
+      const el = $("view-" + name);
+      if(el) el.style.display = name === view ? (name === "review" ? "flex" : "block") : "none";
+    });
+    doc.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+    if(view === "review") {
+      renderRisks();
+      renderDetail(state.activeRisk);
+      setTimeout(() => highlightDoc(state.activeRisk), 30);
+    }
+  }
+
+  function init(){
+    updateHeader();
+    renderTaskFilters();
+    renderTasks();
+    renderContract();
+    renderRiskFilters();
+    renderRisks();
+    renderVersionStrip();
+    renderDetail(state.activeRisk);
+    wireDocTools();
+    renderKnowledge();
+    renderCapability();
+    renderAudit();
+    renderDashboardValidators();
+    updateTaskStatusUI();
+    renderStatusbar();
+    const navItems = doc.querySelectorAll(".nav-item");
+    navItems.forEach((item) => {
+      item.onclick = () => {
+        if(item.dataset.view === "review") window.goReview();
+        else showView(item.dataset.view);
+      };
+    });
+  }
+
+  window.REQUIREMENTS_APP = {project,state,risks,ruleFiles,policyFiles,modelRows,skillRows,validatorList};
+  window.showView = showView;
+  window.goReview = function(){ showView("review"); };
+  window.renderTasks = renderTasks;
+  window.renderRisks = renderRisks;
+  window.renderDetail = renderDetail;
+  window.highlightDoc = highlightDoc;
+  window.selectRisk = selectRisk;
+  window.actRisk = actRisk;
+  window.addHumanRisk = addHumanRisk;
+  window.openSelect = openSelect;
+  window.runSelectReview = runSelectReview;
+  window.openUpload = openUpload;
+  window.startReview = startReview;
+  window.openReviewConfig = function(){ renderConfigModal(); showOverlay("config"); };
+  window.saveReviewConfig = saveReviewConfig;
+  window.openTaskStatusModal = openTaskStatusModal;
+  window.openValidatorModal = openValidatorModal;
+  window.openExport = function(){ renderExportModal(); showOverlay("export"); };
+  window.runExport = runExport;
+  window.closeOv = closeOverlay;
+  window.openOv = showOverlay;
+  window.transitionTask = transitionTask;
+  window.restoreCheckpoint = restoreCheckpoint;
+  window.disableMemory = disableMemory;
+  window.toggleSkill = toggleSkill;
+  window.validateSkill = validateSkill;
+  window.rollbackSkill = rollbackSkill;
+  window.testModel = testModel;
+  window.toggleModel = toggleModel;
+  window.rollbackModel = rollbackModel;
+
+  init();
+})();
 </script>
 </body>
 </html>
