@@ -56,6 +56,18 @@ test("模型保存以模型名称为键，重复保存时更新而不是产生�
   });
 });
 
+test("模型配置不使用历史演示数据，但保留用户手工配置", async () => {
+  const managementState = await managementStatePromise;
+  assert.equal(typeof managementState.removeDemoModels, "function");
+
+  const models = managementState.removeDemoModels([
+    { name: "hunyuan-pro", modelId: "hunyuan-pro", endpoint: "http://model-gateway.local/v1" },
+    { name: "my-deepseek", modelId: "deepseek-chat", endpoint: "https://api.deepseek.com/v1", source: "manual" }
+  ]);
+
+  assert.deepEqual(models.map((model) => model.name), ["my-deepseek"]);
+});
+
 test("设置合并只修改传入项并保留其他设置", async () => {
   const managementState = await managementStatePromise;
   assert.equal(typeof managementState.mergeSettings, "function");
@@ -165,6 +177,22 @@ test("审查执行配置只使用已启用 Skill 和运行中的模型角色", a
   });
   assert.equal(execution.models.embedding, null);
   assert.equal(execution.updatedAt, "2026-09-11T00:00:00.000Z");
+});
+
+test("未完成配置校验的模型不能进入审查执行快照", async () => {
+  const managementState = await managementStatePromise;
+  const execution = managementState.buildReviewExecutionConfig({
+    skills: [],
+    models: [{
+      name: "unverified-analysis",
+      modelId: "deepseek-chat",
+      role: "analysis",
+      status: "active",
+      testStatus: "untested"
+    }]
+  });
+
+  assert.equal(execution.models.analysis, null);
 });
 
 test("选区标记保存文本快照、文件版本、页码、范围和文本哈希", async () => {

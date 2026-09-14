@@ -40,16 +40,16 @@ function createEmptyModel() {
   return {
     name: "",
     modelId: "",
-    provider: "企业模型网关",
-    endpoint: "http://127.0.0.1:8000/v1",
+    provider: "",
+    endpoint: "",
     role: "analysis",
-    version: "cfg-v1",
+    version: "",
     policy: "internal_only",
-    contextLength: 32768,
-    maxTokens: 4096,
+    contextLength: 0,
+    maxTokens: 0,
     timeoutMs: 30000,
-    retries: 2,
-    credentialRef: "cred://local/model",
+    retries: 0,
+    credentialRef: "",
     status: "disabled",
     testStatus: "untested",
     lastTestedAt: ""
@@ -155,7 +155,7 @@ function formatTestedAt(value) {
       <div class="panel-header">
         <div>
           <h2>模型配置</h2>
-          <p>按模型角色配置服务地址、上下文和数据策略；“校验配置”只检查本地字段，不会发送合同内容。</p>
+          <p>模型不会预置测试数据；请人工填写、保存并校验，校验通过后手动启用，配置会保存在本地并供下次使用。</p>
         </div>
         <span class="badge badge-muted">{{ models.length }} 个模型</span>
       </div>
@@ -215,17 +215,17 @@ function formatTestedAt(value) {
     <div class="form-grid two-columns">
       <div class="form-field"><label>配置名称 <span>*</span></label><input v-model="modelForm.name" class="text-input" :disabled="modelMode === 'edit'" placeholder="例如：hunyuan-pro" /></div>
       <div class="form-field"><label>模型标识 <span>*</span></label><input v-model="modelForm.modelId" class="text-input" placeholder="例如：hunyuan-pro" /></div>
-      <div class="form-field"><label>服务商</label><input v-model="modelForm.provider" class="text-input" placeholder="企业模型网关" /></div>
-      <div class="form-field"><label>API 地址 <span>*</span></label><input v-model="modelForm.endpoint" class="text-input" placeholder="http://127.0.0.1:8000/v1" /></div>
+      <div class="form-field"><label>服务商</label><input v-model="modelForm.provider" class="text-input" placeholder="例如：DeepSeek" /></div>
+      <div class="form-field"><label>API 地址 <span>*</span></label><input v-model="modelForm.endpoint" class="text-input" placeholder="例如：https://api.deepseek.com/v1" /></div>
       <div class="form-field"><label>模型角色</label><select v-model="modelForm.role" class="text-input"><option v-for="(label, key) in roleLabels" :key="key" :value="key">{{ label }}（{{ key }}）</option></select></div>
       <div class="form-field"><label>数据策略</label><select v-model="modelForm.policy" class="text-input"><option v-for="(label, key) in policyLabels" :key="key" :value="key">{{ label }}</option></select></div>
       <div class="form-field"><label>上下文长度</label><input v-model.number="modelForm.contextLength" class="text-input" type="number" min="0" step="1" /></div>
       <div class="form-field"><label>最大输出 Token</label><input v-model.number="modelForm.maxTokens" class="text-input" type="number" min="0" step="1" /></div>
       <div class="form-field"><label>超时（毫秒）</label><input v-model.number="modelForm.timeoutMs" class="text-input" type="number" min="0" step="1000" /></div>
       <div class="form-field"><label>失败重试次数</label><input v-model.number="modelForm.retries" class="text-input" type="number" min="0" max="5" step="1" /></div>
-      <div class="form-field"><label>配置版本</label><input v-model="modelForm.version" class="text-input" placeholder="cfg-v1" /></div>
-      <div class="form-field"><label>初始状态</label><select v-model="modelForm.status" class="text-input"><option value="active">启用</option><option value="disabled">停用</option></select></div>
-      <div class="form-field field-span-2"><label>凭据引用</label><input v-model="modelForm.credentialRef" class="text-input" placeholder="例如：cred://model-gateway/legal" /><small class="inline-note">只保存引用名，不在页面或本地状态中填写 API Key。</small></div>
+      <div class="form-field"><label>配置版本</label><input v-model="modelForm.version" class="text-input" placeholder="例如：cfg-v1" /></div>
+      <div class="form-field"><label>启用条件</label><div class="form-static-note">保存后默认停用，完成配置校验后可在列表中启用</div></div>
+      <div class="form-field field-span-2"><label>凭据引用</label><input v-model="modelForm.credentialRef" class="text-input" placeholder="例如：cred://deepseek/analysis" /><small class="inline-note">只保存引用名；API Key 应配置在 Electron 主进程环境或安全凭据存储中。</small></div>
     </div>
     <template #footer><button class="button" type="button" @click="closeModelModal"><X :size="15" />取消</button><button class="button button-primary" type="button" @click="saveModel"><Check :size="15" />保存配置</button></template>
   </Modal>

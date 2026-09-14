@@ -2,7 +2,7 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { electronApi } from "../services/electronApi";
 import { createSampleState, knowledgeData, capabilityData, defaultSettings } from "../data/sampleData";
-import { buildReviewExecutionConfig, createKnowledgeItem, createManualReviewRisk, createSelectionAnnotation, mergeSettings, removeKnowledgeItems, removeModel, updateEnterpriseMemory as updateEnterpriseMemoryState, updateLegalSnapshot as updateLegalSnapshotState, upsertModel } from "../services/managementState.mjs";
+import { buildReviewExecutionConfig, createKnowledgeItem, createManualReviewRisk, createSelectionAnnotation, mergeSettings, removeDemoModels, removeKnowledgeItems, removeModel, updateEnterpriseMemory as updateEnterpriseMemoryState, updateLegalSnapshot as updateLegalSnapshotState, upsertModel } from "../services/managementState.mjs";
 
 export const useReviewStore = defineStore("review", () => {
   const state = ref(createSampleState());
@@ -90,14 +90,29 @@ export const useReviewStore = defineStore("review", () => {
     }
     try {
       const saved = await electronApi.loadState();
-      if (saved && Array.isArray(saved.projects) && saved.projects.length) {
+      const hasSavedWorkspace = Boolean(saved && (
+        (Array.isArray(saved.projects) && saved.projects.length)
+        || saved.capabilities
+        || saved.settings
+        || saved.knowledge
+      ));
+      if (hasSavedWorkspace) {
+        const savedModels = Array.isArray(saved.capabilities?.models)
+          ? removeDemoModels(saved.capabilities.models)
+          : [];
         state.value = {
           ...createSampleState(),
           ...saved,
           knowledge: saved.knowledge || createSampleState().knowledge,
-          capabilities: saved.capabilities || createSampleState().capabilities,
+          // 模型配置只接受本地已保存内容，不能因缺少字段回退到示例模型。
+          capabilities: {
+            ...(createSampleState().capabilities || {}),
+            ...(saved.capabilities || {}),
+            models: savedModels
+          },
           settings: mergeSettings(defaultSettings, saved.settings || {})
         };
+        if (savedModels.length !== (saved.capabilities?.models || []).length) await persist();
       }
       if (review.value && syncActiveReviewExecutionSnapshot()) await persist();
     } catch (error) {
@@ -583,8 +598,12 @@ export const useReviewStore = defineStore("review", () => {
       modelId: String(model.modelId).trim(),
       endpoint: String(model.endpoint).trim(),
       version: String(model.version || "cfg-v1").trim(),
-      status: model.status || "disabled",
-      testStatus: model.testStatus || "untested"
+      // 保存后统一停用，完成“校验配置”后再由用户明确启用；编辑也必须重新校验。
+      status: "disabled",
+      // 修改任何配置都必须重新人工校验，防止旧校验结果继续生效。
+      testStatus: "untested",
+      lastTestedAt: "",
+      source: "manual"
     };
     state.value.capabilities.models = upsertModel(models, next);
     syncActiveReviewExecutionSnapshot();
@@ -605,6 +624,10 @@ export const useReviewStore = defineStore("review", () => {
   async function toggleModel(name) {
     const model = (state.value.capabilities?.models || []).find((item) => item.name === name);
     if (!model) return;
+    if (model.status !== "active" && model.testStatus !== "passed") {
+      notify("请先校验配置，通过后才能启用模型", "warn");
+      return false;
+    }
     model.status = model.status === "active" ? "disabled" : "active";
     syncActiveReviewExecutionSnapshot();
     addAudit(model.status === "active" ? "启用模型配置" : "停用模型配置", name, `当前状态：${model.status === "active" ? "启用" : "停用"}`);

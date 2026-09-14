@@ -1,4 +1,4 @@
-// 示例数据只用于首次打开时展示完整工作台，真实导入后会被本地审查数据替换。
+// 示例合同用于展示工作台结构；模型配置必须由用户人工录入并保存。
 export const contractTypes = {
   procurement: "采购合同",
   supplier_service: "供应商服务",
@@ -191,12 +191,8 @@ export const capabilityData = {
     { name: "legal-source-verification", version: "1.0.0", scope: "全部合同", description: "法律来源版本、状态、原文和快照核验。", status: "validating", icon: "book" },
     { name: "external-skill-upload-demo", version: "0.8.0", scope: "隔离区", description: "待校验 Skill 包，尚未允许进入审查任务。", status: "isolated", icon: "file" }
   ],
-  models: [
-    { name: "hunyuan-pro", modelId: "hunyuan-pro", provider: "企业模型网关", endpoint: "http://model-gateway.local/v1", role: "analysis", version: "cfg-v3", policy: "internal_only", contextLength: 32768, maxTokens: 4096, timeoutMs: 30000, retries: 2, credentialRef: "cred://model-gateway/legal", status: "active", lastTestedAt: "2026-09-10T08:05:00.000Z", testStatus: "passed" },
-    { name: "extract-fast", modelId: "extract-fast", provider: "企业模型网关", endpoint: "http://model-gateway.local/v1", role: "extraction", version: "cfg-v2", policy: "internal_only", contextLength: 16384, maxTokens: 2048, timeoutMs: 20000, retries: 2, credentialRef: "cred://model-gateway/legal", status: "active", lastTestedAt: "2026-09-10T08:06:00.000Z", testStatus: "passed" },
-    { name: "bge-m3", modelId: "BAAI/bge-m3", provider: "本地向量服务", endpoint: "http://127.0.0.1:8080/embeddings", role: "embedding", version: "cfg-v1", policy: "local_only", contextLength: 8192, maxTokens: 0, timeoutMs: 15000, retries: 1, credentialRef: "none", status: "active", lastTestedAt: "2026-09-10T08:07:00.000Z", testStatus: "passed" },
-    { name: "fallback-glm4", modelId: "glm-4", provider: "第三方兼容接口", endpoint: "https://api.example.com/v1", role: "analysis", version: "cfg-v1", policy: "approved_external", contextLength: 32768, maxTokens: 4096, timeoutMs: 30000, retries: 1, credentialRef: "cred://external/glm4", status: "disabled", lastTestedAt: "", testStatus: "untested" }
-  ]
+  // 首次启动不提供测试模型，用户必须在能力配置中人工新增。
+  models: []
 };
 
 export const defaultSettings = {

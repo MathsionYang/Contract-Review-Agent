@@ -100,9 +100,14 @@ function executionModel(state, review, role) {
   const snapshotModel = review.config?.execution?.models?.[role];
   if (snapshotModel) {
     const configured = (state?.capabilities?.models || []).find((item) => item.name === snapshotModel.name);
-    return configured || snapshotModel;
+    if (configured && configured.status === "active" && (configured.testStatus === "passed" || configured.testStatus === undefined)) return configured;
+    return snapshotModel.testStatus === "passed" ? snapshotModel : null;
   }
-  return (state?.capabilities?.models || []).find((item) => item.role === role && item.status === "active") || null;
+  return (state?.capabilities?.models || []).find((item) => (
+    item.role === role
+    && item.status === "active"
+    && (item.testStatus === "passed" || item.testStatus === undefined)
+  )) || null;
 }
 
 function executionSnapshot(state, review) {

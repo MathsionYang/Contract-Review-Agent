@@ -35,6 +35,20 @@ export function upsertModel(models = [], model = {}) {
   return next.some((item) => item.name === model.name) ? next : [model, ...models];
 }
 
+// 清理早期版本写入的演示模型，保留用户后来手工保存的其他模型配置。
+export function removeDemoModels(models = []) {
+  const demoSignatures = new Set([
+    "hunyuan-pro|hunyuan-pro|http://model-gateway.local/v1",
+    "extract-fast|extract-fast|http://model-gateway.local/v1",
+    "bge-m3|BAAI/bge-m3|http://127.0.0.1:8080/embeddings",
+    "fallback-glm4|glm-4|https://api.example.com/v1"
+  ]);
+  return models.filter((model) => {
+    const signature = `${model?.name || ""}|${model?.modelId || ""}|${String(model?.endpoint || "").replace(/\/$/, "")}`;
+    return model?.source !== "demo" && !demoSignatures.has(signature);
+  });
+}
+
 export function removeModel(models = [], name) {
   return models.filter((model) => model.name !== name);
 }
@@ -189,7 +203,10 @@ export function buildReviewExecutionConfig(capabilities = {}, previous = {}, upd
       version: skill.version,
       scope: skill.scope
     }));
-  const activeModels = (capabilities.models || []).filter((model) => model.status === "active");
+  // 新配置必须经过人工字段校验后才能进入审查执行快照。
+  const activeModels = (capabilities.models || []).filter((model) => (
+    model.status === "active" && (model.testStatus === "passed" || model.testStatus === undefined)
+  ));
   const models = Object.fromEntries(roles.map((role) => {
     const previousName = previous.models?.[role]?.name;
     const selected = activeModels.find((model) => model.role === role && model.name === previousName)
