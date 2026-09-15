@@ -122,7 +122,7 @@ function executionSnapshot(state, review) {
 function modelMessages(review, evidence) {
   const documentText = String(review.document?.text || "").slice(0, 60000);
   return [
-    { role: "system", content: "你是合同审查助手。只返回 JSON 对象，格式为 {\"risks\":[...]}。任何没有明确原文依据的结论必须使用 needs_verification 和 unverified。" },
+    { role: "system", content: "你是合同审查助手。只返回 JSON 对象（Return only a JSON object），格式为 {\"risks\":[...]}。任何没有明确原文依据的结论必须使用 needs_verification 和 unverified。" },
     { role: "user", content: JSON.stringify({ task: "合同风险审查", contractType: review.project?.contract_type, document: documentText, evidence }, null, 2) }
   ];
 }

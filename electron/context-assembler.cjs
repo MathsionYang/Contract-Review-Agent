@@ -215,7 +215,7 @@ function assembleContext(options = {}) {
   }));
 
   const system = [
-    "你是合同审查助手。只能基于给定上下文回答，依据不足时必须说明需要核验。",
+    "你是合同审查助手。只能基于给定上下文回答，依据不足时必须说明需要核验。 Return only a JSON object.",
     "只返回 JSON 对象。intent 只能是 answer、create_risk、local_review、clarify。",
     "风险必须保持 conclusion_status=needs_verification、human_status=pending_review，不得自动确认。",
     "引用必须使用上下文中的 citation_id；企业记忆只是内部经验，不得伪装成法律条款。",

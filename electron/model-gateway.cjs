@@ -21,6 +21,42 @@ function endpointFor(model) {
   return /\/chat\/completions$/i.test(endpoint) ? endpoint : `${endpoint}/chat/completions`;
 }
 
+function modelConfigHint(model) {
+  const modelId = String(model?.modelId || "").trim().toLowerCase();
+  if (["deepseek", "deepseek api", "deepseek-api"].includes(modelId)) {
+    return "DeepSeek 的模型标识不能填写服务商名称，请填写 deepseek-chat（或服务商实际支持的模型 ID）";
+  }
+  return "";
+}
+
+function redactProviderError(value) {
+  const text = String(value || "")
+    .replace(/Bearer\s+[^\s,;]+/gi, "Bearer [REDACTED]")
+    .replace(/(api[-_ ]?key|secret|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .trim();
+  return text.slice(0, 500);
+}
+
+function providerErrorDetail(payload) {
+  if (!payload) return "";
+  if (typeof payload === "string") return redactProviderError(payload);
+  const error = payload.error;
+  const message = error?.message || payload.message || (typeof error === "string" ? error : "");
+  const code = error?.code || payload.code || "";
+  const detail = [message, code && code !== message ? `错误码 ${code}` : ""].filter(Boolean).join(" · ");
+  return redactProviderError(detail);
+}
+
+async function readProviderError(response) {
+  try {
+    if (typeof response?.json === "function") return providerErrorDetail(await response.json());
+  } catch (_error) {}
+  try {
+    if (typeof response?.text === "function") return providerErrorDetail(await response.text());
+  } catch (_error) {}
+  return "";
+}
+
 function parseStructuredContent(content) {
   if (content && typeof content === "object") return content;
   if (typeof content !== "string") throw gatewayError("MODEL_OUTPUT_INVALID", "模型未返回结构化内容");
@@ -45,6 +81,10 @@ async function invokeModel(options = {}) {
   }
   if (!String(model.modelId || "").trim()) {
     return { ok: false, data: null, usage: null, latencyMs: 0, errorCode: "MODEL_CONFIG_INVALID", message: "模型标识不能为空" };
+  }
+  const modelHint = modelConfigHint(model);
+  if (modelHint) {
+    return { ok: false, data: null, usage: null, latencyMs: 0, errorCode: "MODEL_CONFIG_INVALID", message: modelHint };
   }
   let url;
   try {
@@ -89,7 +129,8 @@ async function invokeModel(options = {}) {
       });
       if (!response?.ok) {
         const status = Number(response?.status || 0);
-        throw gatewayError("MODEL_REQUEST_FAILED", `模型请求失败（HTTP ${status || "unknown"}）`);
+        const detail = await readProviderError(response);
+        throw gatewayError("MODEL_REQUEST_FAILED", `模型请求失败（HTTP ${status || "unknown"}）${detail ? `：${detail}` : ""}`);
       }
       let payload;
       let content;

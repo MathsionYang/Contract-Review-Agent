@@ -252,6 +252,30 @@ test("模型网关调用 OpenAI 兼容接口并返回脱敏的结构化数据", 
   assert.match(request.options.headers.Authorization, /^Bearer /);
 });
 
+test("模型网关保留脱敏后的服务商错误，并拦截错误的 DeepSeek 模型标识", async () => {
+  const failed = await modelGateway.invokeModel({
+    model: { endpoint: "https://api.deepseek.com", modelId: "deepseek-chat", credentialRef: "cred://deepseek/analysis" },
+    credentialResolver: () => "secret-key",
+    fetchImpl: async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { message: "The model does not exist", code: "invalid_request_error" } })
+    })
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.errorCode, "MODEL_REQUEST_FAILED");
+  assert.match(failed.message, /HTTP 400/);
+  assert.match(failed.message, /The model does not exist/);
+  assert.doesNotMatch(failed.message, /secret-key/);
+
+  const invalidModel = await modelGateway.invokeModel({
+    model: { endpoint: "https://api.deepseek.com", modelId: "DeepSeek", credentialRef: "none" },
+    fetchImpl: async () => { throw new Error("不应发起请求"); }
+  });
+  assert.equal(invalidModel.errorCode, "MODEL_CONFIG_INVALID");
+  assert.match(invalidModel.message, /deepseek-chat/);
+});
+
 test("法律实时核验拒绝白名单之外的地址并保留机器错误码", async () => {
   assert.equal(typeof legalSource.verifyLegalSource, "function");
   const denied = await legalSource.verifyLegalSource({
