@@ -362,50 +362,51 @@ function displaySize(bytes) {
 
 <template>
   <div class="workspace-page">
-    <div class="workspace-toolbar">
-      <div class="workspace-document-title">
-        <div class="file-type-mark">{{ store.activeProject?.file_name?.split(".").pop()?.toUpperCase() || "DOC" }}</div>
-        <div><strong>{{ store.activeProject?.file_name || "未导入合同" }}</strong><span>{{ store.activeProject?.project_name || "等待导入" }} · {{ store.review?.document?.pageCount || 0 }} 页 · {{ displaySize(store.review?.document?.sizeBytes) }}</span></div>
-      </div>
-      <div class="workspace-toolbar-actions">
-        <button class="icon-button" type="button" title="打开知识库配置" aria-label="打开知识库配置" @click="emit('configure')"><FileCog :size="16" /></button>
-        <button class="icon-button" type="button" title="导出审查报告" aria-label="导出审查报告" @click="emit('export')"><FileDown :size="16" /></button>
-      </div>
-    </div>
-    <div class="review-runtime-strip" :class="{ warning: !executionReady }">
-      <div class="runtime-strip-title">
-        <Cpu :size="16" />
-        <div><strong>本次审查执行配置</strong><span>{{ executionReady ? "已绑定能力配置" : "缺少必要模型配置" }}</span></div>
-      </div>
-      <div class="runtime-model-list">
-        <span v-for="item in executionModels" :key="item.key" class="runtime-model-chip">
-          <small>{{ item.label }}</small>
-          <strong>{{ execution.models?.[item.key]?.name || "未配置" }}</strong>
-          <em v-if="execution.models?.[item.key]">{{ execution.models[item.key].version }}</em>
-        </span>
-      </div>
-      <div class="runtime-skill-count"><ListChecks :size="15" /><b>{{ execution.skills?.length || 0 }}</b><span>个 Skill</span></div>
-      <button class="icon-button small" type="button" title="查看并调整执行配置" aria-label="查看并调整执行配置" @click="emit('configure')"><Settings2 :size="14" /></button>
-    </div>
-    <section class="review-task-card" :class="taskStatusClass">
-      <div class="task-heading">
-        <div class="task-heading-main">
-          <span class="task-state-icon">
-            <LoaderCircle v-if="taskStatus === 'running'" class="spin" :size="17" />
-            <Check v-else-if="taskStatus === 'completed'" :size="17" />
-            <X v-else-if="taskStatus === 'failed'" :size="17" />
-            <Clock3 v-else :size="17" />
-          </span>
-          <div><strong>审查任务 · {{ taskStatusLabel }}</strong><span>{{ taskDescription }}</span></div>
-        </div>
-        <button v-if="taskCanRetry" class="icon-button small" type="button" title="重试审查任务" aria-label="重试审查任务" @click="retryReview"><RotateCcw :size="14" /></button>
-      </div>
-      <div class="task-progress-row"><div class="task-progress-track"><span :style="{ width: taskProgress + '%' }"></span></div><strong>{{ taskProgress }}%</strong><span>{{ taskStepLabel }}</span></div>
-      <div v-if="taskErrors.length" class="task-error-list"><span v-for="error in taskErrors" :key="error.code + '-' + error.message"><b>{{ error.code || "TASK_ERROR" }}</b>{{ error.message }}</span></div>
-    </section>
-
     <div class="workspace-grid">
       <section class="document-panel">
+        <div class="document-context-stack">
+          <div class="workspace-toolbar">
+            <div class="workspace-document-title">
+              <div class="file-type-mark">{{ store.activeProject?.file_name?.split(".").pop()?.toUpperCase() || "DOC" }}</div>
+              <div><strong>{{ store.activeProject?.file_name || "未导入合同" }}</strong><span>{{ store.activeProject?.project_name || "等待导入" }} · {{ store.review?.document?.pageCount || 0 }} 页 · {{ displaySize(store.review?.document?.sizeBytes) }}</span></div>
+            </div>
+            <div class="workspace-toolbar-actions">
+              <button class="icon-button" type="button" title="打开知识库配置" aria-label="打开知识库配置" @click="emit('configure')"><FileCog :size="16" /></button>
+              <button class="icon-button" type="button" title="导出审查报告" aria-label="导出审查报告" @click="emit('export')"><FileDown :size="16" /></button>
+            </div>
+          </div>
+          <div class="review-runtime-strip" :class="{ warning: !executionReady }">
+            <div class="runtime-strip-title">
+              <Cpu :size="16" />
+              <div><strong>本次审查执行配置</strong><span>{{ executionReady ? "已绑定能力配置" : "缺少必要模型配置" }}</span></div>
+            </div>
+            <div class="runtime-model-list">
+              <span v-for="item in executionModels" :key="item.key" class="runtime-model-chip">
+                <small>{{ item.label }}</small>
+                <strong>{{ execution.models?.[item.key]?.name || "未配置" }}</strong>
+                <em v-if="execution.models?.[item.key]">{{ execution.models[item.key].version }}</em>
+              </span>
+            </div>
+            <div class="runtime-skill-count"><ListChecks :size="15" /><b>{{ execution.skills?.length || 0 }}</b><span>个 Skill</span></div>
+            <button class="icon-button small" type="button" title="查看并调整执行配置" aria-label="查看并调整执行配置" @click="emit('configure')"><Settings2 :size="14" /></button>
+          </div>
+          <section class="review-task-card" :class="taskStatusClass">
+            <div class="task-heading">
+              <div class="task-heading-main">
+                <span class="task-state-icon">
+                  <LoaderCircle v-if="taskStatus === 'running'" class="spin" :size="17" />
+                  <Check v-else-if="taskStatus === 'completed'" :size="17" />
+                  <X v-else-if="taskStatus === 'failed'" :size="17" />
+                  <Clock3 v-else :size="17" />
+                </span>
+                <div><strong>审查任务 · {{ taskStatusLabel }}</strong><span>{{ taskDescription }}</span></div>
+              </div>
+              <button v-if="taskCanRetry" class="icon-button small" type="button" title="重试审查任务" aria-label="重试审查任务" @click="retryReview"><RotateCcw :size="14" /></button>
+            </div>
+            <div class="task-progress-row"><div class="task-progress-track"><span :style="{ width: taskProgress + '%' }"></span></div><strong>{{ taskProgress }}%</strong><span>{{ taskStepLabel }}</span></div>
+            <div v-if="taskErrors.length" class="task-error-list"><span v-for="error in taskErrors" :key="error.code + '-' + error.message"><b>{{ error.code || "TASK_ERROR" }}</b>{{ error.message }}</span></div>
+          </section>
+        </div>
         <header class="pane-header">
           <div><h2>合同原文</h2><p>{{ store.review?.document?.documentType === "scanned_pdf" ? "扫描 PDF · OCR 不可用" : "解析文本层 · 可搜索" }}</p></div>
           <div class="document-tools">
@@ -436,6 +437,9 @@ function displaySize(bytes) {
           <select v-model.number="store.selectedPage" class="page-select" aria-label="选择页码"><option v-for="page in pageCount" :key="page" :value="page">第 {{ page }} 页</option></select>
           <button class="icon-button" type="button" title="下一页" aria-label="下一页" :disabled="store.selectedPage >= pageCount" @click="changePage(1)"><ChevronRight :size="17" /></button>
         </footer>
+      </section>
+
+      <div class="review-side-column">
         <section class="chat-panel" aria-label="对话审核">
           <header class="chat-header">
             <div class="chat-title"><span class="chat-icon"><MessageSquare :size="16" /></span><div><h2>对话审核</h2><p>{{ chatSession ? `本地会话 · ${chatMessages.length} 条消息` : "输入自然语言，协同完成当前合同审核" }}</p></div></div>
@@ -477,9 +481,8 @@ function displaySize(bytes) {
             <div class="chat-composer-footer"><span>{{ chatModels.length ? "模型只会使用已勾选的上下文" : "请先在能力配置中启用 analysis 模型" }}</span><div><button v-if="store.chatBusy" class="icon-button small danger" type="button" title="停止对话审核" aria-label="停止对话审核" @click="store.cancelChat"><X :size="15" /></button><button class="icon-button chat-send-button" type="button" title="发送审核请求" aria-label="发送审核请求" :disabled="store.chatBusy || !chatInput.trim() || !chatModels.length" @click="sendChat()"><LoaderCircle v-if="store.chatBusy" class="spin" :size="16" /><Send v-else :size="16" /></button></div></div>
           </div>
         </section>
-      </section>
 
-      <section class="risk-panel">
+        <section class="risk-panel">
         <header class="pane-header risk-pane-header">
           <div><h2>风险清单 <span class="count-label">{{ filteredRisks.length }}</span></h2><p>按等级筛选，点击风险定位到原文</p></div>
           <div class="risk-filter-select"><select v-model="riskFilter" aria-label="筛选风险等级"><option value="all">全部等级</option><option value="critical">严重</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></div>
@@ -499,7 +502,7 @@ function displaySize(bytes) {
           </article>
           <div v-if="!filteredRisks.length" class="empty-state compact"><Flag :size="24" /><strong>暂时没有风险项</strong><span>导入合同并完成审查后，风险会显示在这里。</span></div>
         </div>
-      </section>
+        </section>
 
       <aside v-if="currentRisk" class="detail-panel risk-popover" role="dialog" aria-label="风险详情" @click.stop>
         <template v-if="currentRisk">
@@ -523,9 +526,10 @@ function displaySize(bytes) {
             <section class="detail-section"><div class="section-title">法律依据</div><div v-if="currentRisk.legal_basis?.length" class="source-list"><div v-for="source in currentRisk.legal_basis" :key="source.source_id" class="source-item"><span class="source-level">{{ sourceLevel(source) }}</span><div><strong>{{ sourceFileName(source) }}</strong><small class="source-clause"><span>具体条款</span>{{ sourceClause(source) }}</small><small class="source-excerpt"><span>条款原文</span>{{ source.excerpt || "未提供具体条款原文" }}</small></div></div></div><p v-else class="muted-text">暂无直接法律依据，导出时会保留此说明。</p></section>
             <section class="detail-section"><div class="section-title">企业制度与资料依据</div><div v-if="currentRisk.company_basis?.length" class="source-list"><div v-for="source in currentRisk.company_basis" :key="source.source_id" class="source-item"><span class="source-level">{{ sourceLevel(source) }}</span><div><strong>{{ sourceFileName(source) }}</strong><small class="source-clause"><span>具体条款</span>{{ sourceClause(source) }}</small><small class="source-excerpt"><span>条款原文</span>{{ source.excerpt || "未提供具体条款原文" }}</small></div></div></div><p v-else class="muted-text">暂无企业制度依据。</p></section>
           </div>
-        </template>
-        <div v-else class="empty-state"><FileDown :size="26" /><strong>选择一个风险</strong><span>从中间清单选择风险后查看定位、依据和处理建议。</span></div>
-      </aside>
+         </template>
+         <div v-else class="empty-state"><FileDown :size="26" /><strong>选择一个风险</strong><span>从中间清单选择风险后查看定位、依据和处理建议。</span></div>
+       </aside>
+      </div>
     </div>
 
     <div v-if="selectionMenu" class="selection-popover" :class="{ 'selection-popover-form': selectionMenu.mode === 'review' }" :style="selectionMenuStyle" role="dialog" aria-label="选区操作" @mousedown.stop>

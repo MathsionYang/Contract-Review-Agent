@@ -390,9 +390,10 @@ body { font-size: 13.5px; }
   .snapshot-detail-grid { grid-template-columns: 1fr; }
 }
 
-/* 对话审核位于合同原文下方，保持阅读、提问和风险定位属于同一列上下文。 */
+/* 左侧完整展示合同原文，右侧纵向承载对话审核和紧凑风险清单。 */
 .workspace-page { min-height: 900px; }
-.chat-panel { display: flex; min-height: 250px; flex: 0 0 260px; flex-direction: column; border-top: 1px solid var(--border); background: #fbfcff; }
+.review-side-column { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; border-left: 1px solid var(--border); background: #f8fafc; }
+.chat-panel { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; border-bottom: 1px solid var(--border); background: #fbfcff; }
 .chat-header { display: flex; min-height: 58px; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 13px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .chat-title { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .chat-icon, .chat-avatar { display: grid; place-items: center; flex: 0 0 auto; color: var(--primary); background: var(--primary-soft); }
@@ -462,12 +463,63 @@ body { font-size: 13.5px; }
 .chat-send-button:hover { color: #fff; border-color: var(--primary-deep); background: var(--primary-deep); }
 .chat-send-button:disabled { opacity: .45; }
 
+/* 左侧上下文收纳在合同原文上方，右侧按风险清单 40% / 对话审核 60% 分区。 */
+.document-context-stack { flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--surface); }
+.document-context-stack .workspace-toolbar { min-height: 45px; gap: 8px; padding: 5px 10px; }
+.document-context-stack .workspace-document-title { gap: 7px; }
+.document-context-stack .workspace-document-title strong { max-width: 330px; font-size: 12px; }
+.document-context-stack .workspace-document-title span { max-width: 360px; font-size: 10px; }
+.document-context-stack .file-type-mark { width: 25px; height: 28px; border-radius: 5px; font-size: 8px; }
+.document-context-stack .workspace-toolbar-actions { gap: 5px; }
+.document-context-stack .workspace-toolbar-actions .icon-button { width: 28px; height: 28px; }
+.document-context-stack .review-runtime-strip { min-height: 43px; gap: 6px; padding: 5px 10px; }
+.document-context-stack .runtime-strip-title { min-width: 126px; gap: 6px; }
+.document-context-stack .runtime-strip-title strong { font-size: 11px; }
+.document-context-stack .runtime-strip-title span { font-size: 9px; }
+.document-context-stack .runtime-model-list { grid-template-columns: repeat(4, minmax(58px, 1fr)); gap: 4px; }
+.document-context-stack .runtime-model-chip { padding: 3px 5px; }
+.document-context-stack .runtime-model-chip small { font-size: 8px; }
+.document-context-stack .runtime-model-chip strong { font-size: 9.5px; }
+.document-context-stack .runtime-model-chip em { font-size: 8px; }
+.document-context-stack .runtime-skill-count { gap: 3px; padding: 4px 6px; font-size: 9.5px; }
+.document-context-stack .runtime-skill-count b { font-size: 11px; }
+.document-context-stack .review-task-card { gap: 5px; padding: 6px 10px; }
+.document-context-stack .task-heading-main { gap: 6px; }
+.document-context-stack .task-state-icon { width: 24px; height: 24px; flex-basis: 24px; border-radius: 6px; }
+.document-context-stack .task-heading-main strong { font-size: 11px; }
+.document-context-stack .task-heading-main span { font-size: 9.5px; }
+.document-context-stack .task-progress-row { gap: 6px; }
+.document-context-stack .task-progress-row strong { min-width: 33px; font-size: 10px; }
+.document-context-stack .task-progress-row > span { min-width: 75px; font-size: 9.5px; }
+.document-context-stack .task-error-list { padding: 5px 7px; font-size: 9.5px; }
+
+.review-side-column { display: grid; grid-template-rows: minmax(0, 2fr) minmax(0, 3fr); grid-template-areas: "risk" "chat"; }
+.review-side-column .risk-panel { min-height: 0; flex: none; grid-area: risk; border-right: 0; border-bottom: 1px solid var(--border); }
+.review-side-column .chat-panel { min-height: 0; flex: none; grid-area: chat; border-bottom: 0; }
+.review-side-column .risk-list { padding: 7px 8px; }
+.review-side-column .risk-card { margin-bottom: 5px; padding: 8px 9px 7px; }
+.review-side-column .risk-card h3 { margin-top: 5px; font-size: 11.5px; }
+.review-side-column .risk-flags { margin-top: 5px; }
+.review-side-column .risk-actions { margin-top: 6px; padding-top: 6px; }
+
 @media (max-width: 940px) {
   .workspace-page { min-height: 0; }
-  .chat-panel { min-height: 320px; flex-basis: 320px; }
+  .review-side-column { min-height: 760px; border-top: 1px solid var(--border); border-left: 0; }
+  .review-side-column { grid-template-rows: minmax(240px, 2fr) minmax(420px, 3fr); }
 }
 @media (max-width: 600px) {
   .chat-header { align-items: flex-start; flex-direction: column; }
   .chat-model-select { width: 100%; }
   .chat-model-select select { flex: 1; width: auto; }
+}
+
+@media (max-width: 1180px) {
+  .document-context-stack .review-runtime-strip { flex-wrap: wrap; align-items: flex-start; }
+  .document-context-stack .runtime-strip-title { flex: 1; }
+  .document-context-stack .runtime-model-list { flex-basis: 100%; order: 3; grid-template-columns: repeat(2, minmax(70px, 1fr)); }
+}
+
+@media (max-width: 940px) {
+  .document-context-stack .workspace-toolbar { min-height: 43px; }
+  .document-context-stack .review-runtime-strip { padding: 6px 10px; }
 }
