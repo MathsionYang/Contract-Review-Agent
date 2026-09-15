@@ -4,7 +4,12 @@ const { spawn } = require("node:child_process");
 delete process.env.ELECTRON_RUN_AS_NODE;
 
 const electronBinary = require("electron");
-const child = spawn(electronBinary, process.argv.slice(2), {
+const electronArgs = process.argv.slice(2);
+// 该工作台不依赖 GPU；显式关闭 GPU 并改为进程内模式，可兼容无显卡驱动或远程桌面环境。
+for (const flag of ["--disable-gpu", "--in-process-gpu"]) {
+  if (!electronArgs.includes(flag)) electronArgs.unshift(flag);
+}
+const child = spawn(electronBinary, electronArgs, {
   stdio: "inherit",
   windowsHide: false
 });
