@@ -65,14 +65,17 @@ async function startImport() {
     return;
   }
   try {
-    await store.importContract({
+    const importPromise = store.importContract({
       filePath: uploadForm.selection.filePath,
       projectName: uploadForm.projectName || uploadForm.selection.fileName,
       contractType: uploadForm.contractType,
-      reviewMode: uploadForm.reviewMode
+      reviewMode: uploadForm.reviewMode,
+      onImported: () => {
+        modal.value = null;
+        activeView.value = "review";
+      }
     });
-    modal.value = null;
-    activeView.value = "review";
+    await importPromise;
   } catch (_error) {
     // store 已经将可读错误通过通知反馈给用户。
   }

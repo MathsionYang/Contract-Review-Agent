@@ -5,6 +5,7 @@ import {
 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
 import { riskCategories, riskLevels } from "../data/sampleData";
+import { buildReviewPipeline, pipelineOverallLabel, pipelineStatusLabel } from "../services/reviewPipeline.mjs";
 
 const emit = defineEmits(["configure", "export"]);
 const store = useReviewStore();
@@ -80,6 +81,11 @@ const taskStepLabel = computed(() => taskStepLabels[task.value.current_step] || 
 const taskProgress = computed(() => Math.min(Math.max(Number(task.value.progress) || 0, 0), 100));
 const taskErrors = computed(() => Array.isArray(task.value.errors) ? task.value.errors : []);
 const taskCanRetry = computed(() => ["partial", "failed"].includes(taskStatus.value) && !store.isBusy);
+const pipelineRiskCount = computed(() => Math.max(store.risks.length, Number(store.reviewProgress?.riskCount) || 0));
+const reviewPipeline = computed(() => buildReviewPipeline(task.value, { riskCount: pipelineRiskCount.value }));
+const pipelineCompletedCount = computed(() => reviewPipeline.value.filter((step) => step.status === "completed").length);
+const pipelineActiveStep = computed(() => reviewPipeline.value.find((step) => ["running", "failed"].includes(step.status)) || null);
+const pipelineOverallStatus = computed(() => pipelineOverallLabel(task.value));
 const taskDescription = computed(() => ({
   queued: "审查任务已创建，等待开始执行。",
   running: "正在按解析、规则、检索、模型和校验顺序执行。",
@@ -405,6 +411,26 @@ function displaySize(bytes) {
             </div>
             <div class="task-progress-row"><div class="task-progress-track"><span :style="{ width: taskProgress + '%' }"></span></div><strong>{{ taskProgress }}%</strong><span>{{ taskStepLabel }}</span></div>
             <div v-if="taskErrors.length" class="task-error-list"><span v-for="error in taskErrors" :key="error.code + '-' + error.message"><b>{{ error.code || "TASK_ERROR" }}</b>{{ error.message }}</span></div>
+          </section>
+          <section class="review-pipeline-card" :class="taskStatusClass" aria-live="polite">
+            <header class="pipeline-header">
+              <div>
+                <div class="pipeline-title-row"><strong>审查任务流水线</strong><span class="pipeline-status" :class="`pipeline-status-${taskStatus}`">{{ pipelineOverallStatus }}</span></div>
+                <p>按通用审查清单逐步覆盖，结果会随规则和模型阶段更新</p>
+              </div>
+              <div class="pipeline-summary"><strong>{{ pipelineRiskCount }}</strong><span>条风险</span><small>{{ pipelineCompletedCount }}/{{ reviewPipeline.length }} 阶段完成</small></div>
+            </header>
+            <div class="pipeline-steps">
+              <article v-for="(step, index) in reviewPipeline" :key="step.key" class="pipeline-step" :class="`pipeline-step-${step.status}`">
+                <div class="pipeline-step-head"><span class="pipeline-step-index">{{ index + 1 }}</span><span class="pipeline-step-status">{{ pipelineStatusLabel(step.status) }}</span></div>
+                <strong>{{ step.label }}</strong>
+                <small>{{ step.domain }}</small>
+                <div class="pipeline-step-progress"><span :style="{ width: `${step.progress}%` }"></span></div>
+                <em>{{ step.status === "running" ? `${step.progress}% · ${step.description}` : step.status === "failed" ? "存在错误，需处理后重试" : step.status === "completed" ? `${step.riskCount} 条风险已纳入结果` : step.status === "queued" ? "任务已创建" : "等待前置阶段" }}</em>
+              </article>
+            </div>
+            <div v-if="pipelineActiveStep && taskStatus === 'running'" class="pipeline-live-note"><LoaderCircle class="spin" :size="13" />正在{{ pipelineActiveStep.label }}，当前已识别 {{ pipelineRiskCount }} 条候选风险</div>
+            <div v-else-if="taskStatus === 'completed'" class="pipeline-live-note pipeline-live-note-success"><Check :size="13" />审查步骤已完成，可在右侧风险清单中逐条复核</div>
           </section>
         </div>
         <header class="pane-header">

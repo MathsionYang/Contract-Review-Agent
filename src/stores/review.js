@@ -68,7 +68,8 @@ export const useReviewStore = defineStore("review", () => {
           projectId,
           step: String(payload.step || review.value.task?.current_step || ""),
           progress: Math.min(Math.max(Number(payload.progress) || 0, 0), 100),
-          status: String(payload.status || "running")
+          status: String(payload.status || "running"),
+          riskCount: Math.max(0, Number(payload.riskCount ?? reviewProgress.value?.riskCount ?? review.value.risks?.length) || 0)
         };
         review.value.task = {
           ...(review.value.task || {}),
@@ -241,10 +242,11 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function importContract(options) {
+    const { onImported, ...importOptions } = options || {};
     isBusy.value = true;
     try {
       const result = await electronApi.importContract({
-        ...options,
+        ...importOptions,
         bootstrapState: {
           knowledge: state.value.knowledge,
           capabilities: state.value.capabilities,
@@ -258,6 +260,14 @@ export const useReviewStore = defineStore("review", () => {
       await persist();
       activeRiskId.value = null;
       selectedPage.value = 1;
+      reviewProgress.value = {
+        projectId: result.project?.project_id,
+        step: result.review?.task?.current_step || "parse",
+        progress: Number(result.review?.task?.progress || 0),
+        status: result.review?.task?.status || "queued",
+        riskCount: result.review?.risks?.length || 0
+      };
+      if (typeof onImported === "function") onImported(result);
       notify(`已导入 ${result.project.file_name}，开始执行本地审查`, "ok");
       await runReview();
       return result;
@@ -284,7 +294,8 @@ export const useReviewStore = defineStore("review", () => {
         projectId: result.review.project?.project_id || activeProject.value?.project_id,
         step: result.review.task?.current_step || "persist",
         progress: Number(result.review.task?.progress || 0),
-        status: status || "unknown"
+        status: status || "unknown",
+        riskCount: result.review.risks?.length || 0
       } : null;
       notify(status === "completed" ? `审查完成，生成 ${result.review.risks?.length || 0} 条风险` : `审查${status === "partial" ? "部分完成" : "未完成"}，请查看任务状态`, status === "completed" ? "ok" : "warn");
       return result;

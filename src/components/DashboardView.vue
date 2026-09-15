@@ -37,6 +37,7 @@ const stats = computed(() => ({
 function statusClass(status) {
   return {
     waiting_confirmation: "badge-warning",
+    running: "badge-primary",
     working: "badge-primary",
     completed: "badge-success",
     partial: "badge-muted",

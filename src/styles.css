@@ -201,6 +201,47 @@ body { font-size: 13.5px; }
 .task-error-list { display: grid; gap: 4px; padding: 7px 9px; border-left: 3px solid var(--red); color: var(--red); background: var(--red-soft); font-size: 10.5px; line-height: 1.45; }
 .task-error-list span { overflow-wrap: anywhere; }
 .task-error-list b { margin-right: 6px; font-family: var(--mono); font-size: 9.5px; }
+.review-pipeline-card { display: grid; gap: 10px; padding: 11px 14px 12px; border-bottom: 1px solid var(--border); background: #fbfcff; }
+.review-pipeline-card.task-running { background: #f8faff; }
+.review-pipeline-card.task-partial, .review-pipeline-card.task-failed { background: #fffaf0; }
+.review-pipeline-card.task-completed { background: #f7fcf9; }
+.pipeline-header { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.pipeline-title-row { display: flex; align-items: center; gap: 8px; }
+.pipeline-title-row strong { color: var(--text); font-size: 12px; }
+.pipeline-title-row .pipeline-status { padding: 2px 7px; border-radius: 4px; color: var(--primary); background: var(--primary-soft); font-size: 9.5px; }
+.pipeline-status-completed { color: var(--green) !important; background: var(--green-soft) !important; }
+.pipeline-status-partial, .pipeline-status-failed { color: var(--amber) !important; background: var(--amber-soft) !important; }
+.pipeline-status-failed { color: var(--red) !important; background: var(--red-soft) !important; }
+.pipeline-header p { margin: 3px 0 0; color: var(--text-light); font-size: 10px; }
+.pipeline-summary { display: grid; min-width: 105px; grid-template-columns: auto auto; align-items: baseline; justify-content: end; column-gap: 4px; }
+.pipeline-summary strong { color: var(--red); font-family: var(--mono); font-size: 17px; line-height: 1; }
+.pipeline-summary span { color: var(--text-muted); font-size: 10px; }
+.pipeline-summary small { grid-column: 1 / -1; margin-top: 3px; color: var(--text-light); font-size: 9.5px; text-align: right; }
+.pipeline-steps { display: flex; min-width: 0; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.pipeline-step { position: relative; display: grid; min-width: 0; gap: 3px; padding: 7px 7px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.pipeline-step { flex: 1 0 112px; }
+.pipeline-step-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.pipeline-step-index { display: grid; width: 19px; height: 19px; place-items: center; border-radius: 5px; color: var(--text-light); background: var(--surface-muted); font-family: var(--mono); font-size: 9px; }
+.pipeline-step-status { color: var(--text-light); font-size: 9px; }
+.pipeline-step > strong { overflow: hidden; color: var(--text-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.pipeline-step > small { overflow: hidden; color: var(--text-light); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.pipeline-step-progress { height: 4px; margin-top: 3px; overflow: hidden; border-radius: 999px; background: #e9edf4; }
+.pipeline-step-progress span { display: block; height: 100%; border-radius: inherit; background: #c5cddd; transition: width .25s ease; }
+.pipeline-step em { min-height: 25px; overflow: hidden; color: var(--text-light); font-size: 8.5px; font-style: normal; line-height: 1.45; }
+.pipeline-step-completed { border-color: #cdeedd; background: #fbfffc; }
+.pipeline-step-completed .pipeline-step-index { color: var(--green); background: var(--green-soft); }
+.pipeline-step-completed .pipeline-step-status { color: var(--green); }
+.pipeline-step-completed .pipeline-step-progress span { background: var(--green); }
+.pipeline-step-running { border-color: #aebce2; box-shadow: 0 0 0 2px rgba(43,74,203,.08); }
+.pipeline-step-running .pipeline-step-index { color: var(--primary); background: var(--primary-soft); }
+.pipeline-step-running .pipeline-step-status { color: var(--primary); font-weight: 650; }
+.pipeline-step-running .pipeline-step-progress span { background: var(--primary); }
+.pipeline-step-failed { border-color: #f0c2bf; background: #fff7f6; }
+.pipeline-step-failed .pipeline-step-index { color: var(--red); background: var(--red-soft); }
+.pipeline-step-failed .pipeline-step-status { color: var(--red); }
+.pipeline-step-failed .pipeline-step-progress span { background: var(--red); }
+.pipeline-live-note { display: flex; align-items: center; gap: 5px; color: var(--primary); font-size: 10px; }
+.pipeline-live-note-success { color: var(--green); }
 .risk-panel { position: relative; border-right: 0; }
 .risk-popover { position: absolute; z-index: 8; top: 72px; right: 15px; bottom: 12px; display: flex; width: min(440px, calc(100% - 30px)); min-height: 0; border: 1px solid #aebce2; border-radius: 10px; background: var(--surface); box-shadow: 0 14px 35px rgba(26, 34, 51, .22); }
 .risk-popover::before { position: absolute; top: 26px; left: -7px; width: 13px; height: 13px; border-bottom: 1px solid #aebce2; border-left: 1px solid #aebce2; background: var(--surface); content: ""; transform: rotate(45deg); }
@@ -492,6 +533,20 @@ body { font-size: 13.5px; }
 .document-context-stack .task-progress-row strong { min-width: 33px; font-size: 10px; }
 .document-context-stack .task-progress-row > span { min-width: 75px; font-size: 9.5px; }
 .document-context-stack .task-error-list { padding: 5px 7px; font-size: 9.5px; }
+.document-context-stack .review-pipeline-card { gap: 7px; padding: 7px 10px 8px; }
+.document-context-stack .pipeline-header { gap: 8px; }
+.document-context-stack .pipeline-title-row strong { font-size: 10.5px; }
+.document-context-stack .pipeline-header p { margin-top: 2px; font-size: 8.5px; }
+.document-context-stack .pipeline-summary { min-width: 82px; }
+.document-context-stack .pipeline-summary strong { font-size: 14px; }
+.document-context-stack .pipeline-summary span, .document-context-stack .pipeline-summary small { font-size: 8.5px; }
+.document-context-stack .pipeline-step { flex-basis: 103px; padding: 5px 6px; }
+.document-context-stack .pipeline-step-index { width: 17px; height: 17px; border-radius: 4px; font-size: 8px; }
+.document-context-stack .pipeline-step-status { font-size: 8px; }
+.document-context-stack .pipeline-step > strong { font-size: 9.5px; }
+.document-context-stack .pipeline-step > small { font-size: 8px; }
+.document-context-stack .pipeline-step em { min-height: 22px; font-size: 7.8px; }
+.document-context-stack .pipeline-live-note { font-size: 9px; }
 
 .review-side-column { display: grid; grid-template-rows: minmax(0, 2fr) minmax(0, 3fr); grid-template-areas: "risk" "chat"; }
 .review-side-column .risk-panel { min-height: 0; flex: none; grid-area: risk; border-right: 0; border-bottom: 1px solid var(--border); }

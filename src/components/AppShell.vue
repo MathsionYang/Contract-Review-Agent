@@ -33,7 +33,7 @@ function go(view) {
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark"><ShieldCheck :size="19" /></div>
-        <div class="brand-copy">合同审查 Agent<small>Contract Review Workbench</small></div>
+        <div class="brand-copy">合同审查助手<small>Contract Review Workbench</small></div>
       </div>
 
       <nav class="side-nav" aria-label="主导航">

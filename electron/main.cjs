@@ -67,7 +67,8 @@ function sendReviewProgress(projectId, progress) {
     projectId,
     step: String(progress?.step || ""),
     progress: Math.min(Math.max(Number(progress?.progress) || 0, 0), 100),
-    status: String(progress?.status || "running")
+    status: String(progress?.status || "running"),
+    riskCount: Math.max(0, Number(progress?.riskCount) || 0)
   });
 }
 

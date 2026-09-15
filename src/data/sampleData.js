@@ -34,6 +34,7 @@ export const riskCategoryColors = {
 
 export const statusLabels = {
   waiting_confirmation: "待复核",
+  running: "执行中",
   working: "进行中",
   completed: "已完成",
   partial: "部分完成",

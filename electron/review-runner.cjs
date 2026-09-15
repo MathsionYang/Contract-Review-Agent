@@ -133,9 +133,9 @@ async function runReview(options = {}) {
   const state = options.state || {};
   const services = options.services || {};
   const errors = [];
-  const progress = (step, value) => {
+  const progress = (step, value, details = {}) => {
     review.task = { ...(review.task || {}), current_step: step, progress: value };
-    if (typeof options.onProgress === "function") options.onProgress({ step, progress: value });
+    if (typeof options.onProgress === "function") options.onProgress({ step, progress: value, ...details });
   };
 
   review.config = { ...(review.config || {}), execution: executionSnapshot(state, review) };
@@ -164,14 +164,15 @@ async function runReview(options = {}) {
   const document = { ...review.document, fileVersionId: review.project.file_version_id };
   const ruleFindings = evaluateDeterministicRules(document, rules, { contractType: review.project.contract_type });
 
-  progress("retrieve", 52);
   let findings = attachEvidence(ruleFindings, sources);
   const hasRuleEvidence = findings.some((finding) => finding.legal_basis.length || finding.company_basis.length);
   if (hasRuleEvidence) {
     findings = findings.map((finding) => finding.company_basis.length || finding.legal_basis.length ? { ...finding, evidence_status: "verified" } : finding);
   }
+  review.risks = mergeReviewFindings(findings);
+  progress("retrieve", 52, { riskCount: review.risks.length });
 
-  progress("model", 70);
+  progress("model", 70, { riskCount: review.risks.length });
   const model = executionModel(state, review, "analysis");
   if (model) {
     const call = services.invokeModel || invokeModel;
@@ -183,13 +184,15 @@ async function runReview(options = {}) {
     if (response?.ok) {
       const modelFindings = attachEvidence(normalizeModelRisks(response.data, { fileVersionId: review.project.file_version_id, document }), sources);
       findings = mergeReviewFindings([...findings, ...modelFindings]);
+      review.risks = findings;
+      progress("model", 78, { riskCount: review.risks.length });
     } else {
       errors.push({ code: response?.errorCode || "MODEL_REQUEST_FAILED", message: response?.message || "模型调用失败" });
     }
   }
 
-  progress("validate", 88);
   review.risks = mergeReviewFindings(findings);
+  progress("validate", 88, { riskCount: review.risks.length });
   review.review_version_id = `RV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-AUTO-${Date.now().toString(36)}`;
   review.task = {
     ...(review.task || {}),
@@ -198,6 +201,7 @@ async function runReview(options = {}) {
     progress: 100,
     errors
   };
+  progress("persist", 100, { riskCount: review.risks.length });
   const validation = review.config?.snapshot?.status === "published" ? validateReview(review, { formats: ["JSON"] }) : null;
   return { review, errors, validation };
 }
