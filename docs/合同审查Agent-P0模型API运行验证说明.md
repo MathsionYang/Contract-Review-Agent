@@ -96,18 +96,57 @@ npm run build
 - Vite 生产构建成功。
 - `dist/index.html` 和 `dist/assets/` 已更新。
 
-启动 Electron：
+### 4.1 开发模式启动 Electron 桌面端
+
+在项目目录执行：
 
 ```powershell
-npm run dev:desktop
+npm.cmd run dev:desktop
 ```
 
-预期：Vite 启动后 Electron 窗口自动打开，不出现以下错误：
+该命令会自动启动 Vite `127.0.0.1:5173`，再启动 Electron 桌面窗口。验证时应操作 Electron 窗口，不要直接打开浏览器预览地址或 `dist/index.html`。
+
+如果窗口没有自动出现，可检查任务栏中标题为 `contract-review-agent-desktop` 的窗口。启动器会自动清除 `ELECTRON_RUN_AS_NODE`，并添加无 GPU 兼容参数。
+
+预期：Electron 窗口自动打开，不出现以下错误：
 
 ```text
 Cannot read properties of undefined (reading 'whenReady')
 An object could not be cloned
 ```
+
+### 4.2 5173 端口已经被占用时
+
+`vite.config.js` 使用严格端口模式，若 `5173` 已被其他 Vite 服务占用，`npm.cmd run dev:desktop` 会因为端口冲突退出。此时使用两个 PowerShell 窗口手动启动备用端口：
+
+窗口一：
+
+```powershell
+Set-Location 'D:\项目\CheckMCP\Doc\合同审批'
+npm.cmd run dev -- --host 127.0.0.1 --port 5174
+```
+
+窗口二：
+
+```powershell
+Set-Location 'D:\项目\CheckMCP\Doc\合同审批'
+$env:VITE_DEV_SERVER_URL = 'http://127.0.0.1:5174'
+node scripts/launch-electron.cjs .
+```
+
+关闭开发服务时，只结束本次启动的 Vite 和 Electron 进程，不要误结束其他项目正在使用的端口。
+
+### 4.3 使用生产构建启动 Electron
+
+不需要 Vite 开发服务时，先构建再启动桌面端：
+
+```powershell
+Set-Location 'D:\项目\CheckMCP\Doc\合同审批'
+npm.cmd run build
+npm.cmd run electron
+```
+
+此模式会加载 `dist/index.html`，仍然保留 Electron 的本地文件选择器、模型 Key 加密存储、审查执行和 Validator 导出能力。
 
 ## 5. DeepSeek Analysis 配置
 
@@ -135,7 +174,7 @@ An object could not be cloned
 2. 确认页面显示“配置已校验”。
 3. 点击启用按钮，使状态变为“运行中”。
 
-注意：“校验配置”目前只检查模型标识和 API 地址，不会向 DeepSeek 发送请求。只有导入合同并执行审查，才能验证真实连通性。
+注意：“校验配置”会检查模型标识、API 地址和本机 Key 是否已配置，但不会向 DeepSeek 发送请求。只有导入合同并执行审查，才能验证真实连通性。
 
 ## 6. Qwen 向量模型配置说明
 

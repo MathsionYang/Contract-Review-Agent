@@ -10,7 +10,7 @@
 |---|---|
 | 需求基线 | 《合同审查 Agent 需求说明》v0.4 |
 | 实现阶段 | P0 真实审查主链路 + P1-P2 对话审核与上下文记忆基础 |
-| 代码基线 | `89bd069`（2026-09-14） |
+| 代码基线 | `306a463`（2026-09-15） |
 | 前端技术 | Vue 3、Vite、Pinia、lucide-vue-next |
 | 桌面技术 | Electron，主进程 CommonJS |
 | 运行边界 | 本地文件系统和 Electron 用户数据目录 |
@@ -75,6 +75,40 @@ Electron 窗口启用了 `contextIsolation`、关闭 `nodeIntegration` 并启用
 - 执行审查结果导出。
 
 `src/services/electronApi.js` 对这些接口做了渲染层封装。非 Electron 浏览器预览只使用 `localStorage` 保存界面状态，并明确阻止本地合同导入和导出能力。
+
+### 2.2 Electron 桌面端启动方式
+
+项目交付和验证应使用 Electron 桌面端，不应直接打开 `dist/index.html` 或只使用浏览器预览。启动方式分为开发模式和生产构建模式。
+
+开发模式在项目目录 `D:\项目\CheckMCP\Doc\合同审批` 执行：
+
+```powershell
+npm.cmd run dev:desktop
+```
+
+该命令由 `concurrently` 先启动 Vite `127.0.0.1:5173`，再通过 `scripts/launch-electron.cjs` 启动 Electron 窗口。窗口标题为 `contract-review-agent-desktop`。启动器会清除 `ELECTRON_RUN_AS_NODE`，并加入无 GPU 兼容参数。
+
+若 `5173` 已被占用，使用两个 PowerShell 窗口：
+
+```powershell
+# 窗口一
+npm.cmd run dev -- --host 127.0.0.1 --port 5174
+```
+
+```powershell
+# 窗口二
+$env:VITE_DEV_SERVER_URL = 'http://127.0.0.1:5174'
+node scripts/launch-electron.cjs .
+```
+
+生产模式先构建，再启动 Electron：
+
+```powershell
+npm.cmd run build
+npm.cmd run electron
+```
+
+生产模式不依赖 Vite 服务，Electron 主进程会加载 `dist/index.html`；本地合同导入、凭据加密存储、模型调用、审查和导出仍通过 Electron 主进程执行。
 
 ## 3. 本地合同导入和解析
 
