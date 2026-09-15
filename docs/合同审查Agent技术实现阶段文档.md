@@ -53,6 +53,7 @@ Vue 3 组件
 - `src/components/SettingsView.vue`：本地保存、导出门禁和安全策略设置。
 - `src/stores/review.js`：审查状态、人工操作、配置绑定、持久化和导出调用。
 - `electron/main.cjs`：窗口创建、IPC 注册和导入/校验/导出流程编排。
+- `electron/credential-store.cjs`：使用 Electron `safeStorage` 按引用加密保存和读取本机 API Key。
 
 ### 2.1 Electron 安全边界
 
@@ -67,6 +68,7 @@ Electron 窗口启用了 `contextIsolation`、关闭 `nodeIntegration` 并启用
 - 执行审查任务并订阅任务进度。
 - 执行对话审核、流式事件订阅、取消和重试。
 - 确认或放弃企业记忆候选。
+- 保存 API Key 和查询凭据是否已配置；主进程不向渲染层返回 Key。
 - 读取本地状态。
 - 保存本地状态。
 - 执行导出前 Validator。
@@ -221,10 +223,10 @@ Pinia store 的主要保存时机包括：
 - `analysis`、`extraction`、`embedding`、`rerank`、`vision` 角色。
 - 配置版本、上下文长度、最大输出 Token。
 - 超时、重试次数和数据策略。
-- 凭据引用名。
+- Key 引用名和本机加密凭据状态；明文 API Key 不进入模型对象。
 - 启用/停用状态和本地字段校验状态。
 
-保存模型前会检查名称、模型标识和 API 地址。保存后模型默认停用并清除旧校验状态；只有“校验配置”通过后，用户才能手动启用，未校验模型不会进入审查执行快照。审查执行时，model-gateway.cjs 读取主进程环境中的凭据引用，调用 OpenAI 兼容的 /chat/completions 接口，要求 JSON 输出，并记录调用耗时、usage、错误码和有限重试结果；返回对象不包含凭据。模型未配置、凭据不可用、请求超时、HTTP 失败或 JSON 无法解析时，审查保留规则结果并进入 partial/needs_verification 状态。能力页面的“校验配置”仍只做非敏感字段完整性检查，不主动发送合同内容。
+保存模型前会检查名称、模型标识和 API 地址。用户可在同一弹窗直接填写明文 API Key 和 Key 引用名；Key 只通过白名单 IPC 进入主进程，由 Electron `safeStorage` 加密到 `userData/state/credentials.json`。模型对象、Pinia 状态、执行快照、审计和日志只保存引用名，不保存明文 Key。编辑时不回显 Key，留空保存沿用旧凭据，填写新 Key 则覆盖对应引用，因此多个模型可以绑定不同 Key，应用重启后继续使用。保存后模型默认停用并清除旧校验状态；“校验配置”会检查非敏感字段和引用对应的本机凭据状态（不发送合同内容），通过后用户才能手动启用，未校验模型不会进入审查执行快照。审查执行时，model-gateway.cjs 通过主进程 resolver 读取对应 Key，调用 OpenAI 兼容的 /chat/completions 接口，要求 JSON 输出，并记录调用耗时、usage、错误码和有限重试结果；返回对象不包含凭据。模型未配置、凭据不可用、请求超时、HTTP 失败或 JSON 无法解析时，审查保留规则结果并进入 partial/needs_verification 状态。
 
 ### 6.2 Skill 配置
 
@@ -543,7 +545,7 @@ ReviewWorkspace.vue
 - [x] **合同导入后自动审查**：导入并解析合同后创建 Project/Review/Document/Task，绑定当前配置快照并调用 review-runner 执行真实规则、检索和模型链路；真实合同风险不从 sampleData.js 复制。
 - [x] **确定性规则执行**：支持金额比例、必需条款、日期顺序和关键词规则，输出命中、未命中、无法判断三类结论，并保留合同页码、条款号和原文锚点。
 - [x] **知识检索和依据生成**：支持法律快照、企业制度和规则文件的条款解析与本地关键词检索；风险依据返回文件名、条款编号/标题、条款原文、来源类型和版本。
-- [x] **模型网关真实调用**：支持已配置 analysis 模型的 OpenAI 兼容 chat/completions 调用、结构化 JSON 解析、usage/耗时记录、有限重试和错误降级；凭据只在主进程环境或凭据解析器中读取。
+- [x] **模型网关真实调用**：支持已配置 analysis 模型的 OpenAI 兼容 chat/completions 调用、结构化 JSON 解析、usage/耗时记录、有限重试和错误降级；Key 可由页面一次性配置，主进程使用 Electron safeStorage 加密保存并按引用注入。
 - [x] **法律快照导入和实时核验**：支持本地快照 JSON/Markdown/TXT 导入、哈希和条款解析、已发布快照绑定、白名单来源核验，以及不可用/未授权降级，不伪造外部法律来源。
 
 ### P1：对话审核、解析和执行扩展
@@ -585,8 +587,8 @@ ReviewWorkspace.vue
 
 ```text
 npm test
-47 tests
-47 pass
+48 tests
+48 pass
 0 fail
 
 npm run build
@@ -594,6 +596,7 @@ Vite production build passed
 
 node --check electron/main.cjs
 node --check electron/preload.cjs
+node --check electron/credential-store.cjs
 node --check electron/storage.cjs
 node --check electron/parser.cjs
 node --check electron/validator.cjs
@@ -610,7 +613,7 @@ node --check electron/tool-protocol.cjs
 node --check scripts/launch-electron.cjs
 ```
 
-测试覆盖了本地状态读写、原始文件版本复制、DOCX/PDF 解析、导出门禁、四种格式导出、模型和 Skill 执行快照、知识文件版本和条款解析、规则三态、知识检索、模型网关、法律快照导入、白名单核验、真实审查编排、选区文本快照、局部审查风险候选、上下文预算和选区扩圈、记忆召回/敏感扫描/冲突确认、SSE 增量与取消、Tool 协议阻断、对话风险/局部审查持久化、Vue 响应式 IPC 克隆转换和 Electron 启动环境隔离。
+测试覆盖了本地状态读写、原始文件版本复制、DOCX/PDF 解析、导出门禁、四种格式导出、模型和 Skill 执行快照、知识文件版本和条款解析、规则三态、知识检索、模型网关、本机多 Key 加密存储、法律快照导入、白名单核验、真实审查编排、选区文本快照、局部审查风险候选、上下文预算和选区扩圈、记忆召回/敏感扫描/冲突确认、SSE 增量与取消、Tool 协议阻断、对话风险/局部审查持久化、Vue 响应式 IPC 克隆转换和 Electron 启动环境隔离。
 
 ## 14. 本次 P0-P2 阶段交付与同步
 
@@ -622,7 +625,7 @@ node --check scripts/launch-electron.cjs
 - `npm run build` 生成的 `dist/` 已与当前 Vue 3 源码同步，作为生产构建产物一并交付。
 - 阶段文档、P0 设计说明和实施计划均保存在 `docs/` 下；原型文件未被覆盖。
 - 同步目标为 Git 远端 `origin/master`；提交前重新执行测试、生产构建、Electron 模块语法检查和 Git 差异检查。
-- 当前未将 API Key、Bearer Token、私钥或外部绝对路径写入状态文件、日志、审计记录、导出结果或提交内容。
+- 当前未将 API Key、Bearer Token、私钥或外部绝对路径写入状态文件、日志、审计记录、导出结果或提交内容；API Key 仅以 Electron safeStorage 加密形式保存于本机凭据文件。
 
 对话审核、上下文组装和企业记忆闭环的设计基线位于 `docs/合同审查Agent对话审核与上下文记忆设计方案.md`；本文档已同步标注其中落地的 P1-P2 范围，以及仍未完成的真实执行器和协同治理范围。
 

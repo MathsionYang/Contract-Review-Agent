@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
@@ -11,10 +11,13 @@ const { buildKnowledgeItem, parseKnowledgeFile, parseLegalSnapshotFile, validate
 const { runReview } = require("./review-runner.cjs");
 const { verifyLegalSource } = require("./legal-source.cjs");
 const { createReviewChatService } = require("./review-chat.cjs");
+const { createCredentialStore } = require("./credential-store.cjs");
+const { invokeModel } = require("./model-gateway.cjs");
 
 let mainWindow;
 let storage;
 let reviewChatService;
+let credentialStore;
 
 // 审查工作台不依赖 GPU；关闭硬件加速可兼容受限桌面、远程会话和无可用显卡驱动环境。
 app.disableHardwareAcceleration();
@@ -152,10 +155,25 @@ function mergeAudit(state, entry) {
   return next;
 }
 
+// 凭据只在主进程内解密，并在调用模型时通过 resolver 注入，绝不返回给渲染层或写入业务状态。
+function runModelWithCredential(options = {}) {
+  const model = options.model || {};
+  const reference = String(model.credentialRef || "").trim();
+  const credential = reference && reference !== "none" && credentialStore
+    ? credentialStore.get(reference)
+    : "";
+  return invokeModel({
+    ...options,
+    credentialResolver: () => credential
+  });
+}
+
 function registerIpc() {
+  const invokeConfiguredModel = (options = {}) => runModelWithCredential(options);
   reviewChatService = createReviewChatService({
     storage,
-    sendEvent: sendChatEvent
+    sendEvent: sendChatEvent,
+    invokeModel: invokeConfiguredModel
   });
   ipcMain.handle("contract:select-file", chooseContractFile);
 
@@ -242,6 +260,7 @@ function registerIpc() {
     const result = await runReview({
       review,
       state: stored,
+      services: { invokeModel: invokeConfiguredModel },
       onProgress: (progress) => sendReviewProgress(projectId, progress)
     });
     const nextState = {
@@ -260,6 +279,16 @@ function registerIpc() {
   ipcMain.handle("review:chat-cancel", (_event, options = {}) => reviewChatService.cancel(options));
   ipcMain.handle("review:memory-confirm", (_event, options = {}) => reviewChatService.confirmMemory(options));
   ipcMain.handle("review:memory-dismiss", (_event, options = {}) => reviewChatService.dismissMemory(options));
+
+  ipcMain.handle("credential:save", (_event, options = {}) => {
+    const reference = String(options.reference || "").trim();
+    const apiKey = String(options.apiKey || "").trim();
+    if (!apiKey) return { configured: credentialStore.has(reference) };
+    return credentialStore.save(reference, apiKey);
+  });
+  ipcMain.handle("credential:status", (_event, options = {}) => ({
+    configured: credentialStore.has(options.reference)
+  }));
 
   ipcMain.handle("contract:import", async (_event, options = {}) => {
     const filePath = options.filePath;
@@ -390,6 +419,7 @@ function registerIpc() {
 
 app.whenReady().then(() => {
   storage = createStorage(app.getPath("userData"));
+  credentialStore = createCredentialStore(app.getPath("userData"), safeStorage);
   registerIpc();
   createWindow();
   app.on("activate", () => {

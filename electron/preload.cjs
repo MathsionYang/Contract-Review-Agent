@@ -21,6 +21,8 @@ const api = {
   cancelChat: (payload) => ipcRenderer.invoke("review:chat-cancel", payload),
   confirmMemory: (payload) => ipcRenderer.invoke("review:memory-confirm", payload),
   dismissMemory: (payload) => ipcRenderer.invoke("review:memory-dismiss", payload),
+  saveCredential: (payload) => ipcRenderer.invoke("credential:save", payload),
+  getCredentialStatus: (payload) => ipcRenderer.invoke("credential:status", payload),
   onChatEvent: (callback) => {
     if (typeof callback !== "function" || !ipcRenderer) return () => {};
     const listener = (_event, payload) => callback(payload);

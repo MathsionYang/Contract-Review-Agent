@@ -4,6 +4,7 @@ import {
   Check, Cpu, FileCode2, Pencil, PlugZap, Plus, Power, ShieldCheck, Sparkles, Trash2, UploadCloud, X
 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
+import { electronApi } from "../services/electronApi";
 import Modal from "./Modal.vue";
 
 const store = useReviewStore();
@@ -32,6 +33,8 @@ const statusLabels = {
 const modelModalOpen = ref(false);
 const modelMode = ref("create");
 const modelForm = reactive(createEmptyModel());
+const credentialConfigured = ref(false);
+const credentialStatusLoading = ref(false);
 
 const models = computed(() => store.state.capabilities?.models || []);
 const enabledSkillCount = computed(() => (store.state.capabilities?.skills || []).filter((item) => item.status === "enabled").length);
@@ -50,6 +53,7 @@ function createEmptyModel() {
     timeoutMs: 30000,
     retries: 0,
     credentialRef: "",
+    apiKey: "",
     status: "disabled",
     testStatus: "untested",
     lastTestedAt: ""
@@ -60,10 +64,27 @@ function resetModelForm(model = null) {
   Object.assign(modelForm, createEmptyModel(), model ? { ...model } : {});
 }
 
-function openModelModal(model = null) {
+async function refreshCredentialStatus() {
+  const reference = String(modelForm.credentialRef || "").trim();
+  credentialConfigured.value = false;
+  if (!reference || reference === "none") return;
+  credentialStatusLoading.value = true;
+  try {
+    const result = await electronApi.getCredentialStatus({ reference });
+    credentialConfigured.value = Boolean(result?.configured);
+  } catch (_error) {
+    credentialConfigured.value = false;
+  } finally {
+    credentialStatusLoading.value = false;
+  }
+}
+
+async function openModelModal(model = null) {
   modelMode.value = model ? "edit" : "create";
   resetModelForm(model);
+  credentialConfigured.value = false;
   modelModalOpen.value = true;
+  await refreshCredentialStatus();
 }
 
 function closeModelModal() {
@@ -72,13 +93,27 @@ function closeModelModal() {
 
 async function saveModel() {
   try {
+    if (!String(modelForm.name || "").trim()) throw new Error("模型名称不能为空");
+    if (!String(modelForm.modelId || "").trim()) throw new Error("模型标识不能为空");
+    if (!String(modelForm.endpoint || "").trim()) throw new Error("API 地址不能为空");
+    const reference = String(modelForm.credentialRef || "").trim();
+    const apiKey = String(modelForm.apiKey || "").trim();
+    if (apiKey && (!reference || reference === "none")) {
+      throw new Error("填写 API Key 时，请同时填写 Key 引用名，以区分多组 Key");
+    }
+    if (apiKey) {
+      await electronApi.saveCredential({ reference, apiKey });
+    }
+    const { apiKey: _apiKey, ...modelPayload } = modelForm;
     await store.saveModel({
-      ...modelForm,
+      ...modelPayload,
+      credentialRef: reference,
       contextLength: Number(modelForm.contextLength) || 0,
       maxTokens: Number(modelForm.maxTokens) || 0,
       timeoutMs: Number(modelForm.timeoutMs) || 0,
       retries: Number(modelForm.retries) || 0
     });
+    credentialConfigured.value = Boolean(reference && (apiKey || credentialConfigured.value));
     closeModelModal();
   } catch (error) {
     store.notify(error.message || "模型配置保存失败", "warn");
@@ -207,11 +242,11 @@ function formatTestedAt(value) {
       </div>
     </section>
 
-    <div class="dashboard-note"><Sparkles :size="14" /> 模型、OCR 和文档解析服务的凭据不在渲染层保存。</div>
+    <div class="dashboard-note"><Sparkles :size="14" /> API Key 只在输入时短暂经过界面，保存后由 Electron 加密到本机凭据文件；模型配置只保存 Key 引用名。</div>
   </div>
 
   <Modal :open="modelModalOpen" :title="modelMode === 'edit' ? '编辑模型配置' : '新增模型配置'" :wide="true" @close="closeModelModal">
-    <template #subtitle><p class="modal-subtitle">填写模型调用所需的非敏感参数，凭据只填写安全存储中的引用名。</p></template>
+    <template #subtitle><p class="modal-subtitle">API Key 可直接在此填写。保存一次后下次启动继续使用，编辑时不会回显已保存的 Key。</p></template>
     <div class="form-grid two-columns">
       <div class="form-field"><label>配置名称 <span>*</span></label><input v-model="modelForm.name" class="text-input" :disabled="modelMode === 'edit'" placeholder="例如：hunyuan-pro" /></div>
       <div class="form-field"><label>模型标识 <span>*</span></label><input v-model="modelForm.modelId" class="text-input" placeholder="例如：hunyuan-pro" /></div>
@@ -225,7 +260,8 @@ function formatTestedAt(value) {
       <div class="form-field"><label>失败重试次数</label><input v-model.number="modelForm.retries" class="text-input" type="number" min="0" max="5" step="1" /></div>
       <div class="form-field"><label>配置版本</label><input v-model="modelForm.version" class="text-input" placeholder="例如：cfg-v1" /></div>
       <div class="form-field"><label>启用条件</label><div class="form-static-note">保存后默认停用，完成配置校验后可在列表中启用</div></div>
-      <div class="form-field field-span-2"><label>凭据引用</label><input v-model="modelForm.credentialRef" class="text-input" placeholder="例如：cred://deepseek/analysis" /><small class="inline-note">只保存引用名；API Key 应配置在 Electron 主进程环境或安全凭据存储中。</small></div>
+      <div class="form-field"><label>Key 引用名 <span v-if="modelForm.apiKey">*</span></label><input v-model="modelForm.credentialRef" class="text-input" placeholder="例如：cred://deepseek/analysis" autocomplete="off" @change="refreshCredentialStatus" /><small class="inline-note">用于区分多组 Key；同一引用可绑定多个模型。</small></div>
+      <div class="form-field"><label>API Key <span v-if="modelMode === 'create' && !credentialConfigured">*</span></label><input v-model="modelForm.apiKey" class="text-input" type="text" autocomplete="off" spellcheck="false" placeholder="在此填写本模型的明文 Key" @input="credentialConfigured = false" /><small v-if="credentialStatusLoading" class="inline-note">正在检查本机凭据...</small><small v-else-if="credentialConfigured" class="inline-note success-text">本机已配置；留空保存将沿用现有 Key</small><small v-else class="inline-note">仅用于本次保存，Electron 会在本机安全存储中加密保存，不写入模型配置。</small></div>
     </div>
     <template #footer><button class="button" type="button" @click="closeModelModal"><X :size="15" />取消</button><button class="button button-primary" type="button" @click="saveModel"><Check :size="15" />保存配置</button></template>
   </Modal>

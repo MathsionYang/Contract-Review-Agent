@@ -8,7 +8,9 @@
 
 ```text
 DeepSeek analysis 模型配置
-  -> 主进程解析凭据引用
+  -> 能力配置页面保存 Key 引用和明文 Key
+  -> 主进程通过 Electron safeStorage 加密保存
+  -> 主进程按凭据引用解密
   -> 调用 OpenAI 兼容 /chat/completions
   -> 获取结构化 JSON
   -> 归一化为候选风险
@@ -18,7 +20,7 @@ DeepSeek analysis 模型配置
   -> Validator 导出门禁
 ```
 
-本文档不会复制或展示 `key.md` 中的任何明文密钥。验证人员只在当前 PowerShell 进程中设置凭据环境变量。
+本文档不会复制或展示 `key.md` 中的任何明文密钥。验证人员只在 Electron 的“能力配置”页面临时填写 Key；保存后 Key 进入本机加密凭据文件，业务状态和 Git 不保存明文。
 
 ## 2. 当前代码边界
 
@@ -55,14 +57,14 @@ Set-Location 'D:\项目\CheckMCP\Doc\合同审批'
 ### 3.2 密钥使用原则
 
 - `docs/key.md` 只作为当前本地验证凭据来源。
-- 不把密钥填写到“能力配置”页面。
+- 只在 Electron“能力配置 -> 新增模型/编辑模型”弹窗中填写 Key；不要写入源码、状态 JSON 或命令行参数。
 - 不把密钥写入 `package.json`、源码、测试、运行说明或 Git 提交。
 - 不在截图中显示设置密钥的 PowerShell 命令历史。
-- 验证完成后清除当前 PowerShell 会话中的凭据变量。
+- 编辑已配置模型时不要截图或复制 Key；Key 输入框为空表示沿用本机已有 Key。
 
 建议后续将 `key.md` 的明文密钥迁移到操作系统凭据管理器，并轮换已经以明文文件保存过的密钥。
 
-### 3.3 凭据引用和环境变量
+### 3.3 凭据引用和本机加密存储
 
 DeepSeek 建议使用以下凭据引用：
 
@@ -70,30 +72,16 @@ DeepSeek 建议使用以下凭据引用：
 cred://deepseek/analysis
 ```
 
-主进程会把它转换为：
+在“能力配置”中，`Key 引用名` 用来区分多组 Key：
 
 ```text
-CONTRACT_REVIEW_CREDENTIAL_CRED_DEEPSEEK_ANALYSIS
+cred://deepseek/analysis -> DeepSeek 分析模型
+cred://aliyun/embedding -> 阿里云向量模型
 ```
 
-在启动 Electron 前，从 `key.md` 读取 DeepSeek 密钥并仅设置到当前 PowerShell 进程。为避免密钥出现在命令历史中，推荐使用安全输入：
+保存模型时，Key 通过白名单 IPC 发送到 Electron 主进程，由 `safeStorage.encryptString()` 加密后写入 Electron `userData/state/credentials.json`。文件中只有加密后的 Base64 字符串，不是可直接使用的明文 Key。审查或对话调用时，主进程按引用解密并注入请求头，渲染层不会获得 Key。
 
-```powershell
-$secureKey = Read-Host '请输入 docs/key.md 中的 DeepSeek KEY' -AsSecureString
-$credential = [System.Net.NetworkCredential]::new('', $secureKey).Password
-$env:CONTRACT_REVIEW_CREDENTIAL_CRED_DEEPSEEK_ANALYSIS = $credential
-$credential = $null
-npm run dev:desktop
-```
-
-验证完成后执行：
-
-```powershell
-Remove-Item Env:CONTRACT_REVIEW_CREDENTIAL_CRED_DEEPSEEK_ANALYSIS -ErrorAction SilentlyContinue
-$secureKey = $null
-```
-
-不要运行会输出全部环境变量的命令，也不要把带密钥的终端输出作为验收证据。
+同一引用可绑定多个模型；需要使用不同服务商或不同账号时，为每个 Key 使用不同引用。编辑模型时输入框不会回显旧 Key，留空保存表示继续使用原 Key，重新填写则覆盖对应引用。
 
 ## 4. 启动前验证
 
@@ -108,7 +96,7 @@ npm run build
 - Vite 生产构建成功。
 - `dist/index.html` 和 `dist/assets/` 已更新。
 
-设置 DeepSeek 凭据后，在同一个 PowerShell 窗口启动：
+启动 Electron：
 
 ```powershell
 npm run dev:desktop
@@ -138,7 +126,8 @@ An object could not be cloned
 | 超时 | `60000` | 单位毫秒，外部服务建议不低于 30 秒 |
 | 重试次数 | `1` | 避免验证期间重复消耗过多 Token |
 | 数据策略 | `approved_external` | 合同内容会发送到外部模型时应明确标记 |
-| 凭据引用 | `cred://deepseek/analysis` | 只填引用名，不填 DeepSeek KEY |
+| Key 引用名 | `cred://deepseek/analysis` | 用于区分多组 Key；同一引用可绑定多个模型 |
+| API Key | 从本地安全来源复制到页面输入框 | 页面中可见，保存后不回显；不要写入本文档 |
 
 保存后执行：
 
@@ -161,15 +150,10 @@ An object could not be cloned
 | 模型角色 | `embedding` |
 | 配置版本 | `qwen-embedding-cfg-v1` |
 | 数据策略 | `approved_external` |
-| 凭据引用 | `cred://aliyun/qwen3-vl-embedding` |
+| Key 引用名 | `cred://aliyun/qwen3-vl-embedding` |
+| API Key | 在页面中填写对应向量模型 Key | 保存后只显示“本机已配置” |
 
-对应环境变量名称为：
-
-```text
-CONTRACT_REVIEW_CREDENTIAL_CRED_ALIYUN_QWEN3_VL_EMBEDDING
-```
-
-本阶段不需要设置该环境变量来验证 P0 主链路，因为当前代码不会调用向量端点。启用后只检查：
+本阶段不需要调用向量端点来验证 P0 主链路，因为当前代码不会调用向量端点。保存并启用后只检查：
 
 - 能力配置列表中角色显示为“向量化”。
 - 审核工作区执行配置中可以显示该向量模型。
@@ -304,14 +288,14 @@ Authorization: Bearer <从凭据引用解析，不写入状态>
 - `errorCode`。
 - 重试后的最终结果。
 
-不得记录 DeepSeek KEY、完整 `Authorization` 请求头或凭据环境变量值。
+不得记录 DeepSeek KEY、完整 `Authorization` 请求头或本机凭据文件内容。
 
 ## 11. 失败降级验证
 
 ### 11.1 缺少 DeepSeek 凭据
 
 1. 关闭 Electron。
-2. 清除 `CONTRACT_REVIEW_CREDENTIAL_CRED_DEEPSEEK_ANALYSIS`。
+2. 在“能力配置”中编辑 `deepseek-analysis`，将 Key 引用改为一个从未保存过的引用，或使用新引用但不填写 API Key。
 3. 重新启动并执行审查。
 
 预期：
@@ -323,7 +307,7 @@ Authorization: Bearer <从凭据引用解析，不写入状态>
 
 ### 11.2 DeepSeek KEY 无效
 
-使用专门的无效测试值启动，再执行审查。
+在“能力配置”中为 DeepSeek 引用重新保存一个专门的无效测试值，再执行审查；验证完成后应立即覆盖或删除该凭据文件中的对应引用。
 
 预期：
 
@@ -385,7 +369,7 @@ Analysis 配置名称：deepseek-analysis
 配置版本：deepseek-cfg-v1
 API 地址：https://api.deepseek.com
 凭据引用：cred://deepseek/analysis
-凭据环境变量：已设置 / 未设置（禁止记录值）
+本机凭据存储：已配置 / 未配置（禁止记录 Key）
 
 向量模型配置：已登记 / 未登记
 向量 API 实际调用：未实现，不作为 P0 通过项
@@ -410,8 +394,8 @@ Validator 复核后结果：
 | 编号 | 验证项 | 通过标准 | 结果 |
 |---|---|---|---|
 | DS-01 | DeepSeek 配置保存 | 地址、模型标识、角色和版本保存成功 | [ ] |
-| DS-02 | 凭据引用 | 页面只保存 `cred://deepseek/analysis` | [ ] |
-| DS-03 | 环境凭据解析 | 主进程能使用环境变量发起请求 | [ ] |
+| DS-02 | Key 配置保存 | 页面保存 `cred://deepseek/analysis` 和对应 Key，模型对象只保留引用名 | [ ] |
+| DS-03 | 本机凭据解析 | 主进程能按引用从 Electron 加密凭据文件取到 Key 并发起请求 | [ ] |
 | DS-04 | 执行快照 | 工作区显示 `deepseek-analysis` | [ ] |
 | DS-05 | 真实 API 调用 | 请求到达 DeepSeek `/chat/completions` | [ ] |
 | DS-06 | JSON 输出 | 响应可解析为 `{ risks: [...] }` | [ ] |

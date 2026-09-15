@@ -592,8 +592,10 @@ export const useReviewStore = defineStore("review", () => {
     if (!String(model.modelId || "").trim()) throw new Error("模型标识不能为空");
     if (!String(model.endpoint || "").trim()) throw new Error("API 地址不能为空");
     const models = state.value.capabilities?.models || [];
+    // 防御性丢弃敏感字段，避免未来其他调用方误把 API Key 写入业务状态。
+    const { apiKey: _apiKey, ...safeModel } = model;
     const next = {
-      ...model,
+      ...safeModel,
       name,
       modelId: String(model.modelId).trim(),
       endpoint: String(model.endpoint).trim(),
@@ -638,12 +640,24 @@ export const useReviewStore = defineStore("review", () => {
   async function validateModel(name) {
     const model = (state.value.capabilities?.models || []).find((item) => item.name === name);
     if (!model) return false;
-    const valid = Boolean(String(model.modelId || "").trim() && String(model.endpoint || "").trim());
+    let valid = Boolean(String(model.modelId || "").trim() && String(model.endpoint || "").trim());
+    let credentialMessage = "";
+    const reference = String(model.credentialRef || "").trim();
+    if (valid && reference && reference !== "none") {
+      try {
+        const credentialStatus = await electronApi.getCredentialStatus({ reference });
+        valid = Boolean(credentialStatus?.configured);
+        if (!valid) credentialMessage = "，但对应 Key 尚未在本机配置";
+      } catch (_error) {
+        valid = false;
+        credentialMessage = "，本机凭据状态无法读取";
+      }
+    }
     model.testStatus = valid ? "passed" : "failed";
     model.lastTestedAt = new Date().toISOString();
-    addAudit("校验模型配置", name, valid ? "本地字段校验通过，未发起外部网络请求" : "本地字段校验失败，请补充模型标识和 API 地址");
+    addAudit("校验模型配置", name, valid ? "本地字段和凭据状态校验通过，未发起外部网络请求" : `本地配置校验失败${credentialMessage || "，请补充模型标识和 API 地址"}`);
     await persist();
-    notify(valid ? "模型配置校验通过" : "模型配置校验失败，请检查必填字段", valid ? "ok" : "warn");
+    notify(valid ? "模型配置校验通过" : `模型配置校验失败${credentialMessage || "，请检查必填字段"}`, valid ? "ok" : "warn");
     return valid;
   }
 

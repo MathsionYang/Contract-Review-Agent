@@ -65,6 +65,14 @@ export const electronApi = {
     if (!bridge?.dismissMemory) return Promise.reject(new Error("当前页面未连接企业记忆放弃能力"));
     return bridge.dismissMemory(toCloneable(payload));
   },
+  saveCredential(payload) {
+    if (!bridge?.saveCredential) return Promise.reject(new Error("当前页面未连接 Electron 本机凭据保存能力"));
+    return bridge.saveCredential(toCloneable(payload));
+  },
+  getCredentialStatus(payload) {
+    if (!bridge?.getCredentialStatus) return Promise.resolve({ configured: false });
+    return bridge.getCredentialStatus(toCloneable(payload));
+  },
   onChatEvent(callback) {
     if (!bridge?.onChatEvent) return () => {};
     return bridge.onChatEvent(callback);

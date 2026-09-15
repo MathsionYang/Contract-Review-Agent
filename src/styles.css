@@ -250,6 +250,7 @@ body { font-size: 13.5px; }
 .model-table { min-width: 1180px; }
 .endpoint-text { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .success-text { color: var(--green) !important; }
+
 .danger-text { color: var(--red) !important; }
 
 /* 模型和知识文件共用的双栏表单。 */
