@@ -1,0 +1,2588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>合同审查内容体系与通用审查清单</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#161a21; --panel2:#1c212a; --border:#2a313c;
+  --fg:#e6e9ef; --fg-dim:#a3acbb; --fg-mute:#7b8698;
+  --accent:#4c9aff; --accent-soft:rgba(76,154,255,.12);
+  --hi:#ff6b6b; --mid:#ffb454; --low:#4cd4a0;
+  --code-bg:#11151b; --th:#1b2029;
+}
+html.light{
+  --bg:#f7f8fa; --panel:#ffffff; --panel2:#f2f4f7; --border:#e2e6ec;
+  --fg:#1a1f28; --fg-dim:#4a5567; --fg-mute:#78849a;
+  --accent:#1f6feb; --accent-soft:rgba(31,111,235,.08);
+  --hi:#d93a3a; --mid:#c77700; --low:#12855f;
+  --code-bg:#f3f5f8; --th:#eef1f5;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif;
+  font-size:15px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.layout{display:flex; align-items:flex-start; max-width:1440px; margin:0 auto; padding:0 28px}
+/* 侧栏 */
+.side{
+  position:sticky; top:0; flex:0 0 268px; max-height:100vh; overflow-y:auto;
+  padding:34px 16px 40px 0; border-right:1px solid var(--border);
+  font-size:13px;
+}
+.side h4{margin:0 0 12px; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--fg-mute); font-weight:600}
+.side ul{list-style:none; margin:0; padding:0}
+.side li{margin:0}
+.side a{display:block; padding:5px 10px; color:var(--fg-dim); text-decoration:none; border-radius:6px; border-left:2px solid transparent}
+.side a:hover{background:var(--accent-soft); color:var(--accent)}
+.side .lvl-1 > a{color:var(--fg); font-weight:600; margin-top:8px}
+.side .lvl-2 > a{padding-left:20px}
+.side .lvl-3 > a{padding-left:32px; font-size:12.5px}
+/* 主体 */
+.main{flex:1 1 auto; min-width:0; padding:34px 0 90px 40px}
+.main h1{font-size:27px; line-height:1.35; margin:0 0 6px; letter-spacing:-.01em}
+.main h2{
+  font-size:19px; margin:46px 0 14px; padding-bottom:9px;
+  border-bottom:1px solid var(--border); letter-spacing:-.005em;
+}
+.main h3{font-size:16px; margin:30px 0 10px; color:var(--fg)}
+.main h4{font-size:14.5px; margin:22px 0 8px; color:var(--fg-dim)}
+.main p{margin:10px 0; color:var(--fg)}
+.main a{color:var(--accent)}
+hr{border:0; border-top:1px solid var(--border); margin:34px 0}
+blockquote{
+  margin:16px 0; padding:12px 18px; background:var(--panel);
+  border-left:3px solid var(--accent); border-radius:0 8px 8px 0; color:var(--fg-dim);
+}
+blockquote p{margin:4px 0}
+code{
+  background:var(--code-bg); border:1px solid var(--border); border-radius:5px;
+  padding:1.5px 6px; font-size:12.8px;
+  font-family:"JetBrains Mono","Cascadia Code",Consolas,"SFMono-Regular",monospace;
+}
+pre{
+  background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:16px 18px; overflow-x:auto; margin:16px 0;
+}
+pre code{background:none; border:0; padding:0; font-size:13px; line-height:1.65; color:var(--fg-dim)}
+table{
+  width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px;
+  background:var(--panel); border:1px solid var(--border); border-radius:10px; overflow:hidden;
+}
+thead th{
+  background:var(--th); color:var(--fg); text-align:left; font-weight:600;
+  padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{padding:9px 12px; border-bottom:1px solid var(--border); color:var(--fg-dim); vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--accent-soft)}
+tbody td strong, tbody td code{color:var(--fg)}
+ul,ol{padding-left:22px; margin:10px 0; color:var(--fg-dim)}
+li{margin:4px 0}
+li > strong{color:var(--fg)}
+/* 主题切换 */
+#themeBtn{
+  position:fixed; top:18px; right:22px; z-index:50;
+  background:var(--panel); color:var(--fg-dim); border:1px solid var(--border);
+  border-radius:20px; padding:7px 15px; font-size:12.5px; cursor:pointer;
+  font-family:inherit; transition:.15s;
+}
+#themeBtn:hover{color:var(--accent); border-color:var(--accent)}
+@media (max-width:1080px){
+  .side{display:none}
+  .layout{padding:0 20px}
+  .main{padding:34px 0 70px}
+  table{font-size:12.5px}
+}
+@media print{
+  .side,#themeBtn{display:none}
+  body{background:#fff; color:#000}
+}
+</style>
+</head>
+<body>
+<button id="themeBtn">浅色</button>
+<div class="layout">
+  <nav class="side"><h4>目录</h4><div class="toc">
+<ul class="lvl-1">
+<li><a href="#0">0. 文档说明</a></li>
+<li><a href="#1">1. 先定性：合同审查到底在审什么</a></li>
+<li><a href="#2">2. 审查内容总框架（六层）</a></li>
+<li><a href="#3">3. 逐层详解</a></li>
+<li><a href="#4">4. 通用审查清单（可勾选 · 编号化）</a></li>
+<li><a href="#5">5. 分类型专项审查要点</a></li>
+<li><a href="#6">6. 审查方法与风险判定</a></li>
+<li><a href="#7-top-15">7. 最高频 Top 15 风险点（按实务出现频次）</a></li>
+<li><a href="#8">8. 审查输出物标准形态</a></li>
+<li><a href="#a">附录 A：法律依据索引（含待核标注）</a></li>
+<li><a href="#b">附录 B：审查术语速查</a></li>
+<li><a href="#c">附录 C：可勾选审查表（打印版骨架）</a></li>
+<li><a href="#d-agent">附录 D：面向「合同审查 Agent」的工程化映射</a></li>
+<li><a href="#e">附录 E：本清单的局限</a></li>
+</ul>
+</div>
+</nav>
+  <main class="main"><h1 id="_1">合同审查内容体系与通用审查清单</h1>
+<blockquote>
+<p>版本：v1.0
+编写日期：2026-09-15
+适用范围：中国大陆企业内部合同实务（采购、销售、服务、租赁、软件开发等民商事合同）
+文档定位：合同审查领域知识底座——既是法务/业务人员的审查清单，也是「合同审查 Agent」的检查项来源
+关联文档：<code>合同审查Agent需求说明.md</code>（v0.4）</p>
+</blockquote>
+<hr />
+<h2 id="0">0. 文档说明</h2>
+<h3 id="01">0.1 这份文档解决什么问题</h3>
+<p>「合同审查」四个字在实务中含混，不同人对它的理解差异极大：有人理解为挑错别字，有人理解为改条款，有人理解为审合法性。这份文档要把它拆成<strong>可执行、可勾选、可编码</strong>的检查项体系。</p>
+<h3 id="02">0.2 使用方式</h3>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>用法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>法务 / 业务审查人</td>
+<td>用第 4 章通用清单逐项过，用第 5 章看专项要点，用第 2/3 章回看原理</td>
+</tr>
+<tr>
+<td>Agent / 规则库设计者</td>
+<td>第 4 章编号条目 = 候选检查项，第 6.1 节给出「确定性规则 / 语义判断」的划分依据</td>
+</tr>
+<tr>
+<td>新人培训</td>
+<td>按第 2 → 3 → 4 章顺序读，第 7 章作为「踩坑速查」</td>
+</tr>
+</tbody>
+</table>
+<h3 id="03">0.3 法律依据口径声明</h3>
+<ul>
+<li>本文引用法条以《民法典》（2021-01-01 施行）、《民事诉讼法》（2023 修正，2024-01-01 施行）、《招标投标法》、《个人信息保护法》等现行文本为基础，<strong>条号已尽量核对</strong>（第 35 条协议管辖、第 686 条保证方式等已二次查证）。</li>
+<li>凡标注 <strong>〔待核〕</strong> 的条号或口径，表示未完成最终文本核对或存在版本变动风险，<strong>不得直接作为对外法律结论引用</strong>，须回权威数据库（北大法宝等）核验。</li>
+<li>本文是<strong>审查方法论与检查清单</strong>，不构成法律意见。地方司法口径、行业监管细则与个案事实会显著影响结论。</li>
+</ul>
+<hr />
+<h2 id="1">1. 先定性：合同审查到底在审什么</h2>
+<h3 id="11">1.1 三层目标（从低到高）</h3>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>目标</th>
+<th>审不出来会怎样</th>
+<th>审查手段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>L0 形式合法</strong></td>
+<td>签得成、认得出、拿得出</td>
+<td>合同不成立、主体错误、无授权，争议时无法举证</td>
+<td>文件核验、形式检查</td>
+</tr>
+<tr>
+<td><strong>L1 效力与合规</strong></td>
+<td>合同有效、不被认定无效或部分无效</td>
+<td>条款白签、无效后按法定规则处理，商务安排落空</td>
+<td>法律检索、强制性规定比对</td>
+</tr>
+<tr>
+<td><strong>L2 可执行 / 可救济</strong></td>
+<td>对方违约时，我方能低成本拿到赔偿或实现权利</td>
+<td>赢了道理输了钱：无管辖、无证据、无担保、赔偿受限</td>
+<td>条款设计分析、证据链推演</td>
+</tr>
+<tr>
+<td><strong>L3 商业目的达成</strong></td>
+<td>交易结构、价格机制、退出路径真的支撑业务目标</td>
+<td>合同有效且可诉，但生意本身做不成或做亏</td>
+<td>商务与业务联合评审</td>
+</tr>
+</tbody>
+</table>
+<p><strong>实务中最常见的问题不是 L1（合法性），而是 L2</strong>——绝大多数合同纠纷的败因不是条款违法，而是「没有约定清楚 + 没有约定怎么救济」。</p>
+<h3 id="12">1.2 一句核心判据</h3>
+<blockquote>
+<p>审查的本质是<strong>反事实推演</strong>：假设对方明天违约、假设项目中途做不下去、假设出了事故、假设三年后要打官司——逐条问「按现在这份合同，我方能拿到什么？」</p>
+</blockquote>
+<p>凡是回答不了这个问题的条款，就是审查要动的地方。</p>
+<h3 id="13">1.3 与相邻概念的区别</h3>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>关注点</th>
+<th>与合同审查的关系</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>合同起草</td>
+<td>从零设计交易结构</td>
+<td>审查的前置或同源工作；起草质量决定审查工作量</td>
+</tr>
+<tr>
+<td>合同审查</td>
+<td>对已成稿合同做风险识别与修改建议</td>
+<td>本文主题</td>
+</tr>
+<tr>
+<td>法律意见书</td>
+<td>对特定法律问题出具专业结论</td>
+<td>审查意见可为意见书的事实基础，但不等同</td>
+</tr>
+<tr>
+<td>财务 / 税务审核</td>
+<td>价格、发票、资金、税负合规</td>
+<td>与审查交叉于「价款与支付」块，须联合把关</td>
+</tr>
+<tr>
+<td>合规审查</td>
+<td>是否触碰监管红线（反垄断、反腐、数据）</td>
+<td>与第 5 章 L5 高度重叠</td>
+</tr>
+<tr>
+<td>商务审批</td>
+<td>是否符合商业利益与预算</td>
+<td>审查只提供风险输入，不替代商务判断</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2">2. 审查内容总框架（六层）</h2>
+<p>把合同文本拆成六层，逐层审。<strong>顺序不可颠倒</strong>：主体不成立，条款写得再漂亮也没用。</p>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>名称</th>
+<th>审什么（一句话）</th>
+<th>失守的典型后果</th>
+<th>谁主责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>L1</strong></td>
+<td>主体与效力基础</td>
+<td>跟谁签、他有没有资格签、签了算不算数</td>
+<td>主体错误、无权代理、效力待定、无法执行</td>
+<td>法务</td>
+</tr>
+<tr>
+<td><strong>L2</strong></td>
+<td>标的与商务条款</td>
+<td>买什么、多少钱、怎么付、怎么交、怎么验</td>
+<td>履行标准争议、付款被拒、验收扯皮</td>
+<td>业务 + 财务</td>
+</tr>
+<tr>
+<td><strong>L3</strong></td>
+<td>权利义务配置</td>
+<td>谁干什么、谁先干、谁能改、成果归谁</td>
+<td>义务失衡、单方变更、知识产权流失</td>
+<td>业务 + 法务</td>
+</tr>
+<tr>
+<td><strong>L4</strong></td>
+<td>风险分配与救济</td>
+<td>出事谁担责、赔多少、怎么退出、去哪打</td>
+<td>赔偿受限、无担保、无管辖、赢了拿不到钱</td>
+<td>法务</td>
+</tr>
+<tr>
+<td><strong>L5</strong></td>
+<td>合规与程序</td>
+<td>有没有踩红线、内部外部程序走没走完</td>
+<td>合同无效、行政处罚、内控失效</td>
+<td>法务 + 合规</td>
+</tr>
+<tr>
+<td><strong>L6</strong></td>
+<td>文本质量与形式</td>
+<td>条款齐不齐、前后一致不、签得对不对</td>
+<td>条款冲突、引用失效、举证困难</td>
+<td>审查人</td>
+</tr>
+</tbody>
+</table>
+<h3 id="21">2.1 与经典「形式审查 / 实质审查」二分的映射</h3>
+<table>
+<thead>
+<tr>
+<th>经典分类</th>
+<th>对应本文层级</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>形式审查</td>
+<td>L1（资质文件部分）+ L6</td>
+<td>主体资料是否齐全、签署是否规范、附件是否完整、文本是否一致</td>
+</tr>
+<tr>
+<td>实质审查</td>
+<td>L2 + L3 + L4 + L5 + L1（授权/决议部分）</td>
+<td>条款内容是否合法、公平、可执行</td>
+</tr>
+</tbody>
+</table>
+<p>形式审查是<strong>门槛</strong>：形式不全，实质审查没有对象。</p>
+<hr />
+<h2 id="3">3. 逐层详解</h2>
+<h3 id="31-l1">3.1 L1 主体与效力基础</h3>
+<h4 id="311">3.1.1 主体身份核验</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>具体要求</th>
+<th>常见问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>名称一致性</td>
+<td>合同抬头、签署页、正文提及、发票抬头、收款账户名<strong>四处必须完全一致</strong></td>
+<td>简称/全称混用；「有限公司」与「有限责任公司」不一致</td>
+</tr>
+<tr>
+<td>统一社会信用代码</td>
+<td>必填，与营业执照一致</td>
+<td>手抄错位；旧版注册号冒充</td>
+</tr>
+<tr>
+<td>主体资格</td>
+<td>存续状态、是否被吊销/注销/列入经营异常、是否进入破产程序</td>
+<td>已注销企业签约；吊销后仍以原名义签约</td>
+</tr>
+<tr>
+<td>经营范围</td>
+<td>是否超出登记经营范围（一般不影响效力，但涉许可经营的除外）</td>
+<td>无资质从事特许业务</td>
+</tr>
+<tr>
+<td>特殊资质</td>
+<td>建筑资质等级、医疗器械经营许可、食品经营许可、人力资源服务许可、ISP/ICP 等</td>
+<td>借用资质（挂靠）——合同可能无效且责任自担</td>
+</tr>
+<tr>
+<td>履约能力</td>
+<td>注册资本、实缴、涉诉、被执行、失信名单</td>
+<td>空壳公司承接大额合同</td>
+</tr>
+</tbody>
+</table>
+<h4 id="312">3.1.2 签署权限核验</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>法定代表人签署</td>
+<td>核对姓名与登记一致；法定代表人变更后以现任为准</td>
+</tr>
+<tr>
+<td>授权代表签署</td>
+<td>必须有<strong>授权委托书原件</strong>，且授权范围覆盖本合同事项、期限覆盖签署日</td>
+</tr>
+<tr>
+<td>经办人越权</td>
+<td>构成表见代理的风险与「善意相对人」认定</td>
+</tr>
+<tr>
+<td>印章类型</td>
+<td>公章、合同专用章均可；财务章、部门章、项目部章<strong>通常不足以代表法人</strong>（最高人民法院相关裁判口径偏严，具体个案判断）</td>
+</tr>
+<tr>
+<td>印章真实性</td>
+<td>电子章/扫描章的伪造风险；建议对重要合同采取「面签 + 骑缝章 + 名片核验」</td>
+</tr>
+<tr>
+<td>内部决议</td>
+<td>担保、对外投资、重大资产处置、关联交易是否需股东会/董事会决议（《公司法》相关担保决议要求〔待核最新文本〕）</td>
+</tr>
+<tr>
+<td>国资/上市程序</td>
+<td>国资需评估、审批、进场交易；上市公司需披露与审批</td>
+</tr>
+</tbody>
+</table>
+<h4 id="313">3.1.3 三类主体错位的陷阱</h4>
+<ol>
+<li><strong>签约主体 ≠ 履约主体</strong>：合同与 A 签，实际由 B 干活 → 出事找不到责任人。</li>
+<li><strong>签约主体 ≠ 付款主体</strong>：与 A 签、要求付给 B → 付款义务履行的抗辩风险、虚开风险。</li>
+<li><strong>签约主体 ≠ 责任主体</strong>：与子公司签、指望母公司兜底 → 母公司无义务，须另行取得保证或安慰函。</li>
+</ol>
+<blockquote>
+<p><strong>审查动作</strong>：对「三方错位」情形，必须要求<strong>在同一合同中明确各自角色</strong>，或另行签署补充协议/担保文件。</p>
+</blockquote>
+<hr />
+<h3 id="32-l2">3.2 L2 标的与商务条款</h3>
+<h4 id="321">3.2.1 标的描述</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要求</th>
+<th>反例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>名称与规格</td>
+<td>名称、品牌、型号、规格、材质、产地、技术参数</td>
+<td>「一批办公用品」「若干软件」</td>
+</tr>
+<tr>
+<td>数量与单位</td>
+<td>数量、计量单位、溢短装与损耗率</td>
+<td>单位缺失（吨/件/台）</td>
+</tr>
+<tr>
+<td>质量标准</td>
+<td>国标/行标/企标/双方确认的样品或技术文件，须<strong>指明具体编号与版本</strong></td>
+<td>「符合国家标准」不写是哪一项</td>
+</tr>
+<tr>
+<td>服务类标的</td>
+<td>用 SOW（工作说明书）描述范围、交付物、里程碑</td>
+<td>只写「提供咨询服务」</td>
+</tr>
+<tr>
+<td>配套文件</td>
+<td>技术协议、图纸、报价单、需求文档作为附件并明确效力顺序</td>
+<td>附件未签、未编版本号</td>
+</tr>
+</tbody>
+</table>
+<h4 id="322">3.2.2 价格、税率与发票</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+<th>常见坑</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>含税/不含税</td>
+<td>必须写明，且注明税率与税目</td>
+<td>「合同价 100 万」——含不含税吵半年</td>
+</tr>
+<tr>
+<td>税率变化</td>
+<td>约定税率调整机制（政策性调整时价款如何变动）</td>
+<td>税率下调，供方吃掉差额</td>
+</tr>
+<tr>
+<td>发票类型</td>
+<td>增值税专用发票 / 普通发票，开票时限、开票信息</td>
+<td>收到普票不能抵扣</td>
+</tr>
+<tr>
+<td>付款与开票顺序</td>
+<td>先票后款 or 先款后票，是否构成付款前置条件</td>
+<td>供方不开票，买方拒付是否构成违约</td>
+</tr>
+<tr>
+<td>发票瑕疵救济</td>
+<td>约定发票不合规时的补开、换开及赔偿责任</td>
+<td>只写「应开具发票」，无违约后果</td>
+</tr>
+<tr>
+<td>价款构成</td>
+<td>单价、总价、税费、运费、保险、安装调试、备件是否已包含</td>
+<td>后续追加费用</td>
+</tr>
+</tbody>
+</table>
+<h4 id="323">3.2.3 支付条款（实务争议第一名）</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>比例结构</td>
+<td>预付款/到货款/验收款/质保金的百分比，合计必须 = 100%</td>
+</tr>
+<tr>
+<td>账期与起算点</td>
+<td>「收到发票后 30 日」还是「验收合格后 30 日」，起算点必须唯一可确定</td>
+</tr>
+<tr>
+<td>付款前置单据</td>
+<td>发票、验收单、进度确认单、保函——清单化列明</td>
+</tr>
+<tr>
+<td>付款条件可达成性</td>
+<td>条件是否由对方单方控制（如「买方满意后付款」→ 无效或条件成就拟制）</td>
+</tr>
+<tr>
+<td>账户信息</td>
+<td>户名、开户行、账号，且户名须与主体一致；变更账户须书面确认（防诈骗）</td>
+</tr>
+<tr>
+<td>逾期付款</td>
+<td>利息或违约金的计算方式与标准</td>
+</tr>
+<tr>
+<td>资金合规</td>
+<td>是否涉及商业贿赂、返利、账外支付</td>
+</tr>
+</tbody>
+</table>
+<h4 id="324">3.2.4 交付、验收与质保</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>交付时间</td>
+<td>具体日期或相对期限，起算点明确（合同生效日？预付款到账日？）</td>
+</tr>
+<tr>
+<td>交付地点与方式</td>
+<td>送达即视为交付 / 签收单 / 物流单据</td>
+</tr>
+<tr>
+<td>风险转移</td>
+<td>交付主义 vs 特定地点（如 FOB/EXW/DAP/DDP 术语）——<strong>风险转移点 ≠ 所有权转移点，须分别约定</strong></td>
+</tr>
+<tr>
+<td>所有权保留</td>
+<td>是否约定价款未付清前所有权保留，及登记对抗问题</td>
+</tr>
+<tr>
+<td>验收标准与期限</td>
+<td>标准（附件/技术文件）、期限、主体（谁验收）、方式（抽检/全检）</td>
+</tr>
+<tr>
+<td>视为验收</td>
+<td>约定「逾期未提出异议视为验收合格」，绑定明确期限（如 10 个工作日）</td>
+</tr>
+<tr>
+<td>验收不合格救济</td>
+<td>修理/重做/退货/减价/解除，以及<strong>次数上限</strong>（防止无限整改拖死项目）</td>
+</tr>
+<tr>
+<td>质保期与保修</td>
+<td>起算点（验收合格日/交付日）、期限、范围、响应时限（SLA）、费用承担</td>
+</tr>
+<tr>
+<td>备件与文档</td>
+<td>备件供应承诺、操作手册、源代码/设计文档交付</td>
+</tr>
+</tbody>
+</table>
+<h4 id="325">3.2.5 一致性交叉检查（可用规则引擎自动做）</h4>
+<table>
+<thead>
+<tr>
+<th>检查项</th>
+<th>方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>金额大小写一致</td>
+<td>正则比对中文大写与小写</td>
+</tr>
+<tr>
+<td>总价 = 单价 × 数量</td>
+<td>数学校验</td>
+</tr>
+<tr>
+<td>日期逻辑</td>
+<td>签订日 ≤ 生效日 ≤ 交付日 ≤ 验收日 ≤ 质保到期日；付款节点不得早于前置事件</td>
+</tr>
+<tr>
+<td>比例合计</td>
+<td>各期付款比例之和 = 100%，质保金比例与退还条件对应</td>
+</tr>
+<tr>
+<td>期限一致</td>
+<td>正文期限 vs 附件/SOW 期限</td>
+</tr>
+<tr>
+<td>主体一致</td>
+<td>全文主体名称、账户户名一致</td>
+</tr>
+<tr>
+<td>交叉引用有效</td>
+<td>「见第 X 条」的 X 条是否存在，引用内容是否匹配</td>
+</tr>
+<tr>
+<td>附件齐全</td>
+<td>附件清单列出的每一份附件是否实际存在并已签</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="33-l3">3.3 L3 权利义务配置</h3>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>典型失衡表现</th>
+<th>修改方向</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>履行顺序</td>
+<td>未约定谁先履行 → 同时履行抗辩 vs 先后履行抗辩</td>
+<td>明确先后顺序，绑定付款/交付节点</td>
+</tr>
+<tr>
+<td>单方变更权</td>
+<td>「甲方有权单方调整需求/规格/数量」</td>
+<td>设定变更流程、书面确认、计价规则、上限</td>
+</tr>
+<tr>
+<td>配合义务</td>
+<td>「乙方应无条件配合甲方一切要求」</td>
+<td>限定范围、时限、成本承担方</td>
+</tr>
+<tr>
+<td>排他 / 独家</td>
+<td>排他期、排他范围不清，无对价</td>
+<td>明确期限、地域、品类、最低采购量对价、违反后果</td>
+</tr>
+<tr>
+<td>最惠待遇</td>
+<td>无对价、无验证机制</td>
+<td>加对价（承诺量）与验证与救济</td>
+</tr>
+<tr>
+<td>知识产权归属</td>
+<td>只写「成果归甲方」未区分背景 IP / 前景 IP / 通用工具</td>
+<td>分层约定：背景 IP 保留、前景 IP 归属、通用组件许可回授</td>
+</tr>
+<tr>
+<td>职务成果与开源</td>
+<td>未处理员工成果、第三方开源组件</td>
+<td>加「不侵权声明 + 开源清单披露 + 侵权赔偿」</td>
+</tr>
+<tr>
+<td>商标与品牌</td>
+<td>授权范围、期限、品质控制、终止回收</td>
+<td>明确许可类型与终止后清理</td>
+</tr>
+<tr>
+<td>保密</td>
+<td>未约定保密期限、例外、返还销毁</td>
+<td>见 5.6 NDA 专项</td>
+</tr>
+<tr>
+<td>数据合规</td>
+<td>未约定个人信息角色、处理目的、期限、跨境</td>
+<td>按《个人信息保护法》委托处理/共同处理条款落地</td>
+</tr>
+<tr>
+<td>人员与服务水准</td>
+<td>无 SLA、无 KPI、无替换机制</td>
+<td>加 SLA 指标（可用率/响应/恢复）+ 扣款 + 退出</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="34-l4">3.4 L4 风险分配与救济</h3>
+<h4 id="341">3.4.1 违约责任</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+<th>风险提示</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>违约金基数</td>
+<td>按日万分之几 / 按合同总额百分比 / 按实际损失</td>
+<td>基数未写「合同总价」而写「未履行部分」，计算争议</td>
+</tr>
+<tr>
+<td>违约金上限</td>
+<td>通常 5%~20% 封顶</td>
+<td>无上限 → 对方可能主张过高；上限过低 → 约束力不足</td>
+</tr>
+<tr>
+<td>违约金与损失赔偿关系</td>
+<td>是否「违约金不足以弥补损失时可另行索赔」</td>
+<td>未写 → 可能被解释为损失赔偿的唯一救济</td>
+</tr>
+<tr>
+<td>违约金过高调减</td>
+<td>《民法典》第 585 条：过分高于损失的可请求调减；实务常引「超过损失 30%」为参考线（《民法典合同编通则解释》相关条款，条号〔待核〕）</td>
+<td>高额违约金≠可执行</td>
+</tr>
+<tr>
+<td>责任上限</td>
+<td>是否约定赔偿上限（合同总价/已付款金额）、是否排除间接损失</td>
+<td>上限过低会一起封住我方的索赔</td>
+</tr>
+<tr>
+<td>上限例外</td>
+<td>保密、知识产权侵权、故意或重大过失、人身损害<strong>应排除在上限之外</strong></td>
+<td>未排除 → 对方泄密也只赔 10%</td>
+</tr>
+</tbody>
+</table>
+<h4 id="342">3.4.2 担保与增信</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>保证方式</td>
+<td><strong>必须明确写「连带责任保证」</strong>——《民法典》第 686 条：没有约定或约定不明的，按<strong>一般保证</strong>承担（这与已被废止的《担保法》推定连带责任的规则相反），保证人享有先诉抗辩权</td>
+</tr>
+<tr>
+<td>保证期间</td>
+<td>约定明确期间；未约定或约定不明的，为主债务履行期限届满之日起 <strong>6 个月</strong>（《民法典》第 692 条）</td>
+</tr>
+<tr>
+<td>保证人资格</td>
+<td>是否为国家机关、公益性事业单位、企业分支机构（未经授权）等不得作保证人的主体</td>
+</tr>
+<tr>
+<td>抵质押</td>
+<td>标的权属清晰、是否已抵押、是否需办理登记（不动产抵押、股权质押须登记才设立）</td>
+</tr>
+<tr>
+<td>保证金 / 保函</td>
+<td>形式（银行保函/履约保函）、金额、退还条件与时限、见索即付与否</td>
+</tr>
+<tr>
+<td>安慰函 / 支持函</td>
+<td>通常不构成保证，仅为道义支持——<strong>不能当作担保用</strong></td>
+</tr>
+<tr>
+<td>其他增信</td>
+<td>所有权保留、共同债务人、差额补足、回购承诺（注意是否构成保证）</td>
+</tr>
+</tbody>
+</table>
+<h4 id="343">3.4.3 免责、不可抗力与情势变更</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>不可抗力定义</td>
+<td>列明情形（自然灾害、战争、疫情、政府行为），并约定<strong>通知义务与举证期限</strong></td>
+</tr>
+<tr>
+<td>通知与举证</td>
+<td>应在合理期限内（如 15 日）书面通知并提供证明，逾期不得免责</td>
+</tr>
+<tr>
+<td>持续影响</td>
+<td>超过一定期限（如 60 日）任一方有权解除并按已履行部分结算</td>
+</tr>
+<tr>
+<td>情势变更</td>
+<td>《民法典》第 533 条：基础条件重大变化且不属于商业风险的，可请求重新协商；协商不成请求法院/仲裁机构变更或解除</td>
+</tr>
+<tr>
+<td>免责条款效力红线</td>
+<td>《民法典》第 506 条：造成对方<strong>人身损害</strong>的免责条款、因<strong>故意或重大过失</strong>造成对方<strong>财产损失</strong>的免责条款<strong>无效</strong></td>
+</tr>
+<tr>
+<td>保险</td>
+<td>谁投保、险种、保额、被保险人/受益人、免赔额、未投保的后果</td>
+</tr>
+</tbody>
+</table>
+<h4 id="344">3.4.4 解除与退出</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>约定解除事由</td>
+<td>具体化（逾期交付超 X 日、验收连续两次不合格、资质被吊销……），避免「严重违约」这类不可判定的表述</td>
+</tr>
+<tr>
+<td>整改宽限期</td>
+<td>解除前先通知 + 给 cure period（如 30 日），程序上更稳</td>
+</tr>
+<tr>
+<td>根本违约界定</td>
+<td>明确哪些情形直接构成根本违约</td>
+</tr>
+<tr>
+<td>解除后果</td>
+<td>已完成部分如何结算、已付款项是否退还、资料/设备/账号移交、在制品与备件处理</td>
+</tr>
+<tr>
+<td>存续条款</td>
+<td>保密、知识产权、争议解决、责任限制条款在解除后继续有效</td>
+</tr>
+<tr>
+<td>单方任意解除</td>
+<td>是否给对方任意解除权（会否导致我方前期投入打水漂）</td>
+</tr>
+</tbody>
+</table>
+<h4 id="345">3.4.5 争议解决（最容易被忽视、后果最严重）</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+<th>常见致命错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>诉讼 vs 仲裁</td>
+<td>二选一，<strong>不能同时约定</strong>（或诉或裁条款可能被认定无效）</td>
+<td>「可向法院起诉，也可申请仲裁」</td>
+</tr>
+<tr>
+<td>仲裁机构</td>
+<td>必须写<strong>唯一、准确、真实存在的机构全称</strong></td>
+<td>写「仲裁委员会」「当地仲裁机构」→ 仲裁协议可能无效，只能诉讼</td>
+</tr>
+<tr>
+<td>管辖法院</td>
+<td>协议管辖只能选与争议有实际联系的地点（被告住所地、合同履行地、合同签订地、原告住所地、标的物所在地）——《民事诉讼法》（2023 修正）第 35 条</td>
+<td>选「甲方所在地」但甲方所在地与争议无实际联系</td>
+</tr>
+<tr>
+<td>级别与专属管辖</td>
+<td>不得违反级别管辖与专属管辖（不动产、港口作业、继承为专属管辖，民诉法第 34 条）</td>
+<td>约定不动产纠纷由外地法院管辖 → 无效</td>
+</tr>
+<tr>
+<td>适用法律</td>
+<td>涉外合同必写；国内合同通常不必</td>
+<td>涉外合同漏写</td>
+</tr>
+<tr>
+<td>送达地址条款</td>
+<td>明确送达地址、收件人、电话、邮箱，并约定「按此送达即视为有效送达，地址变更须书面通知」</td>
+<td><strong>漏写送达条款 = 对方失联时无法推进程序</strong></td>
+</tr>
+<tr>
+<td>律师费与保全费</td>
+<td>约定由违约方承担</td>
+<td>未约定 → 通常只能自担</td>
+</tr>
+<tr>
+<td>语言与文本</td>
+<td>多语言版本冲突时的优先顺序</td>
+<td>中英文本冲突无优先约定</td>
+</tr>
+<tr>
+<td>时效</td>
+<td>《民法典》第 188 条：诉讼时效 3 年</td>
+<td>遗忘时效导致胜诉权丧失</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="35-l5">3.5 L5 合规与程序</h3>
+<h4 id="351-153154156">3.5.1 效力红线（《民法典》第 153、154、156 条）</h4>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>举例</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>违反法律、行政法规的强制性规定</td>
+<td>无证经营特许业务、违法转包分包、变相高利贷、未招标直接发包必须招标项目</td>
+<td>合同无效（该强制性规定不导致无效的除外）</td>
+</tr>
+<tr>
+<td>违背公序良俗</td>
+<td>赌债、代孕、规避限购</td>
+<td>无效</td>
+</tr>
+<tr>
+<td>恶意串通损害他人合法权益</td>
+<td>双方合谋损害第三方或债权人利益</td>
+<td>无效</td>
+</tr>
+<tr>
+<td>部分无效</td>
+<td>仅某一条款无效，其余仍有效（第 156 条）；无效后返还财产、折价补偿、赔偿损失（第 157 条）</td>
+<td>条款级风险</td>
+</tr>
+</tbody>
+</table>
+<h4 id="352">3.5.2 行业与专项合规</h4>
+<table>
+<thead>
+<tr>
+<th>领域</th>
+<th>关注点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>招投标</td>
+<td>必须招标项目的范围；中标通知书发出后 30 日内订立书面合同；<strong>不得再行订立背离合同实质性内容的其他协议</strong>（《招标投标法》第 46 条）；围标串标</td>
+</tr>
+<tr>
+<td>建设工程</td>
+<td>资质等级匹配、禁止转包与违法分包、必须招标、政府投资项目审批、价款优先受偿（《民法典》第 807 条）</td>
+</tr>
+<tr>
+<td>反商业贿赂</td>
+<td>廉洁条款、佣金与居间费合理性、禁止账外支付、员工收受回扣的责任</td>
+</tr>
+<tr>
+<td>反垄断与反不正当竞争</td>
+<td>纵向价格限制（固定转售价格、限定最低转售价）、排他交易、地域限制的合规边界</td>
+</tr>
+<tr>
+<td>数据与个人信息</td>
+<td>处理个人信息须有合法性基础（《个人信息保护法》第 13 条）；委托处理须签协议并约定处理目的、期限、方式、安全措施（第 21 条）；数据出境需走安全评估/认证/标准合同等路径（第 38 条及配套规定）</td>
+</tr>
+<tr>
+<td>出口管制与制裁</td>
+<td>是否涉及受管制物项、技术出口、受限主体名单</td>
+</tr>
+<tr>
+<td>外汇与跨境</td>
+<td>跨境支付路径、外汇登记</td>
+</tr>
+<tr>
+<td>国资与上市公司</td>
+<td>评估、进场交易、审批、信息披露</td>
+</tr>
+<tr>
+<td>环保与安全</td>
+<td>安全生产责任划分、危废处理、排污许可</td>
+</tr>
+<tr>
+<td>劳动与用工</td>
+<td>外包 vs 派遣 vs 劳动关系的实质认定风险、社保、竞业限制与补偿</td>
+</tr>
+</tbody>
+</table>
+<h4 id="353">3.5.3 程序合规</h4>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内部授权</td>
+<td>是否在分管领导/法务/财务的审批权限内；超权限是否已上报</td>
+</tr>
+<tr>
+<td>关联交易</td>
+<td>关联方识别、定价公允性、审批与披露</td>
+</tr>
+<tr>
+<td>备案登记</td>
+<td>不动产租赁备案、抵押登记、商标/专利转让登记、外商投资信息报告</td>
+</tr>
+<tr>
+<td>公证与见证</td>
+<td>强制执行公证（可直接申请执行，省去诉讼）、重要合同见证</td>
+</tr>
+<tr>
+<td>印章使用登记</td>
+<td>用章审批与留痕</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="36-l6">3.6 L6 文本质量与形式</h3>
+<blockquote>
+<p>这一层最容易被轻视，却是「形式审查」的全部内容，也是 Agent 最容易自动化的一层。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>检查类别</th>
+<th>检查项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>结构完整性</strong></td>
+<td>是否有：定义与解释、双方权利义务、价格与支付、交付与验收、知识产权、保密、违约责任、不可抗力、合同变更与解除、通知与送达、转让与分包限制、完整协议条款、可分割性、适用法律与争议解决、附件清单、生效条件与份数</td>
+</tr>
+<tr>
+<td><strong>定义与术语</strong></td>
+<td>「工作日」vs「日历日」；「包括」是否含「但不限于」；「书面」是否含电子邮件/传真；金额币种是否统一；简称定义后是否一致使用</td>
+</tr>
+<tr>
+<td><strong>一致性</strong></td>
+<td>条款号引用有效；金额、日期、比例、主体、账户全文一致；中英文版本冲突优先顺序</td>
+</tr>
+<tr>
+<td><strong>冲突条款</strong></td>
+<td>专用条款 vs 通用条款优先顺序（如使用示范文本，须明确专用条款优先）；正文 vs 附件优先顺序</td>
+</tr>
+<tr>
+<td><strong>签署形式</strong></td>
+<td>签署页齐全；法定代表人或授权代表签字 + 盖章；<strong>骑缝章</strong>（多页）；日期填写完整；签署主体与首部一致</td>
+</tr>
+<tr>
+<td><strong>附件</strong></td>
+<td>附件清单与实物一一对应；附件已签署或明确「作为合同不可分割部分」；附件版本号</td>
+</tr>
+<tr>
+<td><strong>电子签署</strong></td>
+<td>是否为可靠电子签名（《电子签名法》相关要求〔待核〕）；平台存证</td>
+</tr>
+<tr>
+<td><strong>硬伤扫描</strong></td>
+<td>主体名称错字、金额错位、账号错误、税号错误、条款重复或遗漏、复制粘贴残留（上一份合同的主体名）</td>
+</tr>
+<tr>
+<td><strong>版本控制</strong></td>
+<td>定稿版本唯一、避免多版本同时流转签署；修改处双方签章确认</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4">4. 通用审查清单（可勾选 · 编号化）</h2>
+<blockquote>
+<p>编号规则：<code>GC-&lt;层&gt;-&lt;序号&gt;</code>。风险等级默认值：<strong>高</strong> = 不解决可能导致重大损失或条款无效；<strong>中</strong> = 影响可执行性或产生争议成本；<strong>低</strong> = 文本质量类。
+本清单可直接作为 Agent 的检查项种子集，也可打印为人工审查表。</p>
+</blockquote>
+<h3 id="41-l1-gc-1-xx">4.1 L1 主体与效力（GC-1-xx）</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>检查项</th>
+<th>通过标准</th>
+<th>风险</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GC-1-01</td>
+<td>主体名称一致性</td>
+<td>抬头/签署页/正文/发票/账户四处一致</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-1-02</td>
+<td>统一社会信用代码</td>
+<td>填写完整且与营业执照一致</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-1-03</td>
+<td>主体存续状态</td>
+<td>存续、非吊销/注销/破产/严重违法失信</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-1-04</td>
+<td>经营范围与许可</td>
+<td>涉许可经营者已取得有效许可文件</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-1-05</td>
+<td>签署人权限</td>
+<td>法代或其授权代表，授权书范围与期限覆盖</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-1-06</td>
+<td>印章类型适当</td>
+<td>公章或合同专用章</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-1-07</td>
+<td>内部决议</td>
+<td>需决议事项已取得并作为附件</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-1-08</td>
+<td>主体角色清晰</td>
+<td>签约/履约/付款/开票主体关系书面明确</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-1-09</td>
+<td>履约能力初查</td>
+<td>注册资本、涉诉、被执行情况无重大异常</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-1-10</td>
+<td>国资/上市程序</td>
+<td>评估、审批、披露程序已履行</td>
+<td>高</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-l2-gc-2-xx">4.2 L2 标的与商务（GC-2-xx）</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>检查项</th>
+<th>通过标准</th>
+<th>风险</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GC-2-01</td>
+<td>标的名称规格</td>
+<td>名称/型号/规格/技术参数明确</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-02</td>
+<td>数量与单位</td>
+<td>数量、计量单位、溢短装与损耗</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-03</td>
+<td>质量标准</td>
+<td>指明标准编号或双方确认的技术文件版本</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-04</td>
+<td>服务范围</td>
+<td>有 SOW/需求文档并作为附件</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-05</td>
+<td>含税与税率</td>
+<td>明确含税/不含税、税目、税率</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-06</td>
+<td>税率变动机制</td>
+<td>政策性调整时的价款处理规则</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-07</td>
+<td>发票类型与开票义务</td>
+<td>票种、时限、信息、不合规的补救与责任</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-08</td>
+<td>付款比例合计</td>
+<td>各期比例之和 = 100%</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-09</td>
+<td>付款起算点唯一</td>
+<td>起算事件唯一、可客观判定</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-10</td>
+<td>付款前置单据</td>
+<td>单据清单化、可获取</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-11</td>
+<td>付款条件可控性</td>
+<td>不依赖对方单方主观判断</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-12</td>
+<td>收款账户</td>
+<td>户名与主体一致；变更须书面确认</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-13</td>
+<td>逾期付款责任</td>
+<td>利息/违约金标准明确</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-14</td>
+<td>交付时间与起算</td>
+<td>具体、唯一、可判定</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-15</td>
+<td>交付地点与方式</td>
+<td>交付标记与凭证（签收单/物流单）</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-16</td>
+<td>风险转移点</td>
+<td>明确约定，与所有权转移区分</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-17</td>
+<td>所有权保留</td>
+<td>未付清前所有权保留及登记安排</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-18</td>
+<td>验收标准与期限</td>
+<td>标准、期限、验收主体明确</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-19</td>
+<td>视为验收</td>
+<td>逾期未异议视为合格的期限约定</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-20</td>
+<td>验收不合格救济</td>
+<td>修理/重做/减价/解除 + 次数上限</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-21</td>
+<td>质保期</td>
+<td>起算点、期限、范围、响应时限</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-22</td>
+<td>金额大小写一致</td>
+<td>完全一致</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-23</td>
+<td>总价=单价×数量</td>
+<td>数学校验通过</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-2-24</td>
+<td>日期逻辑链</td>
+<td>签订≤生效≤交付≤验收≤质保到期</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-25</td>
+<td>交叉引用有效</td>
+<td>所有内部引用指向存在条款</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-2-26</td>
+<td>附件齐全</td>
+<td>附件清单与实物一一对应</td>
+<td>高</td>
+</tr>
+</tbody>
+</table>
+<h3 id="43-l3-gc-3-xx">4.3 L3 权利义务（GC-3-xx）</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>检查项</th>
+<th>通过标准</th>
+<th>风险</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GC-3-01</td>
+<td>履行顺序</td>
+<td>明确先后履行关系</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-3-02</td>
+<td>单方变更权</td>
+<td>有流程、书面确认、计价规则、范围上限</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-3-03</td>
+<td>配合义务边界</td>
+<td>范围、时限、成本承担明确</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-3-04</td>
+<td>排他/独家</td>
+<td>期限、地域、品类、对价、违约后果</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-3-05</td>
+<td>最惠待遇</td>
+<td>有对价与验证机制</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-3-06</td>
+<td>知识产权分层</td>
+<td>背景 IP / 前景 IP / 通用工具分别约定</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-3-07</td>
+<td>不侵权保证</td>
+<td>供方保证 + 侵权赔偿责任</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-3-08</td>
+<td>开源披露</td>
+<td>提供开源组件清单</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-3-09</td>
+<td>商标与品牌许可</td>
+<td>许可类型、范围、期限、终止清理</td>
+<td>低</td>
+</tr>
+<tr>
+<td>GC-3-10</td>
+<td>数据与个人信息</td>
+<td>角色、目的、期限、安全措施、跨境路径</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-3-11</td>
+<td>服务水准 SLA</td>
+<td>指标 + 扣款 + 退出</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-3-12</td>
+<td>人员要求</td>
+<td>关键人员锁定、替换须同意</td>
+<td>低</td>
+</tr>
+</tbody>
+</table>
+<h3 id="44-l4-gc-4-xx">4.4 L4 风险分配与救济（GC-4-xx）</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>检查项</th>
+<th>通过标准</th>
+<th>风险</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GC-4-01</td>
+<td>违约金基数</td>
+<td>基数明确、可计算</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-02</td>
+<td>违约金上限</td>
+<td>合理区间（常见 5%~20%）</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-03</td>
+<td>违约金与损失关系</td>
+<td>明示不足时可否另行索赔</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-04</td>
+<td>赔偿范围</td>
+<td>是否含可得利益、是否排除间接损失</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-05</td>
+<td>责任上限</td>
+<td>有上限且金额合理</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-06</td>
+<td>上限例外</td>
+<td>保密/侵权/故意重大过失/人身损害不受限</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-07</td>
+<td>保证方式</td>
+<td><strong>明确「连带责任保证」</strong></td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-08</td>
+<td>保证期间</td>
+<td>明确约定（否则法定 6 个月）</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-09</td>
+<td>担保物权设立</td>
+<td>需登记的已登记</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-10</td>
+<td>保证金/保函</td>
+<td>形式、金额、退还条件与时限</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-11</td>
+<td>不可抗力定义</td>
+<td>情形列举明确</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-12</td>
+<td>不可抗力通知举证</td>
+<td>期限与方式、逾期后果</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-13</td>
+<td>长期影响处理</td>
+<td>超期解除权与结算规则</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-14</td>
+<td>免责条款合法性</td>
+<td>无人身损害免责、无故意重大过失免责</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-15</td>
+<td>保险安排</td>
+<td>投保方、险种、保额、受益人</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-16</td>
+<td>约定解除事由</td>
+<td>具体可判定</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-17</td>
+<td>整改宽限期</td>
+<td>解除前给 cure period</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-18</td>
+<td>解除后果</td>
+<td>结算、返还、移交、存续条款</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-19</td>
+<td>争议解决唯一</td>
+<td>诉讼与仲裁不并存</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-20</td>
+<td>仲裁机构名称</td>
+<td>唯一、准确、真实存在</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-21</td>
+<td>管辖法院</td>
+<td>与争议有实际联系（民诉法第 35 条）</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-22</td>
+<td>不违反专属管辖</td>
+<td>不动产等不约定异地（第 34 条）</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-23</td>
+<td>送达地址条款</td>
+<td>地址/收件人/电话/邮箱 + 变更通知义务</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-4-24</td>
+<td>律师费与保全费</td>
+<td>约定违约方承担</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-25</td>
+<td>文本优先顺序</td>
+<td>中英/正文附件冲突时优先顺序</td>
+<td>中</td>
+</tr>
+</tbody>
+</table>
+<h3 id="45-l5-gc-5-xx">4.5 L5 合规与程序（GC-5-xx）</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>检查项</th>
+<th>通过标准</th>
+<th>风险</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GC-5-01</td>
+<td>强制性规定体检</td>
+<td>无违反法律/行政法规强制性规定</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-5-02</td>
+<td>招投标合规</td>
+<td>必须招标项目已招标；合同与中标内容一致</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-5-03</td>
+<td>转包分包</td>
+<td>无违法转包分包（建设工程等）</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-5-04</td>
+<td>廉洁与反腐</td>
+<td>有廉洁条款、无账外支付</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-5-05</td>
+<td>数据合规</td>
+<td>合法性基础、委托处理条款、出境路径</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-5-06</td>
+<td>反垄断边界</td>
+<td>无固定转售价等高风险安排</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-5-07</td>
+<td>出口管制/制裁</td>
+<td>无受限物项与主体</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-5-08</td>
+<td>税务合规</td>
+<td>税目正确、无虚开风险</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-5-09</td>
+<td>内部审批</td>
+<td>在授权范围内或已上报</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-5-10</td>
+<td>关联交易</td>
+<td>识别、定价公允、审批披露</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-5-11</td>
+<td>备案登记</td>
+<td>应备案/登记事项已完成或已安排</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-5-12</td>
+<td>用工合规</td>
+<td>外包/派遣不被认定事实劳动关系</td>
+<td>中</td>
+</tr>
+</tbody>
+</table>
+<h3 id="46-l6-gc-6-xx">4.6 L6 文本质量与形式（GC-6-xx）</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>检查项</th>
+<th>通过标准</th>
+<th>风险</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GC-6-01</td>
+<td>结构完整</td>
+<td>必备条款无缺失</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-6-02</td>
+<td>定义清晰</td>
+<td>关键术语有定义且一致</td>
+<td>低</td>
+</tr>
+<tr>
+<td>GC-6-03</td>
+<td>专用 vs 通用条款优先</td>
+<td>明确优先顺序</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-6-04</td>
+<td>签署页规范</td>
+<td>签字+盖章+日期，主体一致</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-6-05</td>
+<td>骑缝章</td>
+<td>多页合同已加盖</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-6-06</td>
+<td>附件已签</td>
+<td>附件签署或明确效力</td>
+<td>高</td>
+</tr>
+<tr>
+<td>GC-6-07</td>
+<td>电子签名</td>
+<td>符合可靠电子签名要求</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-6-08</td>
+<td>硬伤扫描</td>
+<td>无错字、错账号、重复条款、模板残留</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-6-09</td>
+<td>版本唯一</td>
+<td>定稿唯一，无并行版本</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-6-10</td>
+<td>修改留痕</td>
+<td>谈判中修改处双方签章</td>
+<td>低</td>
+</tr>
+</tbody>
+</table>
+<p><strong>清单规模</strong>：L1 十项 + L2 二十六项 + L3 十二项 + L4 二十五项 + L5 十二项 + L6 十项 = <strong>95 项</strong>。</p>
+<hr />
+<h2 id="5">5. 分类型专项审查要点</h2>
+<blockquote>
+<p>通用清单是分母，专项要点是分子。以下按第一版 Agent 覆盖的五类合同 + 四类高频合同展开。</p>
+</blockquote>
+<h3 id="51">5.1 采购合同 / 供应商服务合同</h3>
+<table>
+<thead>
+<tr>
+<th>专项风险</th>
+<th>审查要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>规格锁定不足</td>
+<td>宁可写厚技术附件，也不要写「符合需方要求」</td>
+</tr>
+<tr>
+<td>付款与验收脱钩</td>
+<td>验收款必须绑定验收单，而非「到货后」</td>
+</tr>
+<tr>
+<td>质保金退还条件</td>
+<td>明确触发事件与时限，避免被无限扣留</td>
+</tr>
+<tr>
+<td>供应商锁定</td>
+<td>独家条款、API/数据格式封闭、备件断供</td>
+</tr>
+<tr>
+<td>交付延期罚则</td>
+<td>日罚率 + 上限 + 连续超期解除权</td>
+</tr>
+<tr>
+<td>反向责任</td>
+<td>我方作为采购方的协助义务边界（场地、资料、审批）</td>
+</tr>
+<tr>
+<td>框架协议陷阱</td>
+<td>只约价格不约数量 → 无最低采购量承诺，供方无履约保障</td>
+</tr>
+</tbody>
+</table>
+<h3 id="52">5.2 销售 / 客户服务合同</h3>
+<table>
+<thead>
+<tr>
+<th>专项风险</th>
+<th>审查要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>验收条款被滥用</td>
+<td>防止客户以「未验收」无限拖延付款；设置视为验收</td>
+</tr>
+<tr>
+<td>客户单方终止</td>
+<td>是否约定任意终止权及补偿（未摊销成本、违约金）</td>
+</tr>
+<tr>
+<td>无限责任</td>
+<td>责任上限能否谈下来；至少排除间接损失与可得利益</td>
+</tr>
+<tr>
+<td>服务水平罚则</td>
+<td>SLA 扣款上限、与解除权的关系</td>
+</tr>
+<tr>
+<td>客户资料合规</td>
+<td>客户提供的数据的权属、使用限制、返还与销毁</td>
+</tr>
+<tr>
+<td>回款保障</td>
+<td>分期比例、逾期利息、所有权保留、担保</td>
+</tr>
+<tr>
+<td>定制化风险</td>
+<td>定制需求变更的计价与工期顺延机制</td>
+</tr>
+</tbody>
+</table>
+<h3 id="53">5.3 房屋租赁合同</h3>
+<table>
+<thead>
+<tr>
+<th>专项风险</th>
+<th>审查要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>出租方权属</td>
+<td>产权证明、是否共有、是否已抵押、是否二房东（转租授权）</td>
+</tr>
+<tr>
+<td>租赁期限</td>
+<td>《民法典》第 705 条：<strong>不得超过 20 年</strong>，超过部分无效；第 707 条：6 个月以上应书面</td>
+</tr>
+<tr>
+<td>免租期与装修改造</td>
+<td>装修归属、退租时装修补偿、改造审批、消防验收</td>
+</tr>
+<tr>
+<td>押金</td>
+<td>金额、退还条件与时限、扣减情形</td>
+</tr>
+<tr>
+<td>租金调整</td>
+<td>递增机制、物业费与水电费的承担</td>
+</tr>
+<tr>
+<td>转租与分租</td>
+<td>是否允许、需否书面同意</td>
+</tr>
+<tr>
+<td>优先权</td>
+<td>优先承租权、承租人优先购买权（《民法典》第 726 条）</td>
+</tr>
+<tr>
+<td>解约与违约</td>
+<td>提前退租的违约金标准、空置损失计算</td>
+</tr>
+<tr>
+<td>备案</td>
+<td>租赁备案登记义务</td>
+</tr>
+</tbody>
+</table>
+<h3 id="54">5.4 软件开发 / 技术服务合同</h3>
+<table>
+<thead>
+<tr>
+<th>专项风险</th>
+<th>审查要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>需求基线</td>
+<td>需求文档作为附件 + 变更控制流程（谁批准、如何计价、工期如何顺延）</td>
+</tr>
+<tr>
+<td>里程碑与验收</td>
+<td>里程碑与付款绑定；验收标准客观化（不写「甲方满意」）</td>
+</tr>
+<tr>
+<td>知识产权</td>
+<td>背景 IP（乙方通用框架/组件）保留 + 前景 IP 归属 + 许可回授</td>
+</tr>
+<tr>
+<td>源码与文档</td>
+<td>是否交付源码、部署文档、设计文档；第三方开源清单</td>
+</tr>
+<tr>
+<td>人员与连续性</td>
+<td>关键人员锁定、替换须审批、知识转移义务</td>
+</tr>
+<tr>
+<td>数据安全</td>
+<td>开发环境数据、测试数据脱敏、访问控制、漏洞修复时限</td>
+</tr>
+<tr>
+<td>质保与运维</td>
+<td>免费质保期、运维 SLA、报价上限（后续涨价保护）</td>
+</tr>
+<tr>
+<td>项目失败处理</td>
+<td>阶段性交付与结算、终止时的成果与代码移交</td>
+</tr>
+</tbody>
+</table>
+<h3 id="55">5.5 建设工程 / 分包合同</h3>
+<table>
+<thead>
+<tr>
+<th>专项风险</th>
+<th>审查要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主体资质</td>
+<td>施工资质等级与工程规模匹配；禁止挂靠</td>
+</tr>
+<tr>
+<td>招标合规</td>
+<td>必须招标项目不得规避；合同不得背离中标实质性内容</td>
+</tr>
+<tr>
+<td>转包分包</td>
+<td>禁止转包与违法分包，明确合法分包范围</td>
+</tr>
+<tr>
+<td>价款与结算</td>
+<td>计价方式（固定总价/综合单价）、变更签证、结算审计条款、逾期不审视为认可</td>
+</tr>
+<tr>
+<td>工期与索赔</td>
+<td>开工条件、工期顺延事件、索赔程序与时限（逾期失权条款）</td>
+</tr>
+<tr>
+<td>质量与保修</td>
+<td>保修期（最低法定年限）、质量保证金比例与退还</td>
+</tr>
+<tr>
+<td>安全责任</td>
+<td>安全生产费用、事故责任划分、保险（建工险、意外险）</td>
+</tr>
+<tr>
+<td>优先受偿</td>
+<td>承包人的建设工程价款优先受偿权（《民法典》第 807 条）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="56-nda">5.6 保密协议（NDA）</h3>
+<p>必查八项：①保密信息定义（是否含口头信息、是否要求标记）；②例外情形（已公开、独立开发、合法获得）；③保密期限（合作结束后存续几年）；④使用限制（不得用于评估以外目的）；⑤披露例外（法律要求时如何处理：事先通知、协助抗辩）；⑥返还与销毁义务；⑦违约责任与救济（违约金或实际损失 + 禁令救济）；⑧期限（单向 vs 双向）。</p>
+<h3 id="57">5.7 借款 / 担保合同</h3>
+<p>必查：主体资格（非金融机构放贷的效力边界）、利率与费用（不得违反利率管制，超额部分不受保护）、用途限制与提前收回、还款计划与提前还款、担保方式与期间（见 3.4.2）、加速到期条款、抵质押登记、交叉违约条款。</p>
+<h3 id="58">5.8 用工相关（外包 / 派遣 / 劳务）</h3>
+<p>必查：合作性质界定（服务成果导向而非人员管理）、管理与指挥边界（避免事实用工）、结算依据（按成果而非人天）、社保与工伤责任、人员替换权、数据与保密、退出时人员安置。</p>
+<h3 id="59">5.9 股权 / 投资框架协议</h3>
+<p>必查：交易结构（增资/转让）、估值与调整机制（对赌/业绩承诺的效力边界）、交割先决条件、陈述与保证（含重大不利变化条款）、赔偿与托管（escrow）、反稀释、优先权（优先购买、共同出售、领售）、董事会与公司治理、竞业与团队锁定、退出机制（回购、IPO、清算优先）。</p>
+<hr />
+<h2 id="6">6. 审查方法与风险判定</h2>
+<h3 id="61-agent">6.1 三类审查手段（对应 Agent 的三层能力）</h3>
+<table>
+<thead>
+<tr>
+<th>手段</th>
+<th>适用检查项</th>
+<th>特点</th>
+<th>技术实现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>确定性规则</strong></td>
+<td>金额大小写、总价=单价×数量、比例合计、日期逻辑、交叉引用、主体名称一致、附件齐全、必备条款缺失、硬伤扫描（GC-2-22~26、GC-6-01~10）</td>
+<td>结果可复现、可解释、无幻觉</td>
+<td>结构化抽取 + 规则引擎 / 表达式校验</td>
+</tr>
+<tr>
+<td><strong>库比对</strong></td>
+<td>与标准模板、企业制度、历史合同、法律知识快照比对（GC-1-xx 资质文件、GC-5-xx 合规、GC-4-07 保证方式等）</td>
+<td>依赖知识底座质量与版本</td>
+<td>检索 + 版本化快照 + 条款级 diff</td>
+</tr>
+<tr>
+<td><strong>语义判断</strong></td>
+<td>义务平衡性、变更权公平性、责任上限合理性、验收标准客观性、定义歧义（GC-3-xx、GC-4-01~06）</td>
+<td>需要模型理解，存在不确定性与幻觉风险</td>
+<td>LLM + 证据绑定 + Validator + 人工复核</td>
+</tr>
+</tbody>
+</table>
+<p><strong>工程原则</strong>：能用规则的不要用模型。模型只做「理解、关联、解释、生成候选意见」，判定与依据必须由规则与原文证据约束。</p>
+<h3 id="62">6.2 风险等级判定标准</h3>
+<table>
+<thead>
+<tr>
+<th>等级</th>
+<th>判定标准</th>
+<th>处理要求</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>高（P0）</strong></td>
+<td>可能导致条款无效、重大金额损失、权利丧失、无法救济</td>
+<td>必须修改，未改不得签署</td>
+<td>仲裁机构名称错误、无管辖、保证方式未写连带、验收标准主观化、管辖违反专属管辖</td>
+</tr>
+<tr>
+<td><strong>中（P1）</strong></td>
+<td>影响可执行性、显著增加争议成本或履约不确定性</td>
+<td>建议修改，不改需书面说明理由</td>
+<td>付款起算点模糊、质保金退还无期限、责任上限缺例外</td>
+</tr>
+<tr>
+<td><strong>低（P2）</strong></td>
+<td>文本质量、表述优化、无实质风险</td>
+<td>可批量修正</td>
+<td>术语不统一、条文序号错乱、格式问题</td>
+</tr>
+<tr>
+<td><strong>提示（P3）</strong></td>
+<td>不构成风险，仅提示注意</td>
+<td>记录备查</td>
+<td>商业条款对价偏高、非合同义务的商务安排</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63">6.3 意见口径（三档）</h3>
+<table>
+<thead>
+<tr>
+<th>档位</th>
+<th>表述</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>必改</strong></td>
+<td>「该条款……，导致……，应修改为……」</td>
+<td>不修改将产生明确法律或商业风险</td>
+</tr>
+<tr>
+<td><strong>建议改</strong></td>
+<td>「建议调整为……」</td>
+<td>有利于本方立场，属博弈空间</td>
+</tr>
+<tr>
+<td><strong>提示</strong></td>
+<td>「请关注……」</td>
+<td>需业务判断，非法律风险</td>
+</tr>
+</tbody>
+</table>
+<h3 id="64">6.4 依据引用规范（效力层级）</h3>
+<p>引用依据必须标明层级，<strong>不得把示范文本、地方口径、案例写成「法律规定」</strong>：</p>
+<p><code>法律 &gt; 行政法规 &gt; 司法解释 &gt; 部门规章 &gt; 地方性法规/地方司法口径 &gt; 行业示范文本（非强制） &gt; 指导性案例 &gt; 典型案例 &gt; 学理观点</code></p>
+<h3 id="65">6.5 不确定性的处理规则</h3>
+<ol>
+<li>拿不准的条款号，标 <strong>〔待核〕</strong> 并给出检索路径，<strong>禁止编造</strong>。</li>
+<li>涉及法律版本变动的，须区分<strong>合同签订日对应的法律版本</strong>与<strong>当前审查日有效版本</strong>。</li>
+<li>无法从合同原文得到证据的结论，标为「模型推断」或「企业制度判断」，与法律结论分栏呈现。</li>
+<li>被推翻的结论要<strong>主动撤回</strong>并说明前次说法有误。</li>
+</ol>
+<hr />
+<h2 id="7-top-15">7. 最高频 Top 15 风险点（按实务出现频次）</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>风险点</th>
+<th>出现频率</th>
+<th>后果</th>
+<th>修法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>付款起算点模糊（「验收后付款」但验收无标准）</td>
+<td>极高</td>
+<td>回款无限期拖延</td>
+<td>绑定客观单据 + 视为验收条款</td>
+</tr>
+<tr>
+<td>2</td>
+<td>验收标准主观化（「甲方满意」）</td>
+<td>极高</td>
+<td>争议无法判定</td>
+<td>客观化指标或第三方检测</td>
+</tr>
+<tr>
+<td>3</td>
+<td>无责任上限 / 无间接损失排除</td>
+<td>高</td>
+<td>潜在无限责任</td>
+<td>加上限 + 排除间接损失 + 例外清单</td>
+</tr>
+<tr>
+<td>4</td>
+<td>违约金过高或过低，且未联动损失赔偿</td>
+<td>高</td>
+<td>条款被调减或约束不足</td>
+<td>合理区间 + 不足可另行索赔</td>
+</tr>
+<tr>
+<td>5</td>
+<td>保证方式未写「连带责任保证」</td>
+<td>高</td>
+<td>依《民法典》第 686 条推定为一般保证，先诉抗辩权阻碍追偿</td>
+<td>明确写连带</td>
+</tr>
+<tr>
+<td>6</td>
+<td>仲裁机构名称不准确</td>
+<td>高</td>
+<td>仲裁协议无效，被迫诉讼</td>
+<td>写唯一准确全称</td>
+</tr>
+<tr>
+<td>7</td>
+<td>遗漏送达地址条款</td>
+<td>高</td>
+<td>对方失联时程序推进困难</td>
+<td>加送达条款 + 变更通知义务</td>
+</tr>
+<tr>
+<td>8</td>
+<td>知识产权归属只写一句「归甲方」</td>
+<td>高</td>
+<td>背景 IP 与通用工具争议</td>
+<td>三层分层约定 + 许可回授</td>
+</tr>
+<tr>
+<td>9</td>
+<td>附件未签署/未列入清单</td>
+<td>高</td>
+<td>附件效力争议</td>
+<td>附件签署并明确为合同组成部分</td>
+</tr>
+<tr>
+<td>10</td>
+<td>金额大小写不一致 / 比例合计不等于 100%</td>
+<td>中高</td>
+<td>价款争议</td>
+<td>规则化自动校验</td>
+</tr>
+<tr>
+<td>11</td>
+<td>单方变更权无边界</td>
+<td>中高</td>
+<td>范围蔓延、成本失控</td>
+<td>变更流程 + 书面确认 + 计价规则</td>
+</tr>
+<tr>
+<td>12</td>
+<td>缺少解除后果与结算条款</td>
+<td>中高</td>
+<td>中途终止时无法结算</td>
+<td>约定结算与移交规则</td>
+</tr>
+<tr>
+<td>13</td>
+<td>知识产权/保密责任被套进责任上限</td>
+<td>中</td>
+<td>泄密只赔上限金额</td>
+<td>例外清单排除上限</td>
+</tr>
+<tr>
+<td>14</td>
+<td>违反专属管辖或选无实际联系法院</td>
+<td>中</td>
+<td>管辖约定无效</td>
+<td>民诉法第 35 条约束下选择</td>
+</tr>
+<tr>
+<td>15</td>
+<td>签署页缺骑缝章、多页被替换</td>
+<td>中</td>
+<td>举证困难</td>
+<td>骑缝章 + 每页签署 + 留存原件</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8">8. 审查输出物标准形态</h2>
+<h3 id="81">8.1 单条意见字段（可直接作为数据模型）</h3>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>意见编号</td>
+<td>唯一标识，便于追踪</td>
+</tr>
+<tr>
+<td>位置</td>
+<td>章节号 / 页码 / 条款号 / 字符区间（支持原文定位高亮）</td>
+</tr>
+<tr>
+<td>原文摘录</td>
+<td>被审查的原文片段（证据绑定，不得改写）</td>
+</tr>
+<tr>
+<td>问题描述</td>
+<td>风险是什么、为什么会造成损失</td>
+</tr>
+<tr>
+<td>依据</td>
+<td>法律条文 / 企业制度 / 判例 / 惯例，须标效力层级</td>
+</tr>
+<tr>
+<td>风险等级</td>
+<td>高 / 中 / 低 / 提示</td>
+</tr>
+<tr>
+<td>风险类别</td>
+<td>主体 / 商务 / 权利义务 / 救济 / 合规 / 文本</td>
+</tr>
+<tr>
+<td>意见档位</td>
+<td>必改 / 建议改 / 提示</td>
+</tr>
+<tr>
+<td>建议改法</td>
+<td>给出可直接替换的表述或修改方向</td>
+</tr>
+<tr>
+<td>责任方</td>
+<td>若为流程问题，标明责任部门</td>
+</tr>
+<tr>
+<td>结论状态</td>
+<td>待处理 / 已接受 / 已驳回 / 需业务确认</td>
+</tr>
+<tr>
+<td>人工修订</td>
+<td>人工对风险等级或结论的调整（保留原始值）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="82">8.2 交付物构成</h3>
+<ol>
+<li><strong>审查结论摘要页</strong>：风险计数（按等级/类别）、总体放行建议（可签 / 附条件可签 / 需重大修改后重审）。</li>
+<li><strong>风险清单</strong>：按风险等级排序，逐条含上述字段。</li>
+<li><strong>改法对照表</strong>：原文 vs 建议文，双方可谈。</li>
+<li><strong>覆盖与缺口说明</strong>：哪些检查项未覆盖及原因（资料缺失、需业务判断）。</li>
+<li><strong>依据与时效说明</strong>：引用了哪些法律文本、快照版本、检索时间。</li>
+</ol>
+<hr />
+<h2 id="a">附录 A：法律依据索引（含待核标注）</h2>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>依据</th>
+<th>条号</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>合同内容一般条款</td>
+<td>民法典</td>
+<td>470</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>格式条款提示说明义务 / 无效情形</td>
+<td>民法典</td>
+<td>496 / 497</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>免责条款无效（人身损害、故意或重大过失）</td>
+<td>民法典</td>
+<td>506</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>违反强制性规定 / 公序良俗无效</td>
+<td>民法典</td>
+<td>153</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>恶意串通无效</td>
+<td>民法典</td>
+<td>154</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>部分无效、无效后果</td>
+<td>民法典</td>
+<td>156 / 157</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>诉讼时效 3 年</td>
+<td>民法典</td>
+<td>188</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>情势变更</td>
+<td>民法典</td>
+<td>533</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>法定解除</td>
+<td>民法典</td>
+<td>563</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>违约责任、损失赔偿（可预见规则）</td>
+<td>民法典</td>
+<td>577 / 584</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>违约金及调减</td>
+<td>民法典</td>
+<td>585</td>
+<td>已核（「超损失 30%」为实务参考线，源条〔待核〕）</td>
+</tr>
+<tr>
+<td>不可抗力、减损规则</td>
+<td>民法典</td>
+<td>590 / 591</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>保证方式推定（一般保证）</td>
+<td>民法典</td>
+<td>686</td>
+<td>已核（已二次查证）</td>
+</tr>
+<tr>
+<td>一般保证先诉抗辩权</td>
+<td>民法典</td>
+<td>687</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>保证期间（未约定为 6 个月）</td>
+<td>民法典</td>
+<td>692</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>租赁期限 20 年上限</td>
+<td>民法典</td>
+<td>705</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>租赁 6 个月以上书面形式</td>
+<td>民法典</td>
+<td>707</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>承租人优先购买权</td>
+<td>民法典</td>
+<td>726</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>建设工程价款优先受偿</td>
+<td>民法典</td>
+<td>807</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>协议管辖</td>
+<td>民事诉讼法（2023 修正）</td>
+<td>35</td>
+<td>已核（已二次查证）</td>
+</tr>
+<tr>
+<td>专属管辖</td>
+<td>民事诉讼法（2023 修正）</td>
+<td>34</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>招标后 30 日签约、不得背离实质性内容</td>
+<td>招标投标法</td>
+<td>46</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>个人信息处理合法性基础 / 委托处理 / 跨境</td>
+<td>个人信息保护法</td>
+<td>13 / 21 / 38</td>
+<td>已核</td>
+</tr>
+<tr>
+<td>调整违约金的具体口径</td>
+<td>民法典合同编通则解释</td>
+<td>—</td>
+<td>〔待核〕</td>
+</tr>
+<tr>
+<td>担保决议要求、电子签名可靠性标准等</td>
+<td>公司法 / 电子签名法</td>
+<td>—</td>
+<td>〔待核〕</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>使用提醒</strong>：上表「已核」指已对照权威公开文本核对条号与要点；具体案件引用前仍建议以最新有效文本（北大法宝等）再确认一次，尤其是司法解释类文件的条号会随修订变动。</p>
+</blockquote>
+<hr />
+<h2 id="b">附录 B：审查术语速查</h2>
+<table>
+<thead>
+<tr>
+<th>术语</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>先诉抗辩权</td>
+<td>一般保证的保证人在主合同未经审判/仲裁并就债务人财产强制执行仍不能履行前，可拒绝承担保证责任</td>
+</tr>
+<tr>
+<td>视为验收</td>
+<td>约定逾期未提异议即视为验收合格，用以对抗拖延</td>
+</tr>
+<tr>
+<td>Cure Period</td>
+<td>违约后的整改宽限期，期满未改方可解除</td>
+</tr>
+<tr>
+<td>交叉违约</td>
+<td>一方对第三方违约也被视为对本合同违约，触发救济</td>
+</tr>
+<tr>
+<td>加速到期</td>
+<td>特定情形下全部债务立即到期</td>
+</tr>
+<tr>
+<td>责任上限</td>
+<td>一方赔偿总额的封顶金额</td>
+</tr>
+<tr>
+<td>间接损失</td>
+<td>非直接因果的衍生损失（如利润损失、商誉损失），常被排除</td>
+</tr>
+<tr>
+<td>背景 IP / 前景 IP</td>
+<td>合作前已有的知识产权 / 合作过程中新产生的知识产权</td>
+</tr>
+<tr>
+<td>效力性强制规定</td>
+<td>违反将导致合同无效的强制性规定（与「管理性强制规定」相对）</td>
+</tr>
+<tr>
+<td>〔待核〕</td>
+<td>条号或口径未完成最终核对，禁止直接引用</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="c">附录 C：可勾选审查表（打印版骨架）</h2>
+<pre><code>合同名称：____________  审查人：______  日期：______
+相对方：____________  合同类型：□采购 □销售/服务 □租赁 □软件 □工程 □其他
+
+一、主体与效力
+  □ 名称四处一致  □ 代码核对  □ 存续状态  □ 资质许可  □ 签署授权
+  □ 印章类型      □ 内部决议  □ 主体角色清晰
+二、标的与商务
+  □ 规格明确  □ 质量标准  □ 含税税率  □ 发票约定  □ 付款比例合计 100%
+  □ 起算点唯一 □ 前置单据  □ 账户户名一致  □ 交付/风险  □ 验收标准与期限
+  □ 视为验收  □ 质保期    □ 金额大小写  □ 日期逻辑  □ 附件齐全
+三、权利义务
+  □ 履行顺序  □ 变更权边界  □ 配合义务  □ 排他对价  □ IP 分层
+  □ 数据合规  □ SLA
+四、风险与救济
+  □ 违约金基数与上限  □ 损失赔偿关系  □ 责任上限与例外  □ 担保方式（连带）
+  □ 保证期间  □ 不可抗力  □ 解除事由与后果  □ 争议解决唯一  □ 管辖合法
+  □ 送达条款  □ 律师费承担
+五、合规与程序
+  □ 强制性规定  □ 招投标  □ 转包分包  □ 廉洁  □ 数据出境  □ 税务
+  □ 内部审批  □ 备案登记  □ 用工
+六、文本与形式
+  □ 结构完整  □ 术语定义  □ 优先顺序  □ 签署页  □ 骑缝章  □ 附件已签
+  □ 硬伤扫描  □ 版本唯一
+
+审查结论：□ 可签  □ 附条件可签（条件：______）  □ 需重大修改后重审
+高风险条目数：___  中风险：___  低风险：___
+</code></pre>
+<hr />
+<h2 id="d-agent">附录 D：面向「合同审查 Agent」的工程化映射</h2>
+<p>把本清单落到 <code>合同审查Agent需求说明</code>（v0.4）的架构上：</p>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>覆盖手段</th>
+<th>需要的底座</th>
+<th>覆盖率估计</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GC-1-xx 主体与效力</td>
+<td>库比对（营业执照/资质原件核验）+ 语义（角色错位）</td>
+<td>企业主体信息核验接口、附件解析</td>
+<td>中（依赖外部核验能力）</td>
+</tr>
+<tr>
+<td>GC-2-xx 标的与商务</td>
+<td><strong>确定性规则</strong>为主（22~26）+ 库比对（模板比对）+ 语义（标准客观性）</td>
+<td>条款结构化抽取、数值校验引擎、附件管理</td>
+<td><strong>高（优先落地）</strong></td>
+</tr>
+<tr>
+<td>GC-3-xx 权利义务</td>
+<td>语义判断为主</td>
+<td>LLM + 证据绑定 + Validator</td>
+<td>中</td>
+</tr>
+<tr>
+<td>GC-4-xx 风险与救济</td>
+<td>语义词条命中（如「连带责任保证」「仲裁委员会」）+ 规则（送达条款是否存在）</td>
+<td>高风险措辞词库、必备条款库、法律知识快照</td>
+<td><strong>高</strong></td>
+</tr>
+<tr>
+<td>GC-5-xx 合规与程序</td>
+<td>库比对 + 实时核验（高风险/低置信度时）</td>
+<td>法规快照 + 实时核查通道</td>
+<td>中（受资料时效制约）</td>
+</tr>
+<tr>
+<td>GC-6-xx 文本与形式</td>
+<td><strong>确定性规则</strong>可全覆盖</td>
+<td>文档解析 + 一致性校验</td>
+<td><strong>高</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>落地建议顺序</strong>（与需求说明 P0/P1 对齐）：</p>
+<ol>
+<li><strong>P0 先做规则可判定的那些</strong>：GC-2-22~26（金额/日期/引用/附件）、GC-6-xx（结构与形式）、GC-4-19~23（争议解决与送达必备条款检查）——不依赖法律知识库，结果可复现，验收门槛清楚。</li>
+<li><strong>P1 再做库比对类</strong>：企业模板比对（条款缺失与偏离）、必备条款库、保证方式等高风险措辞命中。</li>
+<li><strong>P2 最后做语义类</strong>：义务平衡性、责任上限合理性等需要模型判断的检查项，必须配证据绑定与人工复核。</li>
+</ol>
+<p><strong>每个检查项建议补齐三样东西</strong>（否则无法验收）：判定标准（什么样的文本算命中）、证据要求（需引用原文哪一段）、预期输出（风险等级与建议改法模板）。</p>
+<hr />
+<h2 id="e">附录 E：本清单的局限</h2>
+<ol>
+<li>本文侧重<strong>民商事常规合同</strong>，行业监管细则（金融、医药、军工、涉密）需另加专项子清单。</li>
+<li>风险等级的默认值是基于一般性判断的<strong>缺省值</strong>，实际项目须结合金额量级、我方议价地位、履约周期调整。</li>
+<li>第 5 章专项要点为要点式覆盖，不构成该类型合同的完整审查清单。</li>
+<li>〔待核〕项须在正式引用前完成权威数据库核对。</li>
+</ol>
+<hr />
+<p><em>本文档为内部方法论文档，不构成法律意见。正式对外引用前，法条与实务口径须重新核验。</em></p></main>
+</div>
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeBtn');
+  btn.addEventListener('click', function(){
+    root.classList.toggle('light');
+    btn.textContent = root.classList.contains('light') ? '深色' : '浅色';
+  });
+})();
+</script>
+</body>
+</html>
