@@ -369,7 +369,12 @@ async function runReview(options = {}) {
   }
   review.extraction_source = cacheStatus.hit ? "cache" : extractionModel ? "model" : "rules_only";
   review.extraction_cache = cacheStatus;
-  errors.push(...extracted.warnings.filter((warning) => warning.code.startsWith("EXTRACTION_")).map((warning) => ({ ...warning, stage: "extract" })));
+  // 只有真实失败才进 errors。诊断提示（校验剔除、预算升级后重试成功等）不进错误通道，
+  // 否则一条被本地校验剔除的候选就会把"条款事实抽取"阶段标成异常——而它其实是保护机制在正常工作。
+  // 全部告警仍然完整保存在 review.fact_warnings 里供界面与报告消费，信息不丢失。
+  // 失败名单与渲染层共用同一个模块，避免主进程/渲染层两处名单漂移。
+  const { isExtractionFailure } = require("../src/services/extractionNotices.mjs");
+  errors.push(...extracted.warnings.filter((warning) => isExtractionFailure(warning.code)).map((warning) => ({ ...warning, stage: "extract" })));
   progress("rules", 28);
   const checked = runContractChecks({
     document,

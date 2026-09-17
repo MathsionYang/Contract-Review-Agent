@@ -249,6 +249,7 @@ function splitBatchUnits(batch, model, scope = "full") {
 }
 
 // 丢弃原因的用户可读名称：告警、界面与报告共用同一套措辞。
+// 告警分级（哪些算真实失败）收敛在 src/services/reviewPipeline.mjs，主进程与渲染层共用同一份名单。
 const REJECTION_REASON_LABELS = {
   block_not_in_batch: "来源块不在请求范围",
   quote_not_found: "原文中不存在该引文",
@@ -582,7 +583,22 @@ async function extractWithModel(document, options = {}) {
       summary.phase = "batch_completed";
       report();
     }
-    summary.status = summary.rejected_fact_count ? "partial" : "completed";
+    // 抽取状态反映"这一轮模型到底有没有用"，而不是"有没有发生过任何拒绝"。
+    // 原先写成 `rejected_fact_count ? "partial" : "completed"`：拒绝哪怕 1 条也会把整个抽取阶段
+    // 降级，进而让流水线上"条款事实抽取"阶段显示为异常。
+    // 新判据要看拒绝的**原因**：
+    //  · 锚定类（block_not_in_batch / quote_not_found / clause_mismatch）——模型引文对不上原文，
+    //    是真正的输出错位；若几乎全批如此，说明抽取没起作用。
+    //  · 语义类（value_mismatch / obligation_incomplete / party_incomplete / unknown_type）——
+    //    模型抓对了位置但字段不完整，属于正常拦改。
+    //  · 与规则重复（duplicate_fact_count）——模型抓对了且规则层已有，完全正常，不该降级。
+    const ANCHOR_FAILURE_REASONS = ["block_not_in_batch", "quote_not_found", "clause_mismatch"];
+    const attempted = summary.accepted_fact_count + summary.duplicate_fact_count + summary.rejected_fact_count;
+    const anchorFailures = ANCHOR_FAILURE_REASONS.reduce((sum, reason) => sum + (summary.rejection_reasons?.[reason] || 0), 0);
+    summary.discard_ratio = attempted ? Number((summary.rejected_fact_count / attempted).toFixed(3)) : 0;
+    // 几乎全批被拒且主因是锚定失败 ⇒ 抽取确实没起作用；否则流程本身是完成的。
+    summary.status = attempted >= 5 && summary.rejected_fact_count / attempted >= 0.9 && anchorFailures / Math.max(1, summary.rejected_fact_count) >= 0.5
+      ? "partial" : "completed";
     if (summary.rejected_fact_count) {
       // 注意：falsy-zero here 必须显式判断，accepted 为 0 也走同一分支。
       // 丢弃是本地校验在拦截模型编造内容，属于保护机制而不是抽取失败；

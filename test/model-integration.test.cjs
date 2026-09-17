@@ -193,7 +193,10 @@ test("模型事实绑定真实块、字符范围和条款，丢弃伪造引文�
   assert.equal(ratio.source_refs[0].page, null);
   assert.equal(doc.text.slice(...ratio.source_refs[0].char_range), "百分之三十");
   assert.equal(result.facts.find((item) => item.origin === "model" && item.fact_type === "duration").calendar_type, "workday");
-  assert.equal(result.summary.status, "partial");
+  // 混杂结果（2 采纳 / 1 重复 / 5 剔除）说明校验在正常工作，不构成抽取失败。
+  // 状态降级只留给"几乎全批锚定失败"这类模型确实没用的情形，见 extraction-notices 测试。
+  assert.equal(result.summary.status, "completed");
+  assert.ok(result.summary.discard_ratio > 0 && result.summary.discard_ratio < 0.9);
 });
 
 test("抽取等待、校验、批次完成和结束实时报告，预览只包含原文和接纳事实", async () => {

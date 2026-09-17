@@ -1,9 +1,15 @@
 <script setup>
 import { computed, ref } from "vue";
-import { AlertTriangle, Check, ClipboardList, Filter, Search, X } from "lucide-vue-next";
+import { AlertTriangle, Check, ClipboardList, Filter, Info, Search, X } from "lucide-vue-next";
+import { isExtractionFailure } from "../services/extractionNotices.mjs";
 
 const props = defineProps({ review: { type: Object, default: null } });
 const emit = defineEmits(["close"]);
+// 诊断提示：不是失败，但用户需要知道（页码未定位、输出预算曾升级后重试成功等）。
+// 这些以前只塞进任务 errors 从没被渲染过——现在进了正确通道，这里负责显示它们。
+// 用与流水线同一份失败名单，避免两处判断漂移。
+const notices = computed(() => (props.review?.fact_warnings || [])
+  .filter((warning) => !isExtractionFailure(warning.code) && warning.code !== "EXTRACTION_FACTS_REJECTED"));
 
 const typeLabels = {
   money: "金额", ratio: "比例", duration: "期限", party: "主体", obligation: "义务",
@@ -140,6 +146,13 @@ function displayValue(fact) {
               说明：被丢弃<b>不等于</b>抽取失败。若原因是"原文中不存在该引文"或"数值与引文不一致"，
               说明本地校验拦住了模型编造的内容；这类条目不应进入风险清单。
             </p>
+
+            <div v-if="notices.length" class="extraction-notices">
+              <p class="extraction-notices-title"><Info :size="14" />抽取过程提示<span>不影响结论，供核对时参考</span></p>
+              <ul>
+                <li v-for="notice in notices" :key="notice.code"><strong>{{ notice.code }}</strong>{{ notice.message }}</li>
+              </ul>
+            </div>
           </section>
         </template>
       </div>
@@ -182,4 +195,12 @@ function displayValue(fact) {
 .extraction-reasons li small { color: var(--text-light); font-size: 10.5px; }
 .extraction-reasons-ok { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--green); font-size: 11.5px; }
 .extraction-note { margin: 12px 0 0; padding: 9px 10px; border-left: 3px solid var(--primary); border-radius: 5px; color: var(--text-muted); background: var(--surface); font-size: 11px; line-height: 1.7; }
+/* 过程提示：非失败信息，用中性蓝而非告警色，避免被读成故障。 */
+.extraction-notices { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); }
+.extraction-notices-title { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; color: var(--primary); font-size: 12px; font-weight: 600; }
+.extraction-notices-title span { color: var(--text-light); font-weight: 400; font-size: 10.5px; }
+.extraction-notices ul { margin: 0; padding: 0; list-style: none; }
+.extraction-notices li { padding: 6px 0; border-top: 1px dashed var(--border); color: var(--text-muted); font-size: 11px; line-height: 1.6; }
+.extraction-notices li:first-child { border-top: 0; }
+.extraction-notices li strong { margin-right: 6px; color: var(--text-light); font-family: var(--mono); font-size: 10px; }
 </style>

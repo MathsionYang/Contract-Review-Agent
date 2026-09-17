@@ -1,3 +1,8 @@
+import { LEGACY_NOTICE_CODES } from "./extractionNotices.mjs";
+
+// 供既有调用方沿用（ExtractionReview 等）。名单本身在 extractionNotices.mjs。
+export { EXTRACTION_FAILURE_CODES, isExtractionFailure } from "./extractionNotices.mjs";
+
 export const REVIEW_PIPELINE_STEPS = [
   { key: "parse", label: "解析合同", domain: "L6 文本与形式", description: "读取合同文本、页码和文件版本" },
   { key: "extract", label: "条款事实抽取", domain: "结构化事实与原文定位", description: "抽取模型、规则补充与原文校验" },
@@ -12,6 +17,16 @@ const TERMINAL_STATUSES = new Set(["completed", "partial", "failed", "cancelled"
 // 被用户停止或出现错误的任务：按错误所在阶段标注失败步骤，其余步骤保留已完成状态。
 const INTERRUPTED_STATUSES = new Set(["failed", "partial", "cancelled"]);
 const STEP_KEYS = new Set(REVIEW_PIPELINE_STEPS.map((step) => step.key));
+// 明确的失败码 → 阶段映射。原先用 `code.startsWith("EXTRACTION_")` 做前缀通配，
+// 会把未来新增的任何 EXTRACTION_* 默认当成故障，是"条款事实抽取"被误标异常的结构性来源。
+const STEP_FAILURE_CODES = new Map([
+  ["EXTRACTION_DEGRADED", "extract"],
+  ["EXTRACTION_OUTPUT_BUDGET_EXHAUSTED", "extract"],
+  ["REVIEW_CANCELLED", "extract"],
+  ["DOCUMENT_TEXT_UNAVAILABLE", "parse"],
+  ["CRITICAL_CHECKS_INCOMPLETE", "rules"],
+  ["CHECKLIST_REVIEW_REQUIRED", "rules"]
+]);
 
 function clampProgress(value) {
   return Math.min(Math.max(Number(value) || 0, 0), 100);
@@ -19,15 +34,16 @@ function clampProgress(value) {
 
 function errorStep(errors = []) {
   // 编排写入的 stage 就是最准确的阶段归属，优先采用，避免只能定位到抽取和检索两步。
-  const staged = errors.find((item) => STEP_KEYS.has(String(item?.stage || "")));
+  // 但诊断提示自带 stage 也只是"产生位置"，不代表该阶段失败，必须先排除。
+  const decisive = errors.filter((item) => !LEGACY_NOTICE_CODES.has(String(item?.code || "")));
+  const staged = decisive.find((item) => STEP_KEYS.has(String(item?.stage || "")));
   if (staged) return String(staged.stage);
-  if (errors.some((item) => String(item.code).startsWith("EXTRACTION_"))) return "extract";
-  if (errors.some((item) => String(item.code).startsWith("EMBEDDING_"))) return "retrieve";
-  const codes = errors.map((item) => String(item?.code || ""));
-  if (codes.some((code) => code === "DOCUMENT_TEXT_UNAVAILABLE" || code.startsWith("FILE_"))) return "parse";
-  if (codes.some((code) => code.startsWith("MODEL_"))) return "model";
-  if (codes.some((code) => code === "CRITICAL_CHECKS_INCOMPLETE" || code === "CHECKLIST_REVIEW_REQUIRED")) return "rules";
-  if (codes.some((code) => code.includes("VALIDAT") || code.startsWith("EXPORT_"))) return "validate";
+  const mapped = decisive.map((item) => STEP_FAILURE_CODES.get(String(item?.code || ""))).filter(Boolean);
+  if (mapped.length) return mapped[0];
+  if (decisive.some((item) => String(item.code).startsWith("EMBEDDING_"))) return "retrieve";
+  if (decisive.some((item) => String(item.code).startsWith("MODEL_"))) return "model";
+  if (decisive.some((item) => String(item.code).startsWith("FILE_"))) return "parse";
+  if (decisive.some((item) => String(item.code).includes("VALIDAT") || String(item.code).startsWith("EXPORT_"))) return "validate";
   return "";
 }
 
