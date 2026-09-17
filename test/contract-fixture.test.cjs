@@ -69,7 +69,9 @@ test("真实合同的 DOCX 与 PDF 均覆盖确定性关键风险并保留证据
     for (const clauseNo of ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6"]) {
       assert.ok(review.contract_facts.some((f) => f.fact_type === "penalty" && f.clause_no === clauseNo), clauseNo);
     }
-    assert.equal(review.task.status, "partial");
+    // 通用清单待核验属于审查结论而非流程故障：流程已跑完，状态为 completed，
+    // 但仍以 CHECKLIST_REVIEW_REQUIRED 阻断正式导出（见下方 formalReady）。
+    assert.equal(review.task.status, "completed");
     assert.ok(review.task.errors.some((error) => error.code === "CHECKLIST_REVIEW_REQUIRED" && error.check_ids.length > 0));
     const { validateReview } = require("../electron/validator.cjs");
     const draft = validateReview(review, { formats: ["PDF", "XLSX", "JSON"], mode: "draft" });

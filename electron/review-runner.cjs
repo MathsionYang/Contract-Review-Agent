@@ -571,9 +571,15 @@ async function runReview(options = {}) {
   const cancelledStep = review.task?.current_step || "model";
   progress(cancelled ? cancelledStep : "validate", cancelled ? Number(review.task?.progress) || 70 : 88, { riskCount: review.risks.length });
   review.review_version_id = `RV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${cancelled ? "CANCELLED" : "AUTO"}-${Date.now().toString(36)}`;
+  // CHECKLIST_REVIEW_REQUIRED / CRITICAL_CHECKS_INCOMPLETE 是审查结论而非流程故障：
+  // 它们表示"仍需材料或人工核验"，流程本身已跑完。若把它们算进 errors.length，
+  // 任务会变成 partial，界面上"确定性规则"阶段被标成失败，用户会以为抽取/规则阶段挂了。
+  // 这些结论仍保留在 errors 里供导出门禁识别，但不参与任务状态判定。
+  const blockingOutcomeCodes = new Set(["CHECKLIST_REVIEW_REQUIRED", "CRITICAL_CHECKS_INCOMPLETE"]);
+  const pipelineFailures = errors.filter((error) => !blockingOutcomeCodes.has(String(error?.code || "")));
   review.task = {
     ...(review.task || {}),
-    status: cancelled ? "cancelled" : errors.length ? "partial" : "completed",
+    status: cancelled ? "cancelled" : pipelineFailures.length ? "partial" : "completed",
     current_step: cancelled ? cancelledStep : "persist",
     progress: cancelled ? Math.min(Number(review.task?.progress) || 70, 99) : 100,
     errors

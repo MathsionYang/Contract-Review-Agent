@@ -92,6 +92,13 @@ const taskStatusClass = computed(() => "task-" + taskStatus.value);
 const taskStepLabel = computed(() => taskStepLabels[task.value.current_step] || "准备执行");
 const taskProgress = computed(() => Math.min(Math.max(Number(task.value.progress) || 0, 0), 100));
 const taskErrors = computed(() => Array.isArray(task.value.errors) ? task.value.errors : []);
+// 这两类不是流程故障，而是"审查结论"：结构化检查需要人工核验、关键检查缺输入。
+// 它们确实会阻断正式导出，但以 TASK_ERROR 呈现会让用户以为抽取/规则阶段跑挂了。
+// 因此与真正的错误分开呈现，措辞也改成"待处理事项"。
+const REVIEW_OUTCOME_CODES = new Set(["CHECKLIST_REVIEW_REQUIRED", "CRITICAL_CHECKS_INCOMPLETE"]);
+const isTaskFailure = (error) => !REVIEW_OUTCOME_CODES.has(String(error?.code || ""));
+const taskFailures = computed(() => taskErrors.value.filter(isTaskFailure));
+const taskTodoOutcomes = computed(() => taskErrors.value.filter((error) => !isTaskFailure(error)));
 const taskCanRetry = computed(() => ["partial", "failed", "cancelled"].includes(taskStatus.value) && !store.isBusy);
 // 运行中或正在停止时都显示停止入口：停止请求发出后按钮保持可见，但不可重复点击。
 const reviewRunning = computed(() => ["running", "cancelling"].includes(taskStatus.value) && store.isBusy);
@@ -545,7 +552,8 @@ function displaySize(bytes) {
                 <em>{{ step.status === "running" ? `${step.progress}% · ${step.description}` : step.status === "failed" ? "存在错误，需处理后重试" : step.status === "completed" ? `${step.riskCount} 条风险已纳入结果` : step.status === "queued" ? "任务已创建" : "等待前置阶段" }}</em>
               </article>
             </div>
-            <div v-if="taskErrors.length" class="task-error-list"><div v-for="error in taskErrors" :key="error.code + '-' + error.message" class="task-error-entry"><b>{{ error.code || "TASK_ERROR" }}</b> {{ error.message }}<details v-if="taskErrorDetails(error).length"><summary>{{ taskErrorDetails(error).length }} 项检查明细</summary><ul><li v-for="detail in taskErrorDetails(error)" :key="detail.check_id"><strong>{{ detail.check_id }}</strong>：{{ detail.message }}</li></ul></details><p v-if="error.suggestion">{{ error.suggestion }}</p></div></div>
+            <div v-if="taskFailures.length" class="task-error-list"><div v-for="error in taskFailures" :key="error.code + '-' + error.message" class="task-error-entry"><b>{{ error.code || "TASK_ERROR" }}</b> {{ error.message }}<details v-if="taskErrorDetails(error).length"><summary>{{ taskErrorDetails(error).length }} 项检查明细</summary><ul><li v-for="detail in taskErrorDetails(error)" :key="detail.check_id"><strong>{{ detail.check_id }}</strong>：{{ detail.message }}</li></ul></details><p v-if="error.suggestion">{{ error.suggestion }}</p></div></div>
+            <div v-if="taskTodoOutcomes.length" class="task-todo-list"><div v-for="error in taskTodoOutcomes" :key="error.code + '-' + error.message" class="task-todo-entry"><b>{{ error.message }}</b><span class="task-todo-tag">需人工核验</span><details v-if="taskErrorDetails(error).length"><summary>展开 {{ taskErrorDetails(error).length }} 项检查明细</summary><ul><li v-for="detail in taskErrorDetails(error)" :key="detail.check_id"><strong>{{ detail.check_id }}</strong>：{{ detail.message }}</li></ul></details><p v-if="error.suggestion">{{ error.suggestion }}</p></div></div>
             <div v-if="pipelineActiveStep && taskStatus === 'running'" class="pipeline-live-note"><LoaderCircle class="spin" :size="13" /><div>正在{{ pipelineActiveStep.label }}，当前已识别 {{ pipelineRiskCount }} 条候选风险<p v-if="store.reviewProgress?.latestRiskTitle" class="latest-risk-title">最新识别：{{ store.reviewProgress.latestRiskTitle }}</p></div></div>
             <div v-else-if="taskStatus === 'cancelled'" class="pipeline-live-note pipeline-live-note-cancelled"><Square :size="13" />审查已停止，已保留已生成的风险；可点击右侧重试按钮从当前配置重新开始</div>
             <div v-else-if="taskStatus === 'completed'" class="pipeline-live-note pipeline-live-note-success"><Check :size="13" />审查步骤已完成，可在右侧风险清单中逐条复核</div>

@@ -103,8 +103,13 @@ test("真实软件采购合同在无分析模型时仍执行结构化检查并�
   assert.equal(result.review.checklist_results.length, 95);
   assert.equal(result.review.checklist_coverage.total, 95);
   assert.ok(result.review.checklist_coverage.unverifiable > 0);
-  assert.equal(result.review.task.status, "partial");
+  // 金额一致性检查能给出 conflict，说明关键金额已被抽取而不只是"未能完成"。
+  // 剩余阻断来自通用清单待核验（人工门槛），不是流程故障，因此状态是 completed，
+  // 但正式导出仍被阻断——两条都要成立才算结论没被吞掉。
+  assert.equal(result.review.task.status, "completed");
   assert.equal(result.review.execution_summary.analysis.status, "not_configured");
+  const { validateReview } = require("../electron/validator.cjs");
+  assert.equal(validateReview(result.review, { formats: ["JSON"] }).formalReady, false, "待核验清单必须阻断正式导出");
   assert.ok(result.review.risks.some((item) => item.checklist_ids?.includes("GC-4-23")));
 });
 
@@ -126,7 +131,12 @@ test("模型收到检查计划且不能用空风险结果覆盖通用清单未�
   assert.ok(Array.isArray(payload.facts));
   assert.equal(result.review.execution_summary.analysis.status, "completed");
   assert.equal(result.review.checklist_results.find((c) => c.check_id === "GC-1-03").status, "unverifiable");
-  assert.equal(result.review.task.status, "partial");
+  // 未核验状态必须以阻断码表达，而不是把任务降级成"部分完成"让用户以为流程挂了。
+  // 这里同时锁住两件事：状态是 completed（流程跑完），导出仍被阻断（结论没被吞掉）。
+  assert.equal(result.review.task.status, "completed");
+  assert.ok(result.errors.some((error) => error.code === "CHECKLIST_REVIEW_REQUIRED"));
+  const { validateReview } = require("../electron/validator.cjs");
+  assert.equal(validateReview(result.review, { formats: ["JSON"] }).formalReady, false, "未核验状态必须阻断正式导出");
 });
 
 test("结构化文档的关键检查无法执行时任务降级为部分完成", async () => {
@@ -146,9 +156,12 @@ test("结构化文档的关键检查无法执行时任务降级为部分完成",
     state: { knowledge: { legalSnapshots: [], rules: [], policies: [] }, capabilities: { models: [] }, settings: {} }
   });
 
-  assert.equal(result.review.task.status, "partial");
+  // 关键检查缺输入是"仍需人工核验"的结论，不是流程故障：状态 completed，但导出仍被阻断。
+  assert.equal(result.review.task.status, "completed");
   assert.ok(result.errors.some((error) => error.code === "CRITICAL_CHECKS_INCOMPLETE"));
   assert.ok(result.review.coverage.unverifiable > 0);
+  const { validateReview } = require("../electron/validator.cjs");
+  assert.equal(validateReview(result.review, { formats: ["JSON"] }).formalReady, false, "关键检查未完成必须阻断正式导出");
 });
 
 test("95 项检查计划计入上下文预算，合同删节留痕，小窗口不发超长请求", async () => {

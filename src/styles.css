@@ -209,6 +209,16 @@ body { font-size: 13.5px; }
 .task-error-entry p { margin: 4px 0 0; }
 .task-error-list span { overflow-wrap: anywhere; }
 .task-error-list b { margin-right: 6px; font-family: var(--mono); font-size: 9.5px; }
+/* 待核验事项：属于审查结论而非流程故障，用琥珀色与真正的错误区分开，
+   避免用户把"需要人工核验"误读成"抽取/规则阶段跑挂了"。 */
+.task-todo-list { display: grid; gap: 8px; max-height: 180px; overflow: auto; padding: 7px 9px; border-left: 3px solid var(--amber); color: var(--amber); background: var(--amber-soft); font-size: 10.5px; line-height: 1.45; }
+.task-todo-entry { min-width: 0; overflow-wrap: anywhere; }
+.task-todo-entry b { margin-right: 6px; }
+.task-todo-tag { padding: 1px 6px; border: 1px solid currentColor; border-radius: 999px; font-size: 9.5px; white-space: nowrap; }
+.task-todo-entry details { margin-top: 4px; }
+.task-todo-entry summary { cursor: pointer; }
+.task-todo-entry ul { margin: 5px 0; padding-left: 18px; }
+.task-todo-entry p { margin: 4px 0 0; }
 .review-pipeline-card { display: grid; gap: 10px; padding: 11px 14px 12px; border-bottom: 1px solid var(--border); background: #fbfcff; }
 .review-pipeline-card.task-running { background: #f8faff; }
 .review-pipeline-card.task-partial, .review-pipeline-card.task-failed, .review-pipeline-card.task-cancelled { background: #fffaf0; }

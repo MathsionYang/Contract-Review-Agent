@@ -155,6 +155,21 @@ function unitPayload(unit) {
   return payload;
 }
 
+// 提示词要求模型用短字段名回传（i=来源块号、c=条款号、o=块内偏移），unitPayload 发送的也是同一套别名。
+// 但校验阶段读的是 block_id/clause_no/offset，两者不一致时每一条模型事实都会被判为
+// "来源块不在请求范围"而整批丢弃。这里在进入校验前把别名归一化，两种写法都接受。
+function decodeCandidate(candidate) {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return candidate;
+  const decoded = { ...candidate };
+  const blockId = candidate[UNIT_ALIAS.block_id] ?? candidate.block_id;
+  const clauseNo = candidate[UNIT_ALIAS.clause_no] ?? candidate.clause_no;
+  const offset = candidate[UNIT_ALIAS.offset] ?? candidate.offset;
+  if (blockId !== undefined) decoded.block_id = typeof blockId === "string" ? blockId : String(blockId);
+  if (clauseNo !== undefined) decoded.clause_no = clauseNo;
+  if (offset !== undefined) decoded.offset = Number(offset) || 0;
+  return decoded;
+}
+
 // 模型按短字段名回传，这里还原为与解析块一致的扁平结构，锚定逻辑无需感知字段别名。
 function decodeUnit(payload = {}) {
   const unit = { block_id: String(payload[UNIT_ALIAS.block_id] ?? payload.block_id ?? ""), text: String(payload[UNIT_ALIAS.text] ?? payload.text ?? ""),
@@ -385,12 +400,12 @@ function anchoredFact(candidate, document, batch) {
 
 function sameFact(a, b) {
   if (a.fact_type !== b.fact_type || a.clause_no !== b.clause_no) return false;
-  // 只在两侧都能解析出具体数值时才比较数值。
-  // 原实现写 `["money","ratio","duration"].includes(...) && String(a.value) !== String(b.value)`，
-  // 对 value 为 undefined 的规则事实会拿 "undefined" 去比较；
-  // 更要命的是下面的区间重叠判断 `a.char_range[0] < b.char_range[1]`：起点为 0 时结果为 0（falsy），
-  // 被 some() 当成"不重叠"，于是同一块内的不同数值无法判重（例如 2.3 条的 50% 与 634,000）。
-  // 这里显式转成布尔值，并只在两者都是有效数值时要求数值相同。
+  // 判重必须"类型相同 + 条款相同 + 数值相同 + 原文区间重叠"四条同时成立。
+  // 数值这条只在两侧都能解析成有限数值时才生效：原实现写
+  // `["money","ratio","duration"].includes(...) && String(a.value) !== String(b.value)`，
+  // 对 value 为 undefined 的规则事实会拿字符串 "undefined" 参与比较，
+  // 并且 "12" 与 "12.0" 这类同值异写会被误判为不同数值而漏判重复。
+  // 下面把区间重叠显式转成布尔值，避免把比较结果直接当条件返回。
   if (["money", "ratio", "duration"].includes(a.fact_type)) {
     const left = a.value ?? a.raw_text;
     const right = b.value ?? b.raw_text;
@@ -539,7 +554,9 @@ async function extractWithModel(document, options = {}) {
       if (!Array.isArray(response.data?.facts) || response.data.facts.length > 1000) throw Object.assign(new Error("条款抽取响应缺少有效 facts 数组"), { code: "MODEL_OUTPUT_INVALID" });
       summary.phase = "validating";
       report();
-      for (const candidate of response.data.facts) {
+      for (const raw of response.data.facts) {
+        // 先把模型回传的短字段名（i/c/o）归一化，否则来源块号拿不到，全部事实会被整批判为越界丢弃。
+        const candidate = decodeCandidate(raw);
         // 收敛输出范围：非本档位需要的类型直接丢弃，也不进入事实集，避免下游出现无消费者的数据。
         if (!allowedTypes.has(String(candidate?.fact_type || ""))) { summary.out_of_scope_fact_count += 1; continue; }
         const anchored = anchoredFact(candidate, document, batch);

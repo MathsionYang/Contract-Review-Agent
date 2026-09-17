@@ -20,52 +20,107 @@ const source = (patch = {}) => ({ file: "law.md", id: "law-v1", source_id: "law-
   clauses: [{ clause_no: "第五百七十七条", title: "违约责任", text: "当事人不履行义务，应承担相应责任。" }], ...patch });
 
 test("引文含修饰语时仍能解析数值，不再整条丢弃", async () => {
-  // 真实模型常把数值连同上下文一起引用，例如"即人民币 634,000 元""签订后 7 个工作日内"。
-  // 原实现要求引文恰好是纯数值，否则丢弃——这是抽取事实被大面积丢弃的主因。
-  const text = "2.3 本合同签订后 7 个工作日内，甲方向乙方支付合同总价款的 50%，即人民币 634,000 元。";
+  // 真实模型常把数值连同上下文一起引用（如"即人民币 634,000 元""签订后 7 个工作日内"）。
+  // 原实现要求引文恰好是纯数值，否则丢弃——这是抽取事实被大面积拒收的主因。
+  // 这里刻意混入规则层不产出的写法（中文数字比例 91%、中文数字期限 六个月），
+  // 以便区分"模型补出的新事实"与"与规则重复被合并的事实"。
+  const text = "2.3 甲方向乙方支付总价款的百分之九十一，即人民币 7,331 元，验收期为六个月。";
   const doc = document(text);
-  const cases = [
-    { fact_type: "money", value: "634000", raw_text: "即人民币 634,000 元" },
-    { fact_type: "money", value: "634000", raw_text: "支付合同总价款的 50%，即人民币 634,000 元" },
-    { fact_type: "ratio", value: 0.5, raw_text: "合同总价款的 50%" },
-    { fact_type: "duration", value: 7, raw_text: "本合同签订后 7 个工作日内", calendar_type: "workday" }
-  ];
-  for (const item of cases) {
-    const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [{ ...item, block_id: "b1" }] } }) });
-    assert.equal(result.summary.rejected_fact_count, 0, `${item.raw_text} 不应被丢弃`);
-    const fact = result.facts.find((entry) => entry.fact_type === item.fact_type);
-    assert.ok(fact, `${item.raw_text} 必须被采纳`);
-    assert.equal(String(fact.value), String(item.value));
-    // 引文里含修饰语时必须记录解析依据的数值片段，便于人工核对
-    if (item.raw_text.includes("支付") || item.raw_text.includes("签订后") || item.fact_type === "ratio") {
-      assert.ok(fact.value_span, `${item.raw_text} 应记录数值片段`);
-    }
-  }
+  const accepted = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    { fact_type: "ratio", value: 0.91, raw_text: "总价款的百分之九十一", block_id: "b1" },
+    { fact_type: "duration", value: 6, raw_text: "验收期为六个月", block_id: "b1", calendar_type: "month" },
+    { fact_type: "money", value: "7331", raw_text: "即人民币 7,331 元", block_id: "b1" }] } }) });
+  assert.equal(accepted.summary.rejected_fact_count, 0, "含修饰语的引文不应被丢弃");
+  const modelFacts = accepted.facts.filter((entry) => entry.origin === "model");
+  const byType = new Map(modelFacts.map((entry) => [entry.fact_type, entry]));
+  // 规则层只认 \d+%，中文数字比例只有模型能补出来；六个月的写法规则层同样不产出
+  assert.equal(byType.get("ratio")?.value, 0.91);
+  assert.equal(byType.get("duration")?.value, 6);
+  assert.equal(byType.get("duration")?.calendar_type, "month");
+  // 引文含修饰语时必须记录"数值来自哪几个字"，便于人工核对
+  assert.equal(byType.get("ratio")?.value_span, "百分之九十一");
+  assert.equal(byType.get("duration")?.value_span, "六个月");
+  // 金额与规则层重复：应被合并而不是丢弃（重复≠丢弃，是两条不同的计数）
+  assert.equal(accepted.summary.duplicate_fact_count, 1);
+  assert.ok(accepted.facts.some((entry) => entry.fact_type === "money" && String(entry.value) === "7331"));
+  assert.equal(accepted.summary.rejection_reasons.value_mismatch, undefined);
   // 数值被篡改时仍必须拒绝：放宽引文范围不等于放宽数值校验
   const tampered = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
-    { fact_type: "money", value: "999999", raw_text: "即人民币 634,000 元", block_id: "b1" }] } }) });
+    { fact_type: "money", value: "999999", raw_text: "即人民币 7,331 元", block_id: "b1" }] } }) });
   assert.equal(tampered.summary.accepted_fact_count, 0);
   assert.equal(tampered.summary.rejection_reasons.value_mismatch, 1);
 });
 
 test("同一条款内不同数值的事实不被误判为重复", async () => {
-  // 2.3 条同时含"50%"与"634,000"，两者起点可能都是块首偏移 0；
-  // 原实现用 `a.char_range[0] < b.char_range[1]` 做重叠判断，起点为 0 时结果为 0（falsy），
-  // 会被 some() 当成不重叠，从而把同块不同数值的事实错误合并。
-  const text = "2.3 支付合同总价款的 50%，即人民币 634,000 元。";
+  // sameFact 的四要素是"类型 + 条款 + 数值 + 区间重叠"。
+  // 这里注入一条与模型候选【区间完全相同但数值不同】的对照事实，
+  // 直接压住数值守卫：少了它，同区间的不同数值会被合并，模型事实凭空消失。
+  const text = "2.3 首期支付 12%，尾期支付 34%。";
+  const doc = document(text);
+  const injected = { facts: [{ fact_id: "fact_injected", fact_type: "ratio", raw_text: "50%", clause_no: "2.3", value: 0.5,
+    source_refs: [{ block_id: "b1", page: null, logical_page: 1, clause_no: "2.3", quote: "12%", char_range: [9, 12], range_scope: "block" }] }],
+    clauses: [], blocks: doc.blocks, text, warnings: [] };
+  const distinct = await extractWithModel(doc, { baseline: injected, model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    { fact_type: "ratio", value: 0.12, raw_text: "12%", block_id: "b1", clause_no: "2.3" }] } }) });
+  assert.equal(distinct.summary.rejected_fact_count, 0);
+  assert.equal(distinct.summary.duplicate_fact_count, 0, "区间重叠但数值不同，不得判为重复");
+  assert.equal(distinct.summary.accepted_fact_count, 1);
+  const ratios = distinct.facts.filter((entry) => entry.fact_type === "ratio").map((entry) => String(entry.value)).sort();
+  assert.deepEqual(ratios, ["0.12", "0.5"], "两个不同数值的事实都必须保留");
+  // 数值相同时仍然要合并：重复计数必须能被观察到
+  const repeated = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    { fact_type: "ratio", value: 0.12, raw_text: "12%", block_id: "b1", clause_no: "2.3" }] } }) });
+  assert.equal(repeated.summary.duplicate_fact_count, 1, "与规则事实数值相同应合并");
+  assert.equal(repeated.summary.accepted_fact_count, 0);
+});
+
+test("提示词发出的块号与校验认得的块号必须是同一套", async () => {
+  // 这是别名 bug 的根因契约：unitPayload 发出去的块号字段名，必须能被 anchoredFact 认出。
+  // 此前提示词发 i、校验读 block_id，导致模型事实整批以"来源块不在请求范围"丢弃。
+  const table = [{ block_id: "t1c1", page: null, logical_page: 1, text: "项目", table_ref: { table_id: "table_1", row: 1 } },
+    { block_id: "t1c2", page: null, logical_page: 1, text: "金额", table_ref: { table_id: "table_1", row: 1 } },
+    { block_id: "t1c3", page: null, logical_page: 1, text: "100", table_ref: { table_id: "table_1", row: 1 } }];
+  const doc = { text: "1.1 总价 100 元。", documentType: "docx", pages: [{ page: 1, text: "1.1 总价 100 元。" }],
+    blocks: [{ block_id: "b1", page: null, logical_page: 1, text: "1.1 总价 100 元。" }, ...table] };
+  const batches = extractionBatches(doc, model("extraction"), {});
+  assert.ok(batches.length >= 1);
+  for (const batch of batches) {
+    const sent = new Set();
+    for (const message of batch.messages || []) {
+      if (message.role !== "user") continue;
+      const payload = JSON.parse(message.content);
+      for (const block of payload.blocks || []) {
+        if (typeof block.i === "string") sent.add(block.i);
+        for (const cell of Array.isArray(block.r) ? block.r : []) if (typeof cell.i === "string") sent.add(cell.i);
+      }
+    }
+    const accepted = new Set(batch.blocks.map((block) => block.block_id));
+    for (const cell of batch.blocks) {
+      try { for (const item of JSON.parse(cell.line || "{}").cells || []) accepted.add(item.block_id); } catch (_error) { /* 非表格单元 */ }
+    }
+    for (const id of sent) assert.ok(accepted.has(id), `提示词发出块号 ${id} 但校验侧不认得，该块的事实会被整批丢弃`);
+  }
+});
+
+test("模型按提示词的短字段名回传时仍能定位来源块", async () => {
+  // 提示词要求用 i=来源块号、c=条款号、o=块内偏移，unitPayload 发送的也是同一套别名。
+  // 校验阶段读的却是 block_id/clause_no，两者不一致时每条事实都会以
+  // "来源块不在请求范围"被丢弃——实测真实抽取曾整批 79/79 全因此丢弃。
+  // 这里刻意只回传别名形状（不出现 block_id），锁死这条回归路径。
+  const text = "8.1 乙方应按附件三《服务水平协议》执行，服务费为人民币 634,000 元。";
   const doc = document(text);
   const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
-    { fact_type: "ratio", value: 0.5, raw_text: "50%", block_id: "b1", clause_no: "2.3" },
-    { fact_type: "money", value: "634000", raw_text: "634,000", block_id: "b1", clause_no: "2.3" }
-  ] } }) });
-  const values = result.facts.filter((fact) => fact.origin === "model").map((fact) => String(fact.value)).sort();
-  assert.deepEqual(values, ["0.5", "634000"], "两个不同数值的事实都必须保留");
-  // 完全相同的事实仍然要判重
-  const repeated = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
-    { fact_type: "money", value: "634000", raw_text: "634,000", block_id: "b1", clause_no: "2.3" },
-    { fact_type: "money", value: "634000", raw_text: "634,000", block_id: "b1", clause_no: "2.3" }
-  ] } }) });
-  assert.equal(repeated.summary.duplicate_fact_count, 1, "完全相同的重复仍应合并");
+    // 规则层不产出 reference 类型，确保观察到的确实是模型补出的事实
+    { fact_type: "reference", i: "b1", c: "8.1", raw_text: "附件三《服务水平协议》", value: "附件三《服务水平协议》" },
+    // 数值被改写：必须走到数值校验并按 value_mismatch 拒绝，
+    // 而不是在来源块这一步就以 block_not_in_batch 丢掉。
+    { fact_type: "money", value: "999", i: "b1", c: "8.1", raw_text: "人民币 634,000 元" }] } }) });
+  assert.equal(result.summary.rejection_reasons.block_not_in_batch, undefined, "别名形状不得被判为来源块越界");
+  assert.equal(result.summary.rejection_reasons.value_mismatch, 1, "数值不符应走到数值校验再拒绝");
+  const reference = result.facts.find((entry) => entry.origin === "model" && entry.fact_type === "reference");
+  assert.ok(reference, "别名声明的引用事实必须被采纳");
+  assert.equal(reference.clause_no, "8.1", "别名 c 必须解析为条款号");
+  assert.equal(reference.source_refs[0].block_id, "b1", "别名 i 必须解析为来源块号");
 });
 
 test("丢弃告警说明采纳与剔除情况，并指向核验窗口", async () => {
