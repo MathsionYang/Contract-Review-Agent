@@ -1,5 +1,6 @@
 // 所有渲染层本地能力都从这里经过，组件不直接访问 Node.js 或文件系统。
 import { toCloneable } from "./clonePayload.mjs";
+import { deleteReviewTask, reconcileDeletedTasks } from "./reviewTasks.mjs";
 
 const bridge = typeof window !== "undefined" ? window.contractApp : null;
 
@@ -40,6 +41,14 @@ export const electronApi = {
   runReview(payload) {
     if (!bridge?.runReview) return Promise.reject(new Error("当前页面未连接 Electron 审查执行能力"));
     return bridge.runReview(toCloneable(payload));
+  },
+  async deleteReviewTask(projectId) {
+    if (bridge) {
+      if (!bridge.deleteReviewTask) throw new Error("请重启桌面端以启用任务删除功能");
+      return bridge.deleteReviewTask(projectId);
+    }
+    const nextState = deleteReviewTask(readBrowserState(), projectId);
+    return this.saveState(nextState);
   },
   onReviewProgress(callback) {
     if (!bridge?.onReviewProgress) return () => {};
@@ -83,13 +92,16 @@ export const electronApi = {
   saveState(state) {
     const plainState = toCloneable(state);
     if (bridge?.saveState) return bridge.saveState(plainState);
-    window.localStorage.setItem("contract-review-state", JSON.stringify(plainState));
-    return Promise.resolve(plainState);
+    const nextState = reconcileDeletedTasks(plainState, readBrowserState());
+    window.localStorage.setItem("contract-review-state", JSON.stringify(nextState));
+    return Promise.resolve(nextState);
   },
   validateExport(payload) {
     if (!bridge?.validateExport) {
       return Promise.resolve({
         canExport: false,
+        mode: payload.mode || "formal",
+        warningCodes: [],
         items: [{ id: "bridge", label: "Electron 本地能力", status: "failed", code: "ELECTRON_BRIDGE_UNAVAILABLE", message: "浏览器预览未连接本地 Validator", suggestion: "请通过 Electron 桌面端执行导出" }],
         blockingCodes: ["ELECTRON_BRIDGE_UNAVAILABLE"]
       });

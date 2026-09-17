@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { resolveRefs } = require("./contract-evidence.cjs");
 const { assembleContext, hashText } = require("./context-assembler.cjs");
 const { invokeModel: defaultInvokeModel } = require("./model-gateway.cjs");
 const {
@@ -27,6 +28,7 @@ function errorResult(code, message, extra = {}) {
 
 function publicModel(model) {
   return {
+    configId: model?.configId || null,
     name: String(model?.name || ""),
     model_id: String(model?.modelId || ""),
     config_version: String(model?.version || "cfg-v1"),
@@ -47,8 +49,12 @@ function availableAnalysisModels(state = {}) {
 
 function resolveModel(state, review, modelName) {
   const models = availableAnalysisModels(state);
-  const preferred = String(modelName || review.config?.execution?.models?.analysis?.name || "");
-  return models.find((model) => model.name === preferred) || models[0] || null;
+  const preferred = String(modelName || review.config?.execution?.models?.analysis?.configId || review.config?.execution?.models?.analysis?.name || "");
+  if (!preferred) return models[0] || null;
+  const exact = models.find((model) => model.configId === preferred);
+  if (exact) return exact;
+  const matches = models.filter((model) => model.name === preferred);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function ensureReviewState(state, projectId) {
@@ -190,15 +196,135 @@ function normalizeCitations(rawCitations, available) {
   return result;
 }
 
+function contractPages(review) {
+  const pages = Array.isArray(review?.document?.pages) && review.document.pages.length
+    ? review.document.pages
+    : [{ page: 1, text: String(review?.document?.text || "") }];
+  return pages.map((item) => ({ page: Number(item.page) || 1, text: String(item.text || "") }));
+}
+
+function normalizedText(value) {
+  return String(value || "").replace(/[\s\u3000]+/g, " ").trim();
+}
+
+function clauseBefore(text, index) {
+  const prefix = String(text || "").slice(0, Math.max(0, index));
+  const matches = prefix.match(/(?:第\s*[一二三四五六七八九十百千万\d]+\s*条|(?:clause|section)\s*\d+(?:\.\d+)*)/gi);
+  return matches?.at(-1)?.replace(/\s+/g, "") || "";
+}
+
+function originalRange(rawText, normalizedQuote) {
+  const text = String(rawText || "");
+  const quote = String(normalizedQuote || "");
+  const directIndex = text.indexOf(quote);
+  if (directIndex >= 0) return { quote, index: directIndex };
+  const parts = quote.split(" ").filter(Boolean);
+  if (parts.length < 2) return null;
+  const escaped = parts.map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const match = new RegExp(escaped.join("\\s+"), "i").exec(text);
+  return match ? { quote: match[0], index: match.index } : null;
+}
+
+function exactAnchor(pages, candidate, preferredPage) {
+  const needle = normalizedText(candidate);
+  if (needle.length < 8) return null;
+  const ordered = [...pages].sort((left, right) => (Number(left.page) === Number(preferredPage) ? -1 : 0) - (Number(right.page) === Number(preferredPage) ? -1 : 0));
+  for (const page of ordered) {
+    const located = originalRange(page.text, needle);
+    if (located) return { page: page.page, quote: located.quote, char_range: [located.index, located.index + located.quote.length], clause_no: clauseBefore(page.text, located.index), confidence: 1 };
+  }
+  return null;
+}
+
+function anchorCandidates(value) {
+  const source = normalizedText(value);
+  if (source.length < 8) return [];
+  const segments = source
+    .split(/[。！？.!?;；\n]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 8);
+  const candidates = [source.slice(0, 180), source.slice(-180), ...segments];
+  for (const segment of segments) {
+    if (segment.length <= 16) continue;
+    for (const windowLength of [120, 80, 48, 32, 24, 16]) {
+      if (segment.length <= windowLength) continue;
+      for (let start = 0; start < segment.length; start += 12) {
+        candidates.push(segment.slice(start, start + windowLength));
+      }
+    }
+    const words = segment.split(/\s+/).filter(Boolean);
+    for (let start = 1; start < words.length - 1; start += 1) {
+      candidates.push(words.slice(start).join(" "));
+    }
+  }
+  return [...new Set(candidates.map((item) => item.trim()).filter((item) => item.length >= 8))]
+    .sort((left, right) => right.length - left.length);
+}
+
+function inferredAnchor(pages, candidates, preferredPage) {
+  let best = null;
+  for (const candidate of candidates) {
+    const fragments = anchorCandidates(candidate);
+    if (!fragments.length) continue;
+    for (const page of pages) {
+      const pageText = normalizedText(page.text);
+      const comparablePageText = pageText.toLocaleLowerCase();
+      for (const fragment of fragments) {
+        const pageIndex = comparablePageText.indexOf(fragment.toLocaleLowerCase());
+        if (pageIndex < 0) continue;
+        const pageQuote = pageText.slice(pageIndex, pageIndex + fragment.length);
+        const located = originalRange(page.text, pageQuote);
+        const originalQuote = located?.quote || pageQuote;
+        const originalIndex = located?.index ?? pageIndex;
+        const score = fragment.length + (Number(page.page) === Number(preferredPage) ? 3 : 0);
+        if (!best || score > best.score) {
+          best = { page: page.page, quote: originalQuote, char_range: [originalIndex, originalIndex + originalQuote.length], clause_no: clauseBefore(page.text, originalIndex), confidence: 0.9, score };
+        }
+        break;
+      }
+    }
+  }
+  if (!best) return null;
+  const { score: _score, ...anchor } = best;
+  return anchor;
+}
+
+function resolveContractAnchor(review, raw, requested, selection, fallbackRisk, preferredPage, userInput) {
+  const pages = contractPages(review);
+  const requestedQuote = requested.quote || raw?.quote || selection?.text_snapshot || fallbackRisk?.contract_location?.quote || "";
+  const direct = exactAnchor(pages, requestedQuote, preferredPage);
+  if (direct) return direct;
+  if (requestedQuote) return null;
+  const candidates = [
+    requested.contract_text,
+    requested.clause_text,
+    requested.evidence,
+    raw?.contract_text,
+    raw?.clause_text,
+    raw?.evidence,
+    raw?.analysis,
+    raw?.suggestion,
+    raw?.recommendation,
+    userInput,
+    raw?.title
+  ].filter(Boolean);
+  return inferredAnchor(pages, candidates, preferredPage);
+}
+
 function normalizeRisk(raw, options = {}) {
   const review = options.review || {};
   const selection = options.selection || null;
   const fallbackRisk = options.activeRisk || null;
   const requested = raw?.contract_location || raw?.contractLocation || {};
   const page = Number(requested.page || selection?.page || fallbackRisk?.contract_location?.page || options.currentPage || 1);
-  const pageText = String(review.document?.pages?.find((item) => Number(item.page) === page)?.text || "");
-  const quote = String(requested.quote || raw?.quote || selection?.text_snapshot || fallbackRisk?.contract_location?.quote || "").trim();
-  const locationVerified = Boolean(quote && pageText.includes(quote));
+  let anchor = resolveContractAnchor(review, raw, requested, selection, fallbackRisk, page, options.userInput);
+  if (anchor && review.document?.blocks?.length) {
+    const refs = resolveRefs(review.document, anchor.quote);
+    const matches = refs.filter((ref) => (ref.logical_page ?? ref.page) === anchor.page);
+    anchor = matches.length === 1 ? { ...anchor, ...matches[0], source_refs: [matches[0]] } : null;
+  }
+  const quote = String(anchor?.quote || "");
+  const locationVerified = Boolean(quote);
   const citations = options.citations || [];
   const evidenceCitations = citations.filter((item) => item.source_type !== "enterprise_memory");
   const evidenceVerified = evidenceCitations.length > 0 && evidenceCitations.every((item) => item.verification_status === "verified");
@@ -214,16 +340,18 @@ function normalizeRisk(raw, options = {}) {
     risk_topic: String(raw?.risk_topic || raw?.topic || options.topic || "general"),
     title: String(raw?.title || "对话审查发现待核验风险"),
     conclusion_status: "needs_verification",
-    evidence_status: evidenceVerified ? "verified" : "unverified",
+    evidence_status: evidenceVerified && locationVerified ? "verified" : "unverified",
     human_status: "pending_review",
-    location_confidence: locationVerified ? 1 : quote ? 0.55 : 0,
+    location_confidence: locationVerified ? Number(anchor?.confidence || 1) : 0,
     contract_location: {
       file_version_id: review.project?.file_version_id || "",
-      page,
-      clause_no: String(requested.clause_no || requested.clauseNo || selection?.clause_no || fallbackRisk?.contract_location?.clause_no || ""),
+      page: anchor?.page ?? null,
+      clause_no: String(anchor?.clause_no || ""),
       quote,
-      ...(selection?.char_range ? { char_range: selection.char_range } : {}),
-      ...(selection?.text_hash ? { text_hash: selection.text_hash } : {})
+      location_status: locationVerified ? "resolved" : "unresolved",
+      ...(anchor?.char_range ? { char_range: anchor.char_range } : {}),
+      ...(anchor?.source_refs ? { block_id: anchor.block_id, logical_page: anchor.logical_page, range_scope: anchor.range_scope, source_refs: anchor.source_refs } : {}),
+      ...(anchor?.text_hash ? { text_hash: anchor.text_hash } : locationVerified && selection?.text_hash ? { text_hash: selection.text_hash } : {})
     },
     analysis: String(raw?.analysis || "该结果由对话审查生成，需结合原文和依据完成人工核验。"),
     suggestion: String(raw?.recommendation || raw?.suggestion || "请完成人工复核后再确认风险结论。"),
@@ -490,6 +618,7 @@ function createReviewChatService(options = {}) {
           selection,
           activeRisk,
           currentPage: input.currentPage,
+          userInput,
           citations: response.citations,
           messageId: assistantMessageId
         }));
@@ -513,6 +642,7 @@ function createReviewChatService(options = {}) {
         review: latestReview,
         selection,
         currentPage: input.currentPage,
+        userInput,
         citations: response.citations,
         messageId: assistantMessageId,
         sourceType: "chat_local_review",

@@ -200,6 +200,7 @@ export const defaultSettings = {
   autoSave: true,
   autoSaveInterval: 5,
   defaultExportFormats: ["DOCX", "PDF", "JSON"],
+  defaultExportMode: "draft",
   forceValidator: true,
   blockScannedPdfWithoutOcr: true,
   checkSensitiveInfo: true,

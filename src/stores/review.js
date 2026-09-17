@@ -1,6 +1,9 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
+import { locationPage, recordChecklistReview } from "../services/checklistReview.mjs";
+import { ensureModelIds, findModel } from "../services/managementState.mjs";
 import { electronApi } from "../services/electronApi";
+import { applyReviewProgress } from "../services/reviewProgress.mjs";
 import { createSampleState, knowledgeData, capabilityData, defaultSettings } from "../data/sampleData";
 import { buildReviewExecutionConfig, createKnowledgeItem, createManualReviewRisk, createSelectionAnnotation, mergeSettings, removeDemoModels, removeKnowledgeItems, removeModel, updateEnterpriseMemory as updateEnterpriseMemoryState, updateLegalSnapshot as updateLegalSnapshotState, upsertModel } from "../services/managementState.mjs";
 
@@ -28,6 +31,7 @@ export const useReviewStore = defineStore("review", () => {
   });
   let stopReviewProgress = null;
   let stopChatEvents = null;
+  let activeReviewRun = null;
 
   const activeProject = computed(() => state.value.projects.find((item) => item.project_id === state.value.activeProjectId) || state.value.projects[0] || null);
   const review = computed(() => activeProject.value ? state.value.reviews[activeProject.value.project_id] || null : null);
@@ -60,23 +64,16 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function bootstrap() {
+    if (activeReviewRun) return;
     if (!stopReviewProgress) {
       stopReviewProgress = electronApi.onReviewProgress((payload = {}) => {
         const projectId = String(payload.projectId || "");
         if (!projectId || projectId !== activeProject.value?.project_id || !review.value) return;
-        reviewProgress.value = {
-          projectId,
-          step: String(payload.step || review.value.task?.current_step || ""),
-          progress: Math.min(Math.max(Number(payload.progress) || 0, 0), 100),
-          status: String(payload.status || "running"),
-          riskCount: Math.max(0, Number(payload.riskCount ?? reviewProgress.value?.riskCount ?? review.value.risks?.length) || 0)
-        };
-        review.value.task = {
-          ...(review.value.task || {}),
-          current_step: reviewProgress.value.step,
-          progress: reviewProgress.value.progress,
-          status: reviewProgress.value.status
-        };
+        const next = applyReviewProgress(review.value, payload, activeReviewRun);
+        if (next) {
+          reviewProgress.value = next;
+          if (payload.riskUpdate?.type === "reset") activeRiskId.value = null;
+        }
       });
     }
     if (!stopChatEvents) {
@@ -96,10 +93,11 @@ export const useReviewStore = defineStore("review", () => {
         || saved.capabilities
         || saved.settings
         || saved.knowledge
+        || saved.deletedProjectIds?.length
       ));
       if (hasSavedWorkspace) {
         const savedModels = Array.isArray(saved.capabilities?.models)
-          ? removeDemoModels(saved.capabilities.models)
+          ? ensureModelIds(removeDemoModels(saved.capabilities.models))
           : [];
         state.value = {
           ...createSampleState(),
@@ -113,7 +111,9 @@ export const useReviewStore = defineStore("review", () => {
           },
           settings: mergeSettings(defaultSettings, saved.settings || {})
         };
-        if (savedModels.length !== (saved.capabilities?.models || []).length) await persist();
+        if (JSON.stringify(savedModels) !== JSON.stringify(saved.capabilities?.models || [])) await persist();
+      } else {
+        state.value = await electronApi.saveState(state.value);
       }
       if (review.value && syncActiveReviewExecutionSnapshot()) await persist();
     } catch (error) {
@@ -127,11 +127,60 @@ export const useReviewStore = defineStore("review", () => {
     if (!id) return;
     activeRiskId.value = id;
     const risk = risks.value.find((item) => item.risk_id === id);
-    if (risk?.contract_location?.page) selectedPage.value = risk.contract_location.page;
+    const page = locationPage(risk?.contract_location, review.value?.document);
+    if (page) selectedPage.value = page;
   }
 
   function clearRisk() {
     activeRiskId.value = null;
+  }
+
+  function resetTaskView() {
+    activeRiskId.value = null;
+    selectedPage.value = 1;
+    zoom.value = 1;
+    validatorResult.value = null;
+    reviewProgress.value = null;
+    chatRequestId.value = null;
+    chatStreamText.value = "";
+    selectedChatModel.value = "";
+  }
+
+  async function selectProject(projectId) {
+    if (!state.value.projects.some((project) => project.project_id === projectId)) throw new Error("审查任务不存在或已被删除");
+    if (projectId === activeProject.value?.project_id) return;
+    if (isBusy.value || chatBusy.value) throw new Error("当前任务正在处理，请稍后切换");
+    isBusy.value = true;
+    try {
+      state.value = await electronApi.saveState({ ...state.value, activeProjectId: projectId });
+      resetTaskView();
+    } finally {
+      isBusy.value = false;
+    }
+  }
+
+  async function deleteReviewTask(projectId) {
+    if (isBusy.value || chatBusy.value) throw new Error("当前任务正在处理，请稍后删除");
+    isBusy.value = true;
+    const previousActiveId = activeProject.value?.project_id;
+    try {
+      const nextState = await electronApi.deleteReviewTask(projectId);
+      state.value = nextState;
+      if (previousActiveId !== activeProject.value?.project_id) resetTaskView();
+      notify("审查任务已删除，合同文件及已导出文件已保留");
+    } finally {
+      isBusy.value = false;
+    }
+  }
+
+  async function saveChecklistReview(checkId, input) {
+    if (isBusy.value || chatBusy.value) throw new Error("审查任务运行中，请稍后复核");
+    const nextReview = recordChecklistReview(review.value, checkId, input);
+    const nextState = { ...state.value, reviews: { ...state.value.reviews, [activeProject.value.project_id]: nextReview } };
+    await electronApi.saveState(nextState);
+    state.value = nextState;
+    validatorResult.value = null;
+    notify("已保存清单复核记录");
   }
 
   function syncActiveReviewExecutionSnapshot() {
@@ -281,10 +330,14 @@ export const useReviewStore = defineStore("review", () => {
 
   async function runReview() {
     if (!review.value) return null;
+    if (activeReviewRun || chatBusy.value) throw new Error("审查或对话正在运行，请稍后重试");
+    activeReviewRun = { id: globalThis.crypto.randomUUID(), projectId: activeProject.value.project_id, sequence: 0 };
+    validatorResult.value = null;
     isBusy.value = true;
     try {
       const result = await electronApi.runReview({
         projectId: activeProject.value?.project_id,
+        runId: activeReviewRun.id,
         review: review.value
       });
       if (result.state) state.value = result.state;
@@ -303,6 +356,7 @@ export const useReviewStore = defineStore("review", () => {
       notify(error.message || "合同审查执行失败", "warn");
       throw error;
     } finally {
+      activeReviewRun = null;
       isBusy.value = false;
     }
   }
@@ -635,7 +689,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function toggleModel(name) {
-    const model = (state.value.capabilities?.models || []).find((item) => item.name === name);
+    const model = findModel(state.value.capabilities?.models || [], name);
     if (!model) return;
     if (model.status !== "active" && model.testStatus !== "passed") {
       notify("请先校验配置，通过后才能启用模型", "warn");
@@ -649,7 +703,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function validateModel(name) {
-    const model = (state.value.capabilities?.models || []).find((item) => item.name === name);
+    const model = findModel(state.value.capabilities?.models || [], name);
     if (!model) return false;
     let valid = Boolean(String(model.modelId || "").trim() && String(model.endpoint || "").trim());
     let credentialMessage = "";
@@ -693,25 +747,27 @@ export const useReviewStore = defineStore("review", () => {
     notify("系统设置已保存", "ok");
   }
 
-  async function runValidator(formats = ["DOCX", "PDF", "XLSX", "JSON"]) {
+  async function runValidator(formats = ["DOCX", "PDF", "XLSX", "JSON"], mode = "formal") {
     if (!review.value) return null;
+    if (isBusy.value || chatBusy.value) throw new Error("任务正在处理，请完成后再校验导出");
     isBusy.value = true;
     try {
-      validatorResult.value = await electronApi.validateExport({ review: review.value, formats });
+      validatorResult.value = await electronApi.validateExport({ review: review.value, formats, mode });
       return validatorResult.value;
     } finally {
       isBusy.value = false;
     }
   }
 
-  async function runExport(formats) {
+  async function runExport(formats, mode = "formal") {
     if (!review.value) return null;
+    if (isBusy.value || chatBusy.value) throw new Error("任务正在处理，请完成后再导出");
     isBusy.value = true;
     try {
-      const result = await electronApi.exportReview({ review: review.value, formats });
+      const result = await electronApi.exportReview({ review: review.value, formats, mode });
       if (result.state) state.value = result.state;
       validatorResult.value = result.validation;
-      if (result.records?.length) notify(`已生成 ${result.records.length} 个导出文件`, "ok");
+      if (result.records?.length) notify(`已生成 ${result.records.length} 个${mode === "draft" ? "草稿" : "正式报告"}文件`, "ok");
       return result;
     } catch (error) {
       notify(error.message || "导出失败", "warn");
@@ -734,7 +790,7 @@ export const useReviewStore = defineStore("review", () => {
     chatBusy, chatRequestId, chatStreamText, selectedChatModel, chatContextPreferences,
     activeProject, review, risks, activeRisk, pendingRiskCount, selectedRules, selectedPolicies, reviewExecution,
     activeAnalysisModels, chatSessions, activeChatSession, chatMessages, chatMemoryCandidates,
-    bootstrap, persist, notify, selectRisk, clearRisk, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract, runReview, importKnowledgeFiles, importLegalSnapshot, verifyLegalRealtime,
+    bootstrap, persist, notify, selectRisk, clearRisk, selectProject, deleteReviewTask, saveChecklistReview, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract, runReview, importKnowledgeFiles, importLegalSnapshot, verifyLegalRealtime,
     saveConfig, updateLegalSnapshot, updateEnterpriseMemory, toggleKnowledge, addKnowledge, updateKnowledge, deleteKnowledge, saveModel, deleteModel,
     saveSelectionAnnotation, reviewSelection, setChatModel, updateChatContextPreferences, chatReview, retryChat, cancelChat, confirmMemoryCandidate, dismissMemoryCandidate,
     toggleModel, validateModel, toggleSkill, updateSettings, runValidator, runExport, resetSample

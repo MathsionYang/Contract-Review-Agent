@@ -1,12 +1,12 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { Document, HeadingLevel, Paragraph, Packer, TextRun, Table, TableRow, TableCell, WidthType } = require("docx");
+const { Document, HeadingLevel, Paragraph, Packer, TextRun, Header } = require("docx");
 const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const ExcelJS = require("exceljs");
 const { validateReview } = require("./validator.cjs");
 
-const TEMPLATE_VERSION = "review-report@1.0.0";
+const TEMPLATE_VERSION = "review-report@2.0.0";
 
 function safeFileName(value) {
   return String(value || "合同审查")
@@ -48,11 +48,45 @@ function textOf(value) {
   return String(value ?? "");
 }
 
-async function writeDocx(review, filePath, generatedAt) {
+function reportContext(validation) {
+  const draft = validation.mode === "draft";
+  return {
+    draft,
+    title: draft ? "合同审查报告 草稿" : "合同审查报告 正式版",
+    notice: draft ? "草稿 DRAFT / NOT FINAL：仅供核验与讨论，不代表已完成法务确认，不得作为正式审查结论。"
+      : "正式报告：本次导出已通过正式报告校验。",
+    issues: validation.items.filter((item) => item.status !== "passed")
+  };
+}
+
+function locationText(review, risk) {
+  const location = risk.contract_location || {};
+  const ref = location.source_refs?.[0] || location;
+  const block = review.document?.blocks?.find((item) => item.block_id === ref.block_id);
+  const clause = location.clause_no ? ` 条款 ${location.clause_no}` : "";
+  if (location.location_status === "unresolved" || location.location_status === "fallback") {
+    const missing = [...(review.check_results || []), ...(review.checklist_results || [])]
+      .some((check) => check.status === "missing" && (check.check_id === risk.rule_id || risk.related_checks?.includes(check.check_id)));
+    return missing ? "缺失项待核验（无具体条款定位）" : "待定位，原文锚点尚未核验";
+  }
+  if (review.document?.documentType === "docx") {
+    const logicalPage = ref.logical_page || block?.logical_page;
+    return `${block ? `逻辑块 ${block.block_id}` : "逻辑块待定位"}${logicalPage ? ` / 逻辑页 ${logicalPage}` : ""}${clause}（物理页码未确认）`;
+  }
+  return `${location.page ? `第 ${location.page} 页` : "待定位"}${clause}`;
+}
+
+function issueText(issue) {
+  return `${issue.riskId ? `${issue.riskId} / ` : ""}${issue.label} [${issue.code}]：${issue.message}；${issue.suggestion}`;
+}
+
+async function writeDocx(review, filePath, generatedAt, validation) {
   const risks = riskRows(review);
   const summary = reportSummary(review);
+  const context = reportContext(validation);
   const children = [
-    new Paragraph({ text: "合同审查报告", heading: HeadingLevel.TITLE }),
+    new Paragraph({ text: context.title, heading: HeadingLevel.TITLE }),
+    new Paragraph({ children: [new TextRun({ text: context.notice, bold: true, color: context.draft ? "9C3B10" : "000000" })] }),
     new Paragraph({ children: [new TextRun({ text: `项目：${textOf(review.project?.project_name || review.project?.project_id)}`, bold: true })] }),
     new Paragraph(`合同文件：${textOf(review.document?.fileName)}    文件版本：${textOf(review.project?.file_version_id)}`),
     new Paragraph(`审查版本：${textOf(review.review_version_id || "未命名审查版本")}    生成时间：${generatedAt}`),
@@ -65,12 +99,16 @@ async function writeDocx(review, filePath, generatedAt) {
     children.push(
       new Paragraph({ text: `${index + 1}. ${textOf(risk.title)}`, heading: HeadingLevel.HEADING_2 }),
       new Paragraph(`等级：${textOf(risk.risk_level)}    类别：${textOf(risk.risk_category || "未分类")}    人工状态：${textOf(risk.human_status || "未记录")}`),
-      new Paragraph(`位置：第 ${textOf(location.page || "?")} 页 ${textOf(location.clause_no || "")}    文件版本：${textOf(location.file_version_id || "")}`),
+      new Paragraph(`位置：${locationText(review, risk)}    文件版本：${textOf(location.file_version_id || "")}`),
       new Paragraph(`原文：${textOf(location.quote || "未提供")}`),
       new Paragraph(`分析：${textOf(risk.analysis || "未提供")}`),
       new Paragraph(`建议：${textOf(risk.suggestion || "未提供")}`),
       new Paragraph(`证据状态：${textOf(risk.evidence_status || "未记录")}    结论状态：${textOf(risk.conclusion_status || "未记录")}`)
     );
+  }
+  if (context.issues.length) {
+    children.push(new Paragraph({ text: "待核验事项", heading: HeadingLevel.HEADING_1 }));
+    context.issues.forEach((issue) => children.push(new Paragraph(issueText(issue))));
   }
   children.push(
     new Paragraph({ text: "审查配置", heading: HeadingLevel.HEADING_1 }),
@@ -79,15 +117,33 @@ async function writeDocx(review, filePath, generatedAt) {
     new Paragraph(`企业制度：${(review.config?.policies || []).join("、") || "未绑定"}`),
     new Paragraph(`模板版本：${TEMPLATE_VERSION}`)
   );
-  const document = new Document({ sections: [{ children }] });
+  const document = new Document({
+    styles: { default: {
+      document: { run: { font: "Microsoft YaHei", size: 21 }, paragraph: { spacing: { after: 120 } } },
+      title: { run: { color: "000000" } }, heading1: { run: { color: "000000" } }, heading2: { run: { color: "000000" } }
+    } },
+    sections: [{
+      headers: { default: new Header({ children: [new Paragraph(context.draft ? "草稿 DRAFT / NOT FINAL" : "合同审查报告 正式版")] }) },
+      children
+    }]
+  });
   fs.writeFileSync(filePath, await Packer.toBuffer(document));
 }
 
-function wrapText(value, maxLength = 54) {
-  const text = textOf(value);
+function wrapText(value, font, size, maxWidth) {
   const result = [];
-  for (let offset = 0; offset < text.length; offset += maxLength) result.push(text.slice(offset, offset + maxLength));
-  return result.length ? result : [""];
+  for (const paragraph of textOf(value).split(/\r?\n/)) {
+    let line = "";
+    for (const char of paragraph) {
+      if (line && font.widthOfTextAtSize(line + char, size) > maxWidth) {
+        result.push(line);
+        line = "";
+      }
+      line += char;
+    }
+    result.push(line);
+  }
+  return result;
 }
 
 function findCjkFont() {
@@ -122,34 +178,41 @@ async function createPdfFont(pdf) {
   };
 }
 
-async function writePdf(review, filePath, generatedAt) {
+async function writePdf(review, filePath, generatedAt, validation) {
+  const context = reportContext(validation);
   const pdf = await PDFDocument.create();
   const fontResult = await createPdfFont(pdf);
   const font = fontResult.font;
   const titleFont = fontResult.font;
   const pageSize = { width: 595, height: 842 };
-  let page = pdf.addPage([pageSize.width, pageSize.height]);
-  let cursor = 800;
+  let page;
+  let cursor;
   const margin = 42;
   const lineHeight = 16;
+  function addPage() {
+    page = pdf.addPage([pageSize.width, pageSize.height]);
+    cursor = 780;
+    page.drawText(context.draft ? "DRAFT - NOT FINAL" : "FORMAL REPORT", {
+      x: margin, y: 815, font, size: 10, color: context.draft ? rgb(0.6, 0.2, 0.08) : rgb(0, 0, 0)
+    });
+  }
+  addPage();
 
   function ensureSpace(lines = 1) {
     if (cursor - lines * lineHeight < 42) {
-      page = pdf.addPage([pageSize.width, pageSize.height]);
-      cursor = 800;
+      addPage();
     }
   }
   function drawLines(value, options = {}) {
-    const lines = wrapText(value, options.maxLength || 54);
+    const size = options.size || 10;
+    const renderable = fontResult.supportsUnicode ? textOf(value) : textOf(value).replace(/[^\x00-\x7F]/g, "?");
+    const lines = wrapText(renderable, font, size, pageSize.width - margin * 2);
     for (const line of lines) {
       ensureSpace();
-      const renderableLine = fontResult.supportsUnicode
-        ? line
-        : line.replace(/[^\x00-\x7F]/g, "?");
-      page.drawText(renderableLine || " ", {
+      page.drawText(line || " ", {
         x: margin,
         y: cursor,
-        size: options.size || 10,
+        size,
         font: options.font || font,
         color: options.color || rgb(0.1, 0.13, 0.2)
       });
@@ -157,29 +220,39 @@ async function writePdf(review, filePath, generatedAt) {
     }
   }
 
-  drawLines("合同审查报告", { size: 20, font: titleFont, lineHeight: 28, maxLength: 40 });
+  drawLines(context.title, { size: 20, font: titleFont, lineHeight: 28 });
+  drawLines(context.notice);
   drawLines(`项目：${textOf(review.project?.project_name || review.project?.project_id)}`);
   drawLines(`合同文件：${textOf(review.document?.fileName)}    文件版本：${textOf(review.project?.file_version_id)}`);
   drawLines(`审查版本：${textOf(review.review_version_id || "未命名审查版本")}    生成时间：${generatedAt}`);
   cursor -= 8;
-  drawLines("风险清单", { size: 14, font: titleFont, lineHeight: 22, maxLength: 40 });
+  drawLines("风险清单", { size: 14, font: titleFont, lineHeight: 22 });
   for (const [index, risk] of riskRows(review).entries()) {
     const location = risk.contract_location || {};
-    drawLines(`${index + 1}. ${textOf(risk.title)}`, { size: 12, font: titleFont, lineHeight: 18, maxLength: 48 });
+    drawLines(`${index + 1}. ${textOf(risk.title)}`, { size: 12, font: titleFont, lineHeight: 18 });
     drawLines(`等级：${textOf(risk.risk_level)}    人工状态：${textOf(risk.human_status || "未记录")}`);
-    drawLines(`位置：第 ${textOf(location.page || "?")} 页 ${textOf(location.clause_no || "")}`);
+    drawLines(`位置：${locationText(review, risk)}`);
     drawLines(`原文：${textOf(location.quote || "未提供")}`);
     drawLines(`分析：${textOf(risk.analysis || "未提供")}`);
     drawLines(`建议：${textOf(risk.suggestion || "未提供")}`);
+    drawLines(`证据状态：${textOf(risk.evidence_status)}    结论状态：${textOf(risk.conclusion_status)}`);
     cursor -= 6;
   }
   cursor -= 4;
   drawLines(`法律快照：${textOf(review.config?.snapshot?.id || "未绑定")}`);
   drawLines(`模板版本：${TEMPLATE_VERSION}`);
+  if (context.issues.length) {
+    cursor -= 10;
+    drawLines("待核验事项", { size: 14, lineHeight: 22 });
+    context.issues.forEach((issue) => drawLines(issueText(issue)));
+  }
+  pdf.setTitle(context.title);
+  pdf.setSubject(context.notice);
   fs.writeFileSync(filePath, await pdf.save());
 }
 
-async function writeXlsx(review, filePath, generatedAt) {
+async function writeXlsx(review, filePath, generatedAt, validation) {
+  const context = reportContext(validation);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "合同审查 Agent";
   workbook.created = new Date(generatedAt);
@@ -189,7 +262,7 @@ async function writeXlsx(review, filePath, generatedAt) {
     { header: "风险等级", key: "level", width: 12 },
     { header: "风险标题", key: "title", width: 34 },
     { header: "风险类别", key: "category", width: 16 },
-    { header: "合同页码", key: "page", width: 12 },
+    { header: "合同定位", key: "page", width: 34 },
     { header: "条款号", key: "clause", width: 14 },
     { header: "原文片段", key: "quote", width: 60 },
     { header: "风险分析", key: "analysis", width: 60 },
@@ -198,7 +271,7 @@ async function writeXlsx(review, filePath, generatedAt) {
     { header: "人工状态", key: "human", width: 16 }
   ];
   sheet.mergeCells("A1:J1");
-  sheet.getCell("A1").value = `${textOf(review.project?.project_name || "合同审查")} - 风险清单`;
+  sheet.getCell("A1").value = `${textOf(review.project?.project_name || "合同审查")} - ${context.draft ? "草稿 DRAFT / NOT FINAL" : "正式报告"}`;
   sheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
   sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2B4ACB" } };
   sheet.mergeCells("A2:J2");
@@ -213,7 +286,7 @@ async function writeXlsx(review, filePath, generatedAt) {
       level: risk.risk_level || "",
       title: risk.title || "",
       category: risk.risk_category || "",
-      page: location.page || "",
+      page: locationText(review, risk),
       clause: location.clause_no || "",
       quote: location.quote || "",
       analysis: risk.analysis || "",
@@ -225,18 +298,43 @@ async function writeXlsx(review, filePath, generatedAt) {
   for (const row of sheet.getRows(4, sheet.rowCount) || []) {
     row.alignment = { vertical: "top", wrapText: true };
   }
+  const checks = workbook.addWorksheet("导出校验");
+  checks.columns = [{ key: "risk", width: 28 }, { key: "label", width: 24 }, { key: "code", width: 40 }, { key: "message", width: 70 }, { key: "suggestion", width: 60 }];
+  checks.mergeCells("A1:E1");
+  checks.getCell("A1").value = context.notice;
+  checks.getCell("A1").font = { bold: true };
+  checks.getCell("A1").alignment = { wrapText: true };
+  checks.getRow(1).height = 42;
+  checks.getRow(2).values = ["风险标识", "待核验项目", "校验代码", "问题", "处理建议"];
+  context.issues.forEach((issue) => checks.addRow({ risk: issue.riskId || "整体审查", label: issue.label, code: issue.code, message: issue.message, suggestion: issue.suggestion }));
+  if (!context.issues.length) checks.addRow({ message: "本次导出没有未处理的校验项" });
+  checks.views = [{ state: "frozen", ySplit: 2 }];
+  checks.eachRow((row) => { row.alignment = { vertical: "top", wrapText: true }; });
   await workbook.xlsx.writeFile(filePath);
 }
 
-function writeJson(review, filePath, generatedAt) {
+function writeJson(review, filePath, generatedAt, validation) {
   const payload = {
     export_version: TEMPLATE_VERSION,
     exported_at: generatedAt,
+    export_mode: validation.mode,
+    report_status: validation.mode === "draft" ? "draft" : "formal",
+    export_notice: reportContext(validation).notice,
+    validation,
     review_version_id: review.review_version_id || null,
     file_version_id: review.project?.file_version_id || null,
     project: review.project || null,
     document: review.document || null,
     config: review.config || null,
+    checklist_version: review.checklist_version || null,
+    checklist_results: review.checklist_results || [],
+    checklist_coverage: review.checklist_coverage || null,
+    check_results: review.check_results || [],
+    coverage: review.coverage || null,
+    contract_facts: review.contract_facts || [],
+    fact_warnings: review.fact_warnings || [],
+    execution_summary: review.execution_summary || null,
+    model_context: review.model_context || null,
     summary: reportSummary(review),
     risks: riskRows(review),
     humanRevisions: review.humanRevisions || []
@@ -244,9 +342,9 @@ function writeJson(review, filePath, generatedAt) {
   fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
-async function exportReview({ review, formats, outputDir }) {
+async function exportReview({ review, formats, outputDir, mode = "formal" }) {
   const requestedFormats = [...new Set((Array.isArray(formats) ? formats : []).map((format) => String(format).toUpperCase()))];
-  const validation = validateReview(review, { formats: requestedFormats });
+  const validation = validateReview(review, { formats: requestedFormats, mode });
   if (!validation.canExport) return { records: [], validation };
   if (!outputDir) {
     const error = new Error("未指定导出目录");
@@ -254,21 +352,26 @@ async function exportReview({ review, formats, outputDir }) {
     throw error;
   }
   fs.mkdirSync(outputDir, { recursive: true });
-  const stem = safeFileName(review.project?.project_name || review.document?.fileName || "合同审查");
+  const stem = `${safeFileName(review.project?.project_name || review.document?.fileName || "合同审查")}_${mode === "draft" ? "草稿" : "正式"}`;
   const generatedAt = new Date().toISOString();
   const records = [];
 
   for (const format of requestedFormats) {
     const id = exportId(format);
     const filePath = outputPath(outputDir, stem, format, id);
-    if (format === "DOCX") await writeDocx(review, filePath, generatedAt);
-    if (format === "PDF") await writePdf(review, filePath, generatedAt);
-    if (format === "XLSX") await writeXlsx(review, filePath, generatedAt);
-    if (format === "JSON") writeJson(review, filePath, generatedAt);
+    if (format === "DOCX") await writeDocx(review, filePath, generatedAt, validation);
+    if (format === "PDF") await writePdf(review, filePath, generatedAt, validation);
+    if (format === "XLSX") await writeXlsx(review, filePath, generatedAt, validation);
+    if (format === "JSON") writeJson(review, filePath, generatedAt, validation);
     records.push({
       export_id: id,
       format,
       status: "completed",
+      export_mode: mode,
+      report_status: mode === "draft" ? "draft" : "formal",
+      policy_version: validation.policyVersion,
+      warning_codes: validation.warningCodes,
+      formal_ready: validation.formalReady,
       filePath,
       generated_at: generatedAt,
       review_version_id: review.review_version_id || null,

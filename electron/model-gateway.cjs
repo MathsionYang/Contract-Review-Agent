@@ -1,4 +1,4 @@
-const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
 
 function gatewayError(code, message, cause) {
@@ -96,7 +96,7 @@ async function invokeModel(options = {}) {
   if (model.credentialRef && model.credentialRef !== "none" && !credential) {
     return { ok: false, data: null, usage: null, latencyMs: 0, errorCode: "MODEL_CONFIG_INVALID", message: "模型凭据引用不可用" };
   }
-  const headers = { "Content-Type": "application/json", Accept: "application/json" };
+  const headers = { "Content-Type": "application/json", Accept: options.stream ? "text/event-stream, application/json" : "application/json" };
   if (credential) headers.Authorization = `Bearer ${credential}`;
   const body = {
     model: String(model.modelId),
@@ -106,14 +106,30 @@ async function invokeModel(options = {}) {
     ...(Number(model.maxTokens) > 0 ? { max_tokens: Number(model.maxTokens) } : {}),
     ...(options.stream ? { stream: true } : {})
   };
-  const retries = Math.min(Math.max(Number(model.retries ?? 0), 0), MAX_RETRIES);
+  const configuredRetries = Math.min(Math.max(Number(model.retries ?? 0), 0), MAX_RETRIES);
+  // Recover once from transient timeouts, including older saved configs with retries=0.
+  const retryLimit = Math.max(configuredRetries, 1);
   const timeoutMs = Math.min(Math.max(Number(model.timeoutMs || DEFAULT_TIMEOUT_MS), 1000), 120000);
   let lastFailure = null;
   let emittedDelta = false;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
+  let attemptsUsed = 0;
+  for (let attempt = 0; attempt <= retryLimit; attempt += 1) {
+    attemptsUsed = attempt + 1;
     const startedAt = Date.now();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    let totalTimedOut = false;
+    let receivedActivity = false;
+    const attemptTimeoutMs = Math.min(timeoutMs * (attempt + 1), 120000);
+    let timer;
+    const resetIdleTimeout = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { timedOut = true; controller.abort(); }, attemptTimeoutMs);
+    };
+    resetIdleTimeout();
+    // 流式内容持续到达时不按请求总时长误判超时，但仍限制单次调用最长十分钟。
+    const totalTimeoutMs = Math.min(Math.max(Number(options.maxDurationMs) || 600000, 1000), 600000);
+    const totalTimer = options.stream ? setTimeout(() => { totalTimedOut = true; controller.abort(); }, totalTimeoutMs) : null;
     let requestSignal = controller.signal;
     if (options.signal) {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") requestSignal = AbortSignal.any([controller.signal, options.signal]);
@@ -135,70 +151,93 @@ async function invokeModel(options = {}) {
       let payload;
       let content;
       let usage = null;
-      if (options.stream && response.body && typeof response.body.getReader === "function") {
+      let finishReason;
+      if (options.stream && !response.headers?.get?.("content-type")?.includes("application/json") && response.body && typeof response.body.getReader === "function") {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         let streamedContent = "";
-        while (true) {
-          const chunk = await reader.read();
-          if (chunk.done) break;
-          buffer += decoder.decode(chunk.value, { stream: true });
-          const lines = buffer.split(/\r?\n/);
-          buffer = lines.pop() || "";
-          for (const line of lines) {
-            const value = line.replace(/^data:\s*/i, "").trim();
-            if (!value || value === "[DONE]") continue;
-            let part;
-            try { part = JSON.parse(value); } catch (_error) { continue; }
-            const delta = part?.choices?.[0]?.delta?.content ?? part?.choices?.[0]?.message?.content ?? part?.output;
-            if (typeof delta === "string") {
-              streamedContent += delta;
-              emittedDelta = true;
-              if (typeof options.onDelta === "function") options.onDelta(delta);
-            }
-            if (part?.usage) usage = { ...part.usage };
+        let done = false;
+        const consumeLine = (line) => {
+          if (!/^data:/i.test(line)) return;
+          const value = line.replace(/^data:\s*/i, "").trim();
+          if (value === "[DONE]") { done = true; return; }
+          if (!value) return;
+          let part;
+          try { part = JSON.parse(value); } catch (_error) { throw gatewayError("MODEL_OUTPUT_INVALID", "模型流式响应包含无效 JSON 数据帧"); }
+          if (part.error) throw gatewayError("MODEL_REQUEST_FAILED", providerErrorDetail(part) || "模型流式请求失败");
+          const choice = part?.choices?.[0];
+          const delta = choice?.delta?.content ?? choice?.message?.content ?? part?.output;
+          const reasoning = choice?.delta?.reasoning_content || choice?.delta?.reasoning;
+          if ((typeof delta === "string" && delta.length) || (typeof reasoning === "string" && reasoning.length)) {
+            receivedActivity = true;
+            resetIdleTimeout();
           }
-        }
-        if (buffer.trim() && buffer.trim() !== "[DONE]") {
-          const value = buffer.replace(/^data:\s*/i, "").trim();
-          try {
-            const part = JSON.parse(value);
-            const delta = part?.choices?.[0]?.delta?.content ?? part?.choices?.[0]?.message?.content ?? part?.output;
-            if (typeof delta === "string") {
-              streamedContent += delta;
-              emittedDelta = true;
-              if (typeof options.onDelta === "function") options.onDelta(delta);
+          if (typeof delta === "string" && delta.length) {
+            streamedContent += delta;
+            emittedDelta = true;
+            if (typeof options.onDelta === "function") options.onDelta(delta);
+          }
+          if (choice?.finish_reason) finishReason = choice.finish_reason;
+          if (part?.usage) usage = { ...part.usage };
+        };
+        try {
+          while (!done) {
+            const chunk = await reader.read();
+            buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+              consumeLine(line);
+              if (done) break;
             }
-            if (part?.usage) usage = { ...part.usage };
-          } catch (_error) {}
+            if (chunk.done) { if (!done && buffer.trim()) consumeLine(buffer); break; }
+          }
+        } finally {
+          await reader.cancel().catch(() => {});
+          reader.releaseLock();
         }
         content = streamedContent;
         payload = { usage };
       } else {
         payload = await response.json();
         content = responseContent(payload);
+        finishReason = payload?.choices?.[0]?.finish_reason;
         if (typeof options.onDelta === "function" && typeof content === "string") {
           emittedDelta = Boolean(options.stream);
           options.onDelta(content);
         }
       }
+      if (finishReason === "length") throw gatewayError("MODEL_OUTPUT_TRUNCATED", "模型输出达到长度上限，审查尚未完成");
+      if (finishReason === "content_filter") throw gatewayError("MODEL_OUTPUT_INVALID", "模型输出被服务商过滤，审查尚未完成");
       const data = parseStructuredContent(content);
       return {
         ok: true,
         data,
         usage: usage || (payload?.usage ? { ...payload.usage } : null),
         latencyMs: Date.now() - startedAt,
+        attempts: attemptsUsed,
         errorCode: null,
         message: "模型调用成功"
       };
     } catch (error) {
-      lastFailure = error?.name === "AbortError"
-        ? gatewayError(options.signal?.aborted ? "MODEL_REQUEST_CANCELLED" : "MODEL_REQUEST_FAILED", options.signal?.aborted ? "模型请求已取消" : "模型请求超时", error)
-        : error;
-      if (lastFailure.code === "MODEL_OUTPUT_INVALID" || attempt >= retries || emittedDelta || controller.signal.aborted || options.signal?.aborted) break;
+      const userCancelled = Boolean(options.signal?.aborted);
+      lastFailure = userCancelled
+        ? gatewayError("MODEL_REQUEST_CANCELLED", "模型请求已取消", error)
+        : totalTimedOut
+          ? gatewayError("MODEL_REQUEST_TIMEOUT", `模型调用超过单次总时限 ${totalTimeoutMs / 1000} 秒`, error)
+        : timedOut
+          ? gatewayError("MODEL_REQUEST_TIMEOUT", options.stream
+            ? `${receivedActivity ? "模型连续" : "等待模型首段响应超过"} ${attemptTimeoutMs / 1000} 秒${receivedActivity ? "没有新内容" : ""}`
+            : "模型请求超时", error)
+          : error;
+      const retryableTimeout = timedOut && !userCancelled && !emittedDelta;
+      const retryableFailure = retryableTimeout || (attempt < configuredRetries && !emittedDelta && !userCancelled);
+      if (["MODEL_OUTPUT_INVALID", "MODEL_OUTPUT_TRUNCATED"].includes(lastFailure.code) || totalTimedOut || !retryableFailure) break;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(250 * 2 ** attempt, 1000)));
     } finally {
       clearTimeout(timer);
+      clearTimeout(totalTimer);
     }
   }
   return {
@@ -206,6 +245,8 @@ async function invokeModel(options = {}) {
     data: null,
     usage: null,
     latencyMs: 0,
+    attempts: attemptsUsed,
+    timeoutMs,
     errorCode: lastFailure?.code || "MODEL_REQUEST_FAILED",
     message: lastFailure?.message || "模型请求失败"
   };

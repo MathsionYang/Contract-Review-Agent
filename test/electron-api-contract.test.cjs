@@ -8,6 +8,7 @@ test("preload 只暴露约定的本地桌面端 API", () => {
     "cancelChat",
     "chatReview",
     "confirmMemory",
+    "deleteReviewTask",
     "dismissMemory",
     "exportReview",
     "getCredentialStatus",

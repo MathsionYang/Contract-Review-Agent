@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { deleteReviewTask, reconcileDeletedTasks } = require("../src/services/reviewTasks.mjs");
 
 const DEFAULT_STATE = {
   activeProjectId: null,
@@ -62,12 +63,17 @@ function createStorage(rootDir) {
   }
 
   function saveState(state) {
-    const nextState = cloneState({ ...DEFAULT_STATE, ...state });
+    let nextState = cloneState({ ...DEFAULT_STATE, ...state });
     nextState.projects = Array.isArray(nextState.projects) ? nextState.projects : [];
     nextState.reviews = nextState.reviews && typeof nextState.reviews === "object" ? nextState.reviews : {};
     nextState.auditRecords = Array.isArray(nextState.auditRecords) ? nextState.auditRecords : [];
+    nextState = reconcileDeletedTasks(nextState, loadState());
     writeJsonAtomically(statePath, nextState);
     return nextState;
+  }
+
+  function deleteTask(projectId) {
+    return saveState(deleteReviewTask(loadState(), projectId));
   }
 
   function saveProjectFile({ projectId, versionId, sourcePath, fileName }) {
@@ -131,7 +137,7 @@ function createStorage(rootDir) {
     };
   }
 
-  return { loadState, saveState, saveProjectFile, saveKnowledgeFile, statePath, rootDir: root };
+  return { loadState, saveState, deleteTask, saveProjectFile, saveKnowledgeFile, statePath, rootDir: root };
 }
 
 module.exports = { createStorage };

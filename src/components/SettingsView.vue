@@ -90,8 +90,9 @@ function clearLocalCache() {
       </section>
 
       <section class="panel settings-card">
-        <div class="settings-card-heading"><div class="settings-card-icon"><FolderOpen :size="19" /></div><div><h2>导出策略</h2><p>导出前执行 Validator；阻断项存在时不会生成 completed 记录。</p></div></div>
-        <label class="toggle-row"><span><strong>强制执行 Validator</strong><small>未通过校验时禁用导出按钮</small></span><input v-model="settings.forceValidator" type="checkbox" @change="updateSetting('forceValidator', settings.forceValidator)" /></label>
+        <div class="settings-card-heading"><div class="settings-card-icon"><FolderOpen :size="19" /></div><div><h2>导出策略</h2><p>草稿保留待核验事项，正式报告需通过全部校验。</p></div></div>
+        <div class="setting-row"><span>基础安全校验</span><strong>始终开启</strong></div>
+        <div class="setting-control-row"><label for="default-export-mode">默认导出模式</label><select id="default-export-mode" class="settings-select" :value="settings.defaultExportMode || 'draft'" @change="updateSetting('defaultExportMode', $event.target.value)"><option value="draft">草稿</option><option value="formal">正式报告</option></select></div>
         <div class="setting-control-row setting-control-column"><span>默认导出格式</span><div class="format-check-list"><label v-for="format in exportOptions" :key="format" class="check-pill"><input :checked="settings.defaultExportFormats.includes(format)" type="checkbox" @change="updateExportFormat(format, $event.target.checked)" /><span>{{ format }}</span></label></div></div>
       </section>
 

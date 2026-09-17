@@ -220,7 +220,7 @@ function assembleContext(options = {}) {
     "风险必须保持 conclusion_status=needs_verification、human_status=pending_review，不得自动确认。",
     "引用必须使用上下文中的 citation_id；企业记忆只是内部经验，不得伪装成法律条款。",
     "输出字段：intent、answer、citations、risk_candidates、review_action、memory_candidates、tool_calls、needs_clarification、clarification_question。"
-  ].join("\n");
+  ].join("\n") + "\nFor every risk_candidates item, contract_location must include an exact quote copied from the contract current_page or selection, plus page and clause_no. Never invent a quote; if no anchor is available, state that verification is required.";
   const metadata = {
     project_id: review.project?.project_id || state.activeProjectId || "",
     project_name: review.project?.project_name || "",

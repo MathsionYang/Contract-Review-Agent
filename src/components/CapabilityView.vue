@@ -35,12 +35,14 @@ const modelMode = ref("create");
 const modelForm = reactive(createEmptyModel());
 const credentialConfigured = ref(false);
 const credentialStatusLoading = ref(false);
+const modelSaving = ref(false);
 
 const models = computed(() => store.state.capabilities?.models || []);
 const enabledSkillCount = computed(() => (store.state.capabilities?.skills || []).filter((item) => item.status === "enabled").length);
 
 function createEmptyModel() {
   return {
+    configId: "",
     name: "",
     modelId: "",
     provider: "",
@@ -50,8 +52,8 @@ function createEmptyModel() {
     policy: "internal_only",
     contextLength: 0,
     maxTokens: 0,
-    timeoutMs: 30000,
-    retries: 0,
+    timeoutMs: 60000,
+    retries: 1,
     credentialRef: "",
     apiKey: "",
     status: "disabled",
@@ -61,7 +63,9 @@ function createEmptyModel() {
 }
 
 function resetModelForm(model = null) {
+  for (const key of Object.keys(modelForm)) delete modelForm[key];
   Object.assign(modelForm, createEmptyModel(), model ? { ...model } : {});
+  modelForm.apiKey = "";
 }
 
 async function refreshCredentialStatus() {
@@ -92,6 +96,8 @@ function closeModelModal() {
 }
 
 async function saveModel() {
+  if (modelSaving.value) return;
+  modelSaving.value = true;
   try {
     if (!String(modelForm.name || "").trim()) throw new Error("模型名称不能为空");
     if (!String(modelForm.modelId || "").trim()) throw new Error("模型标识不能为空");
@@ -107,6 +113,7 @@ async function saveModel() {
     const { apiKey: _apiKey, ...modelPayload } = modelForm;
     await store.saveModel({
       ...modelPayload,
+      configId: modelMode.value === "edit" ? modelPayload.configId : "",
       credentialRef: reference,
       contextLength: Number(modelForm.contextLength) || 0,
       maxTokens: Number(modelForm.maxTokens) || 0,
@@ -117,15 +124,17 @@ async function saveModel() {
     closeModelModal();
   } catch (error) {
     store.notify(error.message || "模型配置保存失败", "warn");
+  } finally {
+    modelSaving.value = false;
   }
 }
 
 async function validateModel(model) {
-  await store.validateModel(model.name);
+  await store.validateModel(model.configId || model.name);
 }
 
 async function toggleModel(model) {
-  await store.toggleModel(model.name);
+  await store.toggleModel(model.configId || model.name);
 }
 
 async function toggleSkill(skill) {
@@ -134,7 +143,7 @@ async function toggleSkill(skill) {
 
 async function deleteModel(model) {
   if (!window.confirm(`确定删除模型“${model.name}”吗？`)) return;
-  await store.deleteModel(model.name);
+  await store.deleteModel(model.configId || model.name);
 }
 
 function formatTestedAt(value) {
@@ -208,7 +217,7 @@ function formatTestedAt(value) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="model in models" :key="model.name">
+            <tr v-for="model in models" :key="model.configId || model.name">
               <td>
                 <div class="file-name"><Cpu :size="16" /><strong>{{ model.name }}</strong></div>
                 <span class="table-subtext mono">{{ model.modelId || model.name }} · {{ model.version }}</span>
@@ -248,7 +257,7 @@ function formatTestedAt(value) {
   <Modal :open="modelModalOpen" :title="modelMode === 'edit' ? '编辑模型配置' : '新增模型配置'" :wide="true" @close="closeModelModal">
     <template #subtitle><p class="modal-subtitle">API Key 可直接在此填写。保存一次后下次启动继续使用，编辑时不会回显已保存的 Key。</p></template>
     <div class="form-grid two-columns">
-      <div class="form-field"><label>配置名称 <span>*</span></label><input v-model="modelForm.name" class="text-input" :disabled="modelMode === 'edit'" placeholder="例如：hunyuan-pro" /></div>
+      <div class="form-field"><label>配置名称 <span>*</span></label><input v-model="modelForm.name" class="text-input" placeholder="例如：hunyuan-pro" /></div>
       <div class="form-field"><label>模型标识 <span>*</span></label><input v-model="modelForm.modelId" class="text-input" placeholder="例如：hunyuan-pro" /></div>
       <div class="form-field"><label>服务商</label><input v-model="modelForm.provider" class="text-input" placeholder="例如：DeepSeek" /></div>
       <div class="form-field"><label>API 地址 <span>*</span></label><input v-model="modelForm.endpoint" class="text-input" placeholder="例如：https://api.deepseek.com/v1" /></div>
@@ -256,13 +265,13 @@ function formatTestedAt(value) {
       <div class="form-field"><label>数据策略</label><select v-model="modelForm.policy" class="text-input"><option v-for="(label, key) in policyLabels" :key="key" :value="key">{{ label }}</option></select></div>
       <div class="form-field"><label>上下文长度</label><input v-model.number="modelForm.contextLength" class="text-input" type="number" min="0" step="1" /></div>
       <div class="form-field"><label>最大输出 Token</label><input v-model.number="modelForm.maxTokens" class="text-input" type="number" min="0" step="1" /></div>
-      <div class="form-field"><label>超时（毫秒）</label><input v-model.number="modelForm.timeoutMs" class="text-input" type="number" min="0" step="1000" /></div>
+      <div class="form-field"><label>首段响应 / 空闲超时（毫秒）</label><input v-model.number="modelForm.timeoutMs" class="text-input" type="number" min="1000" max="120000" step="1000" /></div>
       <div class="form-field"><label>失败重试次数</label><input v-model.number="modelForm.retries" class="text-input" type="number" min="0" max="5" step="1" /></div>
       <div class="form-field"><label>配置版本</label><input v-model="modelForm.version" class="text-input" placeholder="例如：cfg-v1" /></div>
       <div class="form-field"><label>启用条件</label><div class="form-static-note">保存后默认停用，完成配置校验后可在列表中启用</div></div>
       <div class="form-field"><label>Key 引用名 <span v-if="modelForm.apiKey">*</span></label><input v-model="modelForm.credentialRef" class="text-input" placeholder="例如：cred://deepseek/analysis" autocomplete="off" @change="refreshCredentialStatus" /><small class="inline-note">用于区分多组 Key；同一引用可绑定多个模型。</small></div>
       <div class="form-field"><label>API Key <span v-if="modelMode === 'create' && !credentialConfigured">*</span></label><input v-model="modelForm.apiKey" class="text-input" type="text" autocomplete="off" spellcheck="false" placeholder="在此填写本模型的明文 Key" @input="credentialConfigured = false" /><small v-if="credentialStatusLoading" class="inline-note">正在检查本机凭据...</small><small v-else-if="credentialConfigured" class="inline-note success-text">本机已配置；留空保存将沿用现有 Key</small><small v-else class="inline-note">仅用于本次保存，Electron 会在本机安全存储中加密保存，不写入模型配置。</small></div>
     </div>
-    <template #footer><button class="button" type="button" @click="closeModelModal"><X :size="15" />取消</button><button class="button button-primary" type="button" @click="saveModel"><Check :size="15" />保存配置</button></template>
+    <template #footer><button class="button" type="button" :disabled="modelSaving" @click="closeModelModal"><X :size="15" />取消</button><button class="button button-primary" type="button" :disabled="modelSaving" @click="saveModel"><Check :size="15" />{{ modelSaving ? "保存中" : "保存配置" }}</button></template>
   </Modal>
 </template>

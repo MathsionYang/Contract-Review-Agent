@@ -8,6 +8,7 @@ import KnowledgeView from "./components/KnowledgeView.vue";
 import CapabilityView from "./components/CapabilityView.vue";
 import SettingsView from "./components/SettingsView.vue";
 import Modal from "./components/Modal.vue";
+import ExportValidation from "./components/ExportValidation.vue";
 import { useReviewStore } from "./stores/review";
 import { contractTypes } from "./data/sampleData";
 import { electronApi, hasElectronBridge } from "./services/electronApi";
@@ -19,7 +20,9 @@ const modal = ref(null);
 const uploadForm = reactive({ projectName: "", contractType: "procurement", reviewMode: "standard", selection: null });
 const configForm = reactive({ snapshotId: "CN-2026-09", reviewMode: "standard" });
 const exportFormats = ref(["DOCX", "PDF", "JSON"]);
+const exportMode = ref("draft");
 const isValidating = ref(false);
+const isExporting = ref(false);
 
 const pageComponent = computed(() => ({
   dashboard: DashboardView,
@@ -103,25 +106,47 @@ async function openExport() {
     store.notify("当前没有可导出的审查结果", "warn");
     return;
   }
+  if (store.isBusy || store.chatBusy) {
+    store.notify("任务正在处理，请完成后再导出", "warn");
+    return;
+  }
+  exportMode.value = store.state.settings?.defaultExportMode === "formal" ? "formal" : "draft";
+  exportFormats.value = [...(store.state.settings?.defaultExportFormats || ["DOCX", "PDF", "JSON"])];
   modal.value = "export";
   await validateExport();
 }
 async function validateExport() {
   isValidating.value = true;
-  try { await store.runValidator(exportFormats.value); } finally { isValidating.value = false; }
+  store.validatorResult = null;
+  try {
+    return await store.runValidator(exportFormats.value, exportMode.value);
+  } catch (error) {
+    store.notify(error.message || "导出校验失败，请重试", "warn");
+    return null;
+  } finally {
+    isValidating.value = false;
+  }
 }
 async function startExport() {
+  if (isExporting.value || isValidating.value || store.isBusy || store.chatBusy) return;
   if (!exportFormats.value.length) {
     store.notify("至少选择一种导出格式", "warn");
     return;
   }
-  const result = await store.runValidator(exportFormats.value);
-  if (!result?.canExport) {
-    store.notify(`导出已阻断：${result?.blockingCodes?.join("、") || "存在校验失败"}`, "warn");
-    return;
+  isExporting.value = true;
+  try {
+    const result = await validateExport();
+    if (!result?.canExport) {
+      store.notify(`导出已阻断：${result?.blockingCodes?.join("、") || "存在校验失败"}`, "warn");
+      return;
+    }
+    const output = await store.runExport(exportFormats.value, exportMode.value);
+    if (output?.records?.length) modal.value = null;
+  } catch (_error) {
+    // store 已反馈导出错误，保留弹窗以便重试。
+  } finally {
+    isExporting.value = false;
   }
-  const output = await store.runExport(exportFormats.value);
-  if (output?.records?.length) modal.value = null;
 }
 function formatBytes(bytes) {
   if (!bytes) return "-";
@@ -164,10 +189,10 @@ function statusClass(status) { return status === "published" || status === "acti
     <template #footer><button class="button" type="button" @click="modal = null">取消</button><button class="button button-primary" type="button" @click="saveConfig"><Save :size="15" />保存配置</button></template>
   </Modal>
 
-  <Modal :open="modal === 'export'" title="导出审查报告" @close="modal = null">
-    <template #subtitle><p class="modal-subtitle">导出前自动执行 Validator；存在阻断项时不会生成完成记录。</p></template>
-    <div class="form-field"><label>导出格式</label><div class="format-grid"><label v-for="format in ['DOCX','PDF','XLSX','JSON']" :key="format" class="format-option"><input v-model="exportFormats" type="checkbox" :value="format" @change="validateExport" /><span><FileDown :size="15" />{{ format }}</span></label></div></div>
-    <div class="validator-box" :class="{ passed: validator?.canExport, failed: validator && !validator.canExport }"><div class="validator-heading"><div><small>导出门禁</small><strong>{{ isValidating ? "校验中..." : validator?.canExport ? "校验通过，可导出" : "存在阻断项，暂不可导出" }}</strong></div><Check v-if="validator?.canExport" :size="20" /><LoaderCircle v-else-if="isValidating" class="spin" :size="20" /></div><div v-if="validator && !validator.canExport" class="blocking-codes"><span v-for="code in validator.blockingCodes" :key="code" class="code-chip">{{ code }}</span></div><div class="validator-items"><div v-for="item in validator?.items || []" :key="item.id" class="validator-item"><span :class="item.status === 'passed' ? 'pass-mark' : 'fail-mark'">{{ item.status === "passed" ? "✓" : "!" }}</span><span>{{ item.label }}</span><small>{{ item.message }}</small></div></div></div>
-    <template #footer><button class="button" type="button" @click="modal = null">取消</button><button class="button button-primary" type="button" :disabled="!validator?.canExport || store.isBusy" @click="startExport"><LoaderCircle v-if="store.isBusy" class="spin" :size="15" /><FileDown v-else :size="15" />选择目录并导出</button></template>
+  <Modal :open="modal === 'export'" title="导出审查报告" @close="!isExporting && !isValidating && (modal = null)">
+    <div class="form-field"><label>导出模式</label><div class="mode-grid" role="group" aria-label="导出模式"><label v-for="mode in [['draft','草稿'],['formal','正式报告']]" :key="mode[0]" class="mode-card" :class="{ active: exportMode === mode[0] }"><input v-model="exportMode" type="radio" name="export-mode" :value="mode[0]" :disabled="isValidating || isExporting" @change="validateExport" /> {{ mode[1] }}</label></div></div>
+    <div class="form-field"><label>导出格式</label><div class="format-grid"><label v-for="format in ['DOCX','PDF','XLSX','JSON']" :key="format" class="format-option"><input v-model="exportFormats" type="checkbox" :value="format" :disabled="isValidating || isExporting" @change="validateExport" /><span><FileDown :size="15" />{{ format }}</span></label></div></div>
+    <ExportValidation :validation="validator" :loading="isValidating" />
+    <template #footer><button class="button" type="button" :disabled="isValidating || isExporting" @click="modal = null">取消</button><button class="button button-primary" type="button" :disabled="!validator?.canExport || validator?.mode !== exportMode || store.isBusy || store.chatBusy || isValidating || isExporting" @click="startExport"><LoaderCircle v-if="isValidating || isExporting" class="spin" :size="15" /><FileDown v-else :size="15" />{{ exportMode === 'draft' ? '导出草稿' : '导出正式报告' }}</button></template>
   </Modal>
 </template>

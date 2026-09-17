@@ -16,6 +16,7 @@ const api = {
   importLegalSnapshot: (payload) => ipcRenderer.invoke("legal:import-snapshot", payload),
   verifyLegalRealtime: (payload) => ipcRenderer.invoke("legal:verify-realtime", payload),
   runReview: (payload) => ipcRenderer.invoke("review:run", payload),
+  deleteReviewTask: (projectId) => ipcRenderer.invoke("review:delete-task", { projectId }),
   chatReview: (payload) => ipcRenderer.invoke("review:chat", payload),
   retryChat: (payload) => ipcRenderer.invoke("review:chat-retry", payload),
   cancelChat: (payload) => ipcRenderer.invoke("review:chat-cancel", payload),

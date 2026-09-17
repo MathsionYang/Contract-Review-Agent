@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { compact, resolveRefs } = require("./contract-evidence.cjs");
 
 const ALLOWED_LEVELS = new Set(["critical", "high", "medium", "low", "info"]);
 const ALLOWED_CATEGORIES = new Set(["legal", "commercial", "company_policy", "text_quality", "evidence"]);
@@ -14,23 +15,6 @@ function documentPages(document = {}) {
   return [{ page: 1, text: String(document.text || "") }];
 }
 
-function findQuote(document, query) {
-  const pages = documentPages(document);
-  const needle = String(query || "").trim();
-  if (needle) {
-    const found = pages.find((page) => String(page.text || "").includes(needle));
-    if (found) return { page: Number(found.page) || 1, quote: needle };
-  }
-  const first = pages.find((page) => String(page.text || "").trim());
-  return first ? { page: Number(first.page) || 1, quote: String(first.text).trim().slice(0, 180) } : { page: 1, quote: "" };
-}
-
-function inferClause(text, index = 0) {
-  const before = String(text || "").slice(0, Math.max(0, index));
-  const matches = before.match(/(?:第\s*[一二三四五六七八九十百\d]+\s*条|\b\d+(?:\.\d+)+)/g);
-  return matches?.at(-1)?.replace(/\s+/g, "") || "";
-}
-
 function baseFinding(input = {}) {
   const title = String(input.title || "待核验风险");
   const location = input.contract_location || {};
@@ -38,11 +22,20 @@ function baseFinding(input = {}) {
   const category = ALLOWED_CATEGORIES.has(input.risk_category) ? input.risk_category : "evidence";
   const conclusion = ALLOWED_CONCLUSIONS.has(input.conclusion_status) ? input.conclusion_status : "needs_verification";
   const evidence = ALLOWED_EVIDENCE.has(input.evidence_status) ? input.evidence_status : "unverified";
+  const page = Number.isInteger(location.page) && location.page > 0 ? location.page : null;
+  const locationConfidence = Number.isFinite(Number(input.location_confidence))
+    ? Number(input.location_confidence)
+    : Number.isFinite(Number(location.location_confidence))
+      ? Number(location.location_confidence)
+      : (location.location_status === "unresolved" ? 0 : 0.82);
   return {
-    risk_id: String(input.risk_id || `risk_${hashValue(`${title}-${location.page || 1}-${location.clause_no || ""}`)}`),
+    risk_id: String(input.risk_id || `risk_${hashValue(`${title}-${page ?? "unresolved"}-${location.clause_no || ""}`)}`),
     source_type: String(input.source_type || "review_engine"),
     evidence_origin: String(input.evidence_origin || input.source_type || "review_engine"),
     rule_id: input.rule_id || undefined,
+    related_checks: Array.isArray(input.related_checks) ? input.related_checks : [],
+    checklist_ids: Array.isArray(input.checklist_ids) ? input.checklist_ids : [],
+    catalog_version: input.catalog_version || undefined,
     risk_level: level,
     risk_category: category,
     risk_topic: String(input.risk_topic || "general"),
@@ -50,12 +43,14 @@ function baseFinding(input = {}) {
     conclusion_status: conclusion,
     evidence_status: evidence,
     human_status: input.human_status || "pending_review",
-    location_confidence: Number.isFinite(Number(input.location_confidence)) ? Number(input.location_confidence) : 0.82,
+    location_confidence: locationConfidence,
     contract_location: {
+      ...location,
       file_version_id: String(location.file_version_id || input.file_version_id || ""),
-      page: Number(location.page || 1),
+      page,
       clause_no: String(location.clause_no || ""),
-      quote: String(location.quote || "")
+      quote: String(location.quote || ""),
+      location_status: String(location.location_status || (page ? "resolved" : "unresolved"))
     },
     analysis: String(input.analysis || "当前结果需要结合合同原文和知识依据进行人工核验。"),
     suggestion: String(input.suggestion || "建议补充依据并完成人工复核后再确认结论。"),
@@ -65,14 +60,19 @@ function baseFinding(input = {}) {
 }
 
 function locationFor(document, query, fileVersionId, clauseNo) {
-  const found = findQuote(document, query);
-  const pageText = documentPages(document).find((page) => Number(page.page) === found.page)?.text || "";
-  const index = query ? pageText.indexOf(query) : 0;
+  const refs = resolveRefs(document, query);
+  const matchingClause = clauseNo ? refs.filter((ref) => ref.clause_no === clauseNo) : [];
+  const candidates = matchingClause.length ? matchingClause : refs;
+  const found = candidates.length === 1 ? candidates[0] : null;
   return {
     file_version_id: fileVersionId || document.fileVersionId || "",
-    page: found.page,
-    clause_no: clauseNo || inferClause(pageText, index),
-    quote: found.quote
+    ...(found || {}),
+    page: found?.page ?? null,
+    clause_no: found?.clause_no || "",
+    quote: found?.quote || "",
+    source_refs: found ? [found] : [],
+    location_status: found ? "resolved" : "unresolved",
+    location_confidence: found ? 0.92 : 0
   };
 }
 
@@ -159,7 +159,7 @@ function evaluateDeterministicRules(document = {}, rules = [], options = {}) {
 }
 
 function parseModelContent(payload) {
-  const content = typeof payload === "string" ? payload : payload?.content ?? payload?.output ?? payload?.data;
+  const content = typeof payload === "string" ? payload : payload?.content ?? payload?.output ?? payload?.data ?? payload;
   if (Array.isArray(content)) return content;
   if (content && typeof content === "object") return Array.isArray(content.risks) ? content.risks : [content];
   if (typeof content !== "string") return null;
@@ -194,11 +194,12 @@ function normalizeModelRisks(payload, context = {}) {
     const location = locationFor(context.document || {}, quote, context.fileVersionId, requestedLocation.clause_no || requestedLocation.clauseNo);
     return baseFinding({
       ...item,
-      risk_id: item.risk_id || `model_${index + 1}_${hashValue(item.title || index)}`,
+      risk_id: item.risk_id || `model_${index + 1 + (context.indexOffset || 0)}_${hashValue(item.title || index)}`,
       source_type: "model_analysis",
       evidence_origin: "model_analysis",
-      conclusion_status: item.conclusion_status === "confirmed" && item.evidence_status === "verified" ? "candidate" : item.conclusion_status,
-      evidence_status: item.evidence_status || "unverified",
+      conclusion_status: "needs_verification",
+      evidence_status: "unverified",
+      location_confidence: location.location_confidence,
       human_status: "pending_review",
       contract_location: location,
       file_version_id: context.fileVersionId
@@ -222,7 +223,8 @@ function sameFinding(left, right) {
   const rightLocation = right.contract_location || {};
   const leftKey = `${leftLocation.page || ""}|${leftLocation.clause_no || ""}|${left.title || ""}`.toLowerCase();
   const rightKey = `${rightLocation.page || ""}|${rightLocation.clause_no || ""}|${right.title || ""}`.toLowerCase();
-  return leftKey === rightKey || (left.title && right.title && left.title === right.title);
+  return leftKey === rightKey && leftLocation.file_version_id === rightLocation.file_version_id
+    && compact(leftLocation.quote) === compact(rightLocation.quote);
 }
 
 function mergeReviewFindings(findings = []) {
@@ -236,6 +238,8 @@ function mergeReviewFindings(findings = []) {
     }
     existing.legal_basis = mergeBasis(existing.legal_basis, next.legal_basis);
     existing.company_basis = mergeBasis(existing.company_basis, next.company_basis);
+    existing.checklist_ids = [...new Set([...existing.checklist_ids, ...next.checklist_ids])];
+    existing.related_checks = [...new Set([...existing.related_checks, ...next.related_checks])];
     if (next.evidence_status === "verified") existing.evidence_status = "verified";
     if (existing.conclusion_status === "needs_verification" && next.conclusion_status) existing.conclusion_status = next.conclusion_status;
     existing.evidence_origin = `${existing.evidence_origin},${next.evidence_origin}`;

@@ -475,3 +475,44 @@ test("用户取消后即使模型适配器忽略信号也不会保存成功结�
   assert.equal(result.errorCode, "MODEL_REQUEST_CANCELLED");
   assert.equal(storage.loadState().reviews["project-chat"].chat_sessions[0].messages.at(-1).status, "cancelled");
 });
+
+test("natural-language risk without model quote is anchored back to contract text", () => {
+  assert.equal(typeof reviewChat.normalizeRisk, "function");
+  const risk = reviewChat.normalizeRisk({
+    title: "Excessive prepayment",
+    analysis: "The contract says prepayment is 40% of contract amount.",
+    risk_category: "commercial"
+  }, {
+    review: {
+      project: { file_version_id: "contract_v1" },
+      document: {
+        pages: [{ page: 1, text: "Clause 1.2 Payment: Prepayment is 40% of contract amount." }]
+      }
+    },
+    currentPage: 1
+  });
+
+  assert.equal(risk.contract_location.file_version_id, "contract_v1");
+  assert.equal(risk.contract_location.page, 1);
+  assert.match(risk.contract_location.quote, /Prepayment is 40% of contract amount/);
+  assert.deepEqual(risk.contract_location.char_range, [20, 56]);
+  assert.ok(risk.location_confidence >= 0.7);
+});
+
+test("risk without any textual match remains unresolved without unrelated page text", () => {
+  const risk = reviewChat.normalizeRisk({
+    title: "Potential issue",
+    analysis: "Further legal review is required."
+  }, {
+    review: {
+      project: { file_version_id: "contract_v1" },
+      document: { pages: [{ page: 2, text: "2.1 Delivery date shall be confirmed by both parties." }] }
+    },
+    currentPage: 2
+  });
+
+  assert.equal(risk.contract_location.page, null);
+  assert.equal(risk.contract_location.quote, "");
+  assert.equal(risk.contract_location.location_status, "unresolved");
+  assert.equal(risk.location_confidence, 0);
+});

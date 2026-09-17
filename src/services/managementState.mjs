@@ -31,8 +31,25 @@ export function removeKnowledgeItems(items = [], files = []) {
 }
 
 export function upsertModel(models = [], model = {}) {
-  const next = models.map((item) => item.name === model.name ? { ...item, ...model } : item);
-  return next.some((item) => item.name === model.name) ? next : [model, ...models];
+  if (!model.configId) return [{ ...model, configId: crypto.randomUUID() }, ...models];
+  if (!models.some((item) => item.configId === model.configId)) throw new Error("待编辑的模型配置不存在，请刷新列表");
+  return models.map((item) => item.configId === model.configId ? { ...item, ...model } : item);
+}
+
+export function ensureModelIds(models = []) {
+  const seen = new Set();
+  return models.map((model) => {
+    const configId = model.configId && !seen.has(model.configId) ? model.configId : crypto.randomUUID();
+    seen.add(configId);
+    return { ...model, configId };
+  });
+}
+
+export function findModel(models = [], reference) {
+  const exact = models.find((model) => model.configId && model.configId === reference);
+  if (exact) return exact;
+  const named = models.filter((model) => model.name === reference);
+  return named.length === 1 ? named[0] : null;
 }
 
 // 清理早期版本写入的演示模型，保留用户后来手工保存的其他模型配置。
@@ -49,8 +66,9 @@ export function removeDemoModels(models = []) {
   });
 }
 
-export function removeModel(models = [], name) {
-  return models.filter((model) => model.name !== name);
+export function removeModel(models = [], reference) {
+  const target = findModel(models, reference);
+  return models.filter((model) => model !== target);
 }
 
 export function mergeSettings(current = {}, patch = {}) {
@@ -208,10 +226,11 @@ export function buildReviewExecutionConfig(capabilities = {}, previous = {}, upd
     model.status === "active" && (model.testStatus === "passed" || model.testStatus === undefined)
   ));
   const models = Object.fromEntries(roles.map((role) => {
-    const previousName = previous.models?.[role]?.name;
-    const selected = activeModels.find((model) => model.role === role && model.name === previousName)
+    const previousRef = previous.models?.[role]?.configId || previous.models?.[role]?.name;
+    const selected = findModel(activeModels.filter((model) => model.role === role), previousRef)
       || activeModels.find((model) => model.role === role);
     return [role, selected ? {
+      ...(selected.configId ? { configId: selected.configId } : {}),
       name: selected.name,
       modelId: selected.modelId || selected.name,
       provider: selected.provider || "",

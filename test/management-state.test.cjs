@@ -37,23 +37,53 @@ test("删除知识项只移除指定文件并保留其他项", async () => {
   );
 });
 
-test("模型保存以模型名称为键，重复保存时更新而不是产生重复项", async () => {
+test("模型编辑按配置 ID 更新，名称不作为覆盖依据", async () => {
   const managementState = await managementStatePromise;
   assert.equal(typeof managementState.upsertModel, "function");
 
-  const initial = [{ name: "hunyuan-pro", provider: "旧网关", status: "active" }];
+  const initial = [{ configId: "config-1", name: "hunyuan-pro", provider: "旧网关", status: "active" }];
   const updated = managementState.upsertModel(initial, {
     name: "hunyuan-pro",
+    configId: "config-1",
     provider: "新网关",
     status: "disabled"
   });
 
   assert.equal(updated.length, 1);
   assert.deepEqual(updated[0], {
+    configId: "config-1",
     name: "hunyuan-pro",
     provider: "新网关",
     status: "disabled"
   });
+});
+
+test("同名同角色新增模型独立保存，编辑删除不影响其他记录且重启后保留", async () => {
+  const { upsertModel, removeModel, findModel, ensureModelIds, buildReviewExecutionConfig } = await managementStatePromise;
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { createStorage } = require("../electron/storage.cjs");
+  const first = { name: "DeepSeek", modelId: "model-a", role: "analysis", status: "active", testStatus: "passed", credentialRef: "cred://a" };
+  const a = upsertModel([], first);
+  const b = upsertModel(a, { ...first, modelId: "model-b", credentialRef: "cred://b" });
+  assert.equal(b.length, 2);
+  assert.ok(b.every((m) => m.configId));
+  assert.notEqual(b[0].configId, b[1].configId);
+  assert.equal(findModel(b, "DeepSeek"), null, "同名旧引用不得任意选择");
+  const edited = upsertModel(b, { ...b[1], name: "重命名", modelId: "model-c" });
+  assert.equal(edited[0].modelId, "model-b");
+  assert.equal(edited[1].modelId, "model-c");
+  assert.equal(removeModel(edited, b[1].configId).length, 1);
+  assert.throws(() => upsertModel(b, { ...first, configId: "missing" }));
+  const snapshot = buildReviewExecutionConfig({ models: b }, { models: { analysis: b[1] } });
+  assert.equal(snapshot.models.analysis.configId, b[1].configId);
+  const storage = createStorage(fs.mkdtempSync(path.join(os.tmpdir(), "multi-model-")));
+  storage.saveState({ capabilities: { models: b } });
+  assert.deepEqual(createStorage(storage.rootDir).loadState().capabilities.models, b);
+  const migrated = ensureModelIds([{ ...first }, { ...first }]);
+  assert.equal(new Set(migrated.map((m) => m.configId)).size, 2);
+  assert.deepEqual(ensureModelIds(migrated), migrated);
 });
 
 test("模型配置不使用历史演示数据，但保留用户手工配置", async () => {

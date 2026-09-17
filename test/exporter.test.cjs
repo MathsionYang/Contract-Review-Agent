@@ -84,3 +84,101 @@ test("门禁失败时不生成 completed 导出记录", async () => {
   assert.equal(result.records.length, 0);
   assert.equal(fs.readdirSync(outputDir).length, 0);
 });
+
+test("JSON 导出保存完整通用清单、专项统计和人工复核记录", async () => {
+  const catalog = require("../electron/general-checklist-catalog.json");
+  const { coverageFrom } = require("../electron/checklist-policy.cjs");
+  const review = reviewFixture();
+  review.checklist_version = catalog.version;
+  review.checklist_results = catalog.items.map((entry) => ({ ...entry, status: "pass" }));
+  review.checklist_coverage = coverageFrom(review.checklist_results);
+  review.check_results = [{ check_id: "test.check", status: "pass" }];
+  review.coverage = coverageFrom(review.check_results);
+  review.checklist_results[0].human_review = { reviewer: "测试法务", evidence: "测试材料" };
+  const result = await exportReview({ review, formats: ["JSON"], outputDir: tempDir() });
+  assert.equal(result.validation.canExport, true);
+  const data = JSON.parse(fs.readFileSync(result.records[0].filePath, "utf8"));
+  assert.equal(data.checklist_results.length, 95);
+  assert.deepEqual(data.checklist_results, review.checklist_results);
+  assert.deepEqual(data.checklist_coverage, review.checklist_coverage);
+  assert.deepEqual(data.coverage, review.coverage);
+});
+
+test("四种草稿文件携带明确标记和完整待核验事项，PDF 每页重复草稿标记", async (t) => {
+  const review = reviewFixture();
+  review.risks[0].human_status = "pending_review";
+  review.risks[0].evidence_status = "unverified";
+  review.risks[0].analysis = "本项尚需核对合同原件、补充材料和业务立场。".repeat(100);
+  const before = JSON.stringify(review);
+  const result = await exportReview({ review, mode: "draft", formats: ["DOCX", "PDF", "XLSX", "JSON"], outputDir: tempDir() });
+  assert.equal(result.validation.canExport, true);
+  assert.equal(result.records.length, 4);
+  assert.equal(JSON.stringify(review), before);
+  for (const record of result.records) {
+    assert.equal(record.export_mode, "draft");
+    assert.equal(record.report_status, "draft");
+    assert.equal(record.formal_ready, false);
+    assert.ok(record.filePath.includes("_草稿_"));
+    assert.ok(record.warning_codes.includes("PENDING_HUMAN_REVIEW"));
+  }
+  const fileFor = (format) => result.records.find((record) => record.format === format).filePath;
+  const json = JSON.parse(fs.readFileSync(fileFor("JSON"), "utf8"));
+  assert.equal(json.export_mode, "draft");
+  assert.deepEqual(json.risks, review.risks);
+  assert.ok(json.validation.items.some((item) => item.code === "PENDING_HUMAN_REVIEW" && item.status === "warning"));
+  const mammoth = require("mammoth");
+  const docx = (await mammoth.extractRawText({ path: fileFor("DOCX") })).value;
+  assert.ok(docx.includes("合同审查报告 草稿"));
+  assert.ok(docx.includes("DRAFT / NOT FINAL"));
+  assert.ok(docx.includes("待核验事项") && docx.includes("PENDING_HUMAN_REVIEW"));
+  const archive = await require("jszip").loadAsync(fs.readFileSync(fileFor("DOCX")));
+  const headers = Object.keys(archive.files).filter((name) => /^word\/header\d+\.xml$/.test(name));
+  assert.ok(headers.length > 0);
+  assert.ok((await archive.file(headers[0]).async("string")).includes("DRAFT / NOT FINAL"));
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(fileFor("XLSX"));
+  assert.ok(workbook.getWorksheet("审查风险清单").getCell("A1").value.includes("DRAFT / NOT FINAL"));
+  const checks = workbook.getWorksheet("导出校验");
+  assert.ok(checks.getCell("A1").value.includes("不得作为正式审查结论"));
+  assert.ok(checks.getSheetValues().flat().includes("PENDING_HUMAN_REVIEW"));
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loadingTask = getDocument({ data: new Uint8Array(fs.readFileSync(fileFor("PDF"))), useSystemFonts: true });
+  const document = await loadingTask.promise;
+  try {
+    assert.ok(document.numPages > 1);
+    let text = "";
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((item) => item.str).join("");
+      assert.ok(pageText.includes("DRAFT - NOT FINAL"), `page ${pageNumber}`);
+      for (const item of content.items) {
+        assert.ok(item.transform[4] >= 40 && item.transform[4] + item.width <= 555, `page ${pageNumber}: text outside margins`);
+      }
+      text += pageText;
+    }
+    assert.ok(text.includes("PENDING_HUMAN_REVIEW"));
+    assert.ok(text.includes("待核验事项"));
+  } finally {
+    await loadingTask.destroy();
+  }
+  t.diagnostic(`draft artifacts: ${path.dirname(fileFor("PDF"))}`);
+});
+
+test("导出器直接调用也不能用草稿绕过硬阻断，不能自动升级草稿", async () => {
+  const outputDir = tempDir();
+  const review = reviewFixture();
+  review.risks[0].title = `sk-${"s".repeat(30)}`;
+  const blocked = await exportReview({ review, formats: ["JSON"], mode: "draft", outputDir });
+  assert.equal(blocked.validation.canExport, false);
+  assert.equal(blocked.records.length, 0);
+  assert.equal(fs.readdirSync(outputDir).length, 0);
+  const validDraft = await exportReview({ review: reviewFixture(), formats: ["JSON"], mode: "draft", outputDir });
+  assert.equal(validDraft.records[0].report_status, "draft");
+  assert.equal(validDraft.records[0].formal_ready, true);
+  const formal = await exportReview({ review: reviewFixture(), formats: ["JSON"], mode: "formal", outputDir });
+  assert.equal(formal.records[0].report_status, "formal");
+  assert.deepEqual(formal.records[0].warning_codes, []);
+  assert.ok(formal.records[0].filePath.includes("_正式_"));
+});

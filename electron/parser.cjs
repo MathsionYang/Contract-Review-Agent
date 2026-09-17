@@ -17,6 +17,107 @@ function splitPages(text) {
   return pages.length ? pages : [""];
 }
 
+function textHash(value) {
+  return `sha256:${crypto.createHash("sha256").update(String(value || "")).digest("hex")}`;
+}
+
+function decodeHtmlText(value) {
+  return String(value || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferClauseNo(value) {
+  const match = String(value || "").trim().match(/^(?:第\s*[一二三四五六七八九十百千万\d]+\s*条|\d+(?:\.\d+)+(?=\s*[\u3400-\u9fff]))/);
+  return match ? match[0].replace(/\s+/g, "") : "";
+}
+
+function docxBlocksFromHtml(html, text) {
+  const blocks = [];
+  const source = String(html || "");
+  const fullText = String(text || "");
+  const sourceOffsets = [];
+  let normalizedText = "";
+  for (const match of fullText.matchAll(/\s+|\S/g)) {
+    normalizedText += /\s/.test(match[0]) ? " " : match[0];
+    sourceOffsets.push(match.index);
+  }
+  let normalizedCursor = 0;
+  let order = 0;
+  let currentClause = "";
+  const append = (input = {}) => {
+    const blockText = String(input.text || "").trim();
+    if (!blockText) return;
+    const normalizedBlock = blockText.replace(/\s+/g, " ");
+    const start = normalizedText.indexOf(normalizedBlock, normalizedCursor);
+    // Match normalized text, but store offsets into the original document text.
+    const charRange = start >= 0
+      ? [sourceOffsets[start], sourceOffsets[start + normalizedBlock.length - 1] + 1]
+      : null;
+    const clauseNo = input.clause_no || inferClauseNo(blockText) || currentClause;
+    if (clauseNo) currentClause = clauseNo;
+    blocks.push({
+      block_id: `docx_block_${++order}`,
+      source_type: "docx",
+      page: null,
+      logical_page: 1,
+      page_status: "unresolved",
+      block_type: input.block_type || "paragraph",
+      clause_no: clauseNo,
+      text: blockText,
+      char_range: charRange,
+      text_hash: textHash(blockText),
+      ...(input.table_ref ? { table_ref: input.table_ref } : {})
+    });
+    if (start >= 0) normalizedCursor = start + normalizedBlock.length;
+  };
+
+  const tokenPattern = /<table\b[\s\S]*?<\/table\s*>|<(p|h[1-6])\b[\s\S]*?<\/\1\s*>/gi;
+  let token;
+  while ((token = tokenPattern.exec(source))) {
+    const value = token[0];
+    if (/^<table\b/i.test(value)) {
+      const tableId = `table_${order + 1}`;
+      let row = -1;
+      const rowPattern = /<tr\b[\s\S]*?<\/tr\s*>/gi;
+      let rowMatch;
+      while ((rowMatch = rowPattern.exec(value))) {
+        row += 1;
+        let column = -1;
+        const cellPattern = /<(td|th)\b[\s\S]*?<\/\1\s*>/gi;
+        let cellMatch;
+        while ((cellMatch = cellPattern.exec(rowMatch[0]))) {
+          column += 1;
+          append({
+            block_type: "table_cell",
+            text: decodeHtmlText(cellMatch[0]),
+            table_ref: { table_id: tableId, row, column }
+          });
+        }
+      }
+      continue;
+    }
+    append({
+      block_type: /^<h[1-6]/i.test(value) ? "heading" : "paragraph",
+      text: decodeHtmlText(value)
+    });
+  }
+  if (!blocks.length && fullText.trim()) {
+    append({ block_type: "paragraph", text: fullText.trim() });
+  }
+  return blocks;
+}
+
 function baseDocumentMetadata(filePath, buffer) {
   const extension = path.extname(filePath).toLowerCase();
   const fileName = path.basename(filePath);
@@ -35,6 +136,7 @@ function baseDocumentMetadata(filePath, buffer) {
 async function parseDocx(filePath, buffer) {
   const mammoth = require("mammoth");
   const result = await mammoth.extractRawText({ path: filePath });
+  const htmlResult = await mammoth.convertToHtml({ path: filePath });
   const text = String(result.value || "").trim();
   const pageTexts = splitPages(text);
   if (pageTexts.length > MAX_PAGE_COUNT) {
@@ -49,8 +151,12 @@ async function parseDocx(filePath, buffer) {
       text: pageText,
       ocr: { status: "not_required" }
     })),
+    blocks: docxBlocksFromHtml(htmlResult.value, text),
     text,
-    parseMessages: Array.isArray(result.messages) ? result.messages : [],
+    parseMessages: [
+      ...(Array.isArray(result.messages) ? result.messages : []),
+      ...(Array.isArray(htmlResult.messages) ? htmlResult.messages : [])
+    ],
     ocr: { status: "not_required" }
   };
 }
@@ -76,6 +182,8 @@ async function parsePdf(filePath, buffer) {
   }
 
   const pages = [];
+  const blocks = [];
+  let textCursor = 0;
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
@@ -84,6 +192,22 @@ async function parsePdf(filePath, buffer) {
       .join(" ")
       .replace(/[ \t]+/g, " ")
       .trim();
+    const viewport = page.getViewport({ scale: 1 });
+    const start = text ? textCursor : -1;
+    if (text) textCursor += text.length + 2;
+    blocks.push({
+      block_id: `pdf_page_${pageNumber}`,
+      source_type: "pdf",
+      page: pageNumber,
+      logical_page: pageNumber,
+      page_status: "resolved",
+      block_type: "page",
+      clause_no: inferClauseNo(text),
+      text,
+      bbox: [0, 0, viewport.width, viewport.height],
+      char_range: start >= 0 ? [start, start + text.length] : null,
+      text_hash: textHash(text)
+    });
     pages.push({
       page: pageNumber,
       text,
@@ -101,6 +225,7 @@ async function parsePdf(filePath, buffer) {
     documentType: searchable ? "searchable_pdf" : "scanned_pdf",
     pageCount: pdf.numPages,
     pages,
+    blocks,
     text,
     ocr: searchable
       ? { status: "not_required" }

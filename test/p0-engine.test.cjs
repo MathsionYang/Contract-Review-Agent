@@ -137,6 +137,22 @@ test("模型输出必须归一化为允许的风险结构，非法 JSON 不得�
   assert.equal(result[0].source_type, "model_analysis");
 });
 
+test("模型引用无法匹配原文时不得回退到第一页伪造证据", () => {
+  const result = reviewEngine.normalizeModelRisks(
+    { risks: [{ title: "未匹配风险", quote: "合同中不存在的原文", risk_level: "high" }] },
+    {
+      fileVersionId: "contract_v1",
+      document: { pageCount: 2, pages: [{ page: 1, text: "第一页条款" }, { page: 2, text: "第二页条款" }] }
+    }
+  );
+
+  assert.equal(result[0].contract_location.page, null);
+  assert.equal(result[0].contract_location.quote, "");
+  assert.equal(result[0].contract_location.location_status, "unresolved");
+  assert.equal(result[0].location_confidence, 0);
+  assert.equal(result[0].conclusion_status, "needs_verification");
+});
+
 test("模型风险与规则风险合并时保留具体依据并去除重复风险", () => {
   assert.equal(typeof reviewEngine.mergeReviewFindings, "function");
 
@@ -274,6 +290,26 @@ test("模型网关保留脱敏后的服务商错误，并拦截错误的 DeepSee
   });
   assert.equal(invalidModel.errorCode, "MODEL_CONFIG_INVALID");
   assert.match(invalidModel.message, /deepseek-chat/);
+});
+
+test("model timeout retries according to configured attempts", async () => {
+  assert.equal(typeof modelGateway.invokeModel, "function");
+  let attempts = 0;
+  const result = await modelGateway.invokeModel({
+    model: { endpoint: "https://model.example/v1", modelId: "analysis-model", credentialRef: "none", timeoutMs: 10, retries: 0 },
+    fetchImpl: async (_url, options) => {
+      attempts += 1;
+      await new Promise((resolve, reject) => {
+        if (options.signal.aborted) return reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        options.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })), { once: true });
+      });
+    }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.errorCode, "MODEL_REQUEST_FAILED");
+  assert.equal(attempts, 2);
+  assert.ok(result.message);
 });
 
 test("法律实时核验拒绝白名单之外的地址并保留机器错误码", async () => {

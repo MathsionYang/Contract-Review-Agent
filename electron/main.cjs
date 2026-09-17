@@ -18,6 +18,7 @@ let mainWindow;
 let storage;
 let reviewChatService;
 let credentialStore;
+const runningReviewProjects = new Set();
 
 // 审查工作台不依赖 GPU；关闭硬件加速可兼容受限桌面、远程会话和无可用显卡驱动环境。
 app.disableHardwareAcceleration();
@@ -60,7 +61,7 @@ function auditEntry(action, resource, result, detail = "") {
   };
 }
 
-// 进度事件只传递任务标识和阶段信息，避免把模型响应、合同正文或凭据带入渲染层事件。
+// 只传递归一化后的单条风险和任务进度，不发送原始模型流或完整合同。
 function sendReviewProgress(projectId, progress) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send("review:progress", {
@@ -68,7 +69,11 @@ function sendReviewProgress(projectId, progress) {
     step: String(progress?.step || ""),
     progress: Math.min(Math.max(Number(progress?.progress) || 0, 0), 100),
     status: String(progress?.status || "running"),
-    riskCount: Math.max(0, Number(progress?.riskCount) || 0)
+    riskCount: Math.max(0, Number(progress?.riskCount) || 0),
+    runId: progress.runId,
+    sequence: progress.sequence,
+    fileVersionId: progress.fileVersionId,
+    ...(progress.riskUpdate ? { riskUpdate: progress.riskUpdate } : {})
   });
 }
 
@@ -203,8 +208,7 @@ function registerIpc() {
         errors.push({ fileName: file.fileName || path.basename(file.filePath || ""), code: error.code || "KNOWLEDGE_PARSE_FAILED", message: error.message });
       }
     }
-    storage.saveState(state);
-    return { items, errors, state };
+    return { items, errors, state: storage.saveState(state) };
   });
 
   ipcMain.handle("legal:import-snapshot", async (_event, options = {}) => {
@@ -235,8 +239,7 @@ function registerIpc() {
     delete snapshot.sourcePath;
     state.knowledge.legalSnapshots.unshift(snapshot);
     state.auditRecords.unshift(auditEntry("导入法律快照", snapshot.id, "成功", `${snapshot.name} · ${snapshot.clauses.length} 个条款`));
-    storage.saveState(state);
-    return { canceled: false, snapshot, state };
+    return { canceled: false, snapshot, state: storage.saveState(state) };
   });
 
   ipcMain.handle("legal:verify-realtime", async (_event, options = {}) => {
@@ -249,30 +252,45 @@ function registerIpc() {
     });
     const nextState = ensureKnowledgeState(state);
     nextState.auditRecords.unshift(auditEntry("实时法律来源核验", options.query || "未填写查询", result.status === "verified" ? "成功" : result.errorCode || "未完成", result.message || ""));
-    storage.saveState(nextState);
-    return { ...result, state: nextState };
+    return { ...result, state: storage.saveState(nextState) };
   });
 
   ipcMain.handle("review:run", async (_event, options = {}) => {
     const stored = ensureKnowledgeState(storage.loadState());
     const projectId = options.projectId || options.review?.project?.project_id || stored.activeProjectId;
+    if (stored.deletedProjectIds?.includes(projectId)) throw new Error("审查任务已被删除");
+    if (runningReviewProjects.has(projectId)) throw new Error("该审查任务正在运行");
     const review = options.review || stored.reviews?.[projectId];
     if (!review) throw new Error("当前项目没有可执行的审查版本");
-    const result = await runReview({
-      review,
-      state: stored,
-      services: { invokeModel: invokeConfiguredModel },
-      onProgress: (progress) => sendReviewProgress(projectId, progress)
-    });
-    const nextState = {
-      ...stored,
-      activeProjectId: projectId,
-      projects: (stored.projects || []).map((project) => project.project_id === projectId ? { ...project, updated_at: new Date().toISOString() } : project),
-      reviews: { ...(stored.reviews || {}), [projectId]: result.review },
-      auditRecords: [auditEntry("执行合同审查", projectId, result.review.task.status === "completed" ? "成功" : "部分完成", `${result.review.risks.length} 条风险 · ${result.review.task.status}`), ...(stored.auditRecords || [])]
-    };
-    storage.saveState(nextState);
-    return { ...result, state: nextState };
+    const runId = typeof options.runId === "string" && options.runId.length <= 100 ? options.runId : crypto.randomUUID();
+    let sequence = 0;
+    runningReviewProjects.add(projectId);
+    try {
+      const result = await runReview({
+        review,
+        state: stored,
+        services: { invokeModel: invokeConfiguredModel },
+        onProgress: (progress) => sendReviewProgress(projectId, { ...progress, runId, sequence: ++sequence, fileVersionId: review.project?.file_version_id })
+      });
+      const latest = storage.loadState();
+      const nextState = {
+        ...latest,
+        activeProjectId: projectId,
+        projects: (latest.projects || []).map((project) => project.project_id === projectId ? { ...project, updated_at: new Date().toISOString() } : project),
+        reviews: { ...(latest.reviews || {}), [projectId]: result.review },
+        auditRecords: [auditEntry("执行合同审查", projectId, result.review.task.status === "completed" ? "成功" : "部分完成", `${result.review.risks.length} 条风险 · ${result.review.task.status}`), ...(latest.auditRecords || [])]
+      };
+      return { ...result, state: storage.saveState(nextState) };
+    } finally {
+      runningReviewProjects.delete(projectId);
+    }
+  });
+
+  ipcMain.handle("review:delete-task", (_event, options = {}) => {
+    if (runningReviewProjects.size || reviewChatService.activeRequestCount()) {
+      throw new Error("审查或对话正在运行，请等待完成后再删除任务");
+    }
+    return storage.deleteTask(options.projectId);
   });
 
   ipcMain.handle("review:chat", async (_event, options = {}) => reviewChatService.chat(options));
@@ -351,31 +369,35 @@ function registerIpc() {
         auditEntry("导入合同", parsed.fileName, "成功", `${parsed.documentType} · ${parsed.pageCount} 页 · ${parsed.sha256}`)
       ].concat(current.auditRecords || [])
     };
-    storage.saveState(nextState);
-    return { state: nextState, project, review };
+    return { state: storage.saveState(nextState), project, review };
   });
 
   ipcMain.handle("state:load", () => storage.loadState());
   ipcMain.handle("state:save", (_event, state) => storage.saveState(state));
 
   ipcMain.handle("review:validate-export", (_event, payload = {}) => {
-    return validateReview(payload.review || payload, { formats: payload.formats || [] });
+    return validateReview(payload.review || payload, { formats: payload.formats || [], mode: payload.mode });
   });
 
   ipcMain.handle("review:export", async (_event, payload = {}) => {
     const review = payload.review || payload;
+    const assertExportAvailable = () => {
+      if (runningReviewProjects.size || reviewChatService.activeRequestCount()) throw new Error("审查或对话正在运行，请等待完成后再导出");
+      if (storage.loadState().deletedProjectIds?.includes(review.project?.project_id)) throw new Error("审查任务已被删除，无法导出");
+    };
+    assertExportAvailable();
     const requestedFormats = Array.isArray(payload.formats) ? payload.formats : [];
-    const validation = validateReview(review, { formats: requestedFormats });
+    const mode = payload.mode === undefined ? "formal" : payload.mode;
+    const validation = validateReview(review, { formats: requestedFormats, mode });
     if (!validation.canExport) {
       const state = storage.loadState();
       const nextState = mergeAudit(state, auditEntry(
         "导出审查结果",
         review.project?.project_id || "unknown-project",
         "EXPORT_BLOCKED",
-        validation.blockingCodes.join(",")
+        `${mode} · ${validation.blockingCodes.join(",")}`
       ));
-      storage.saveState(nextState);
-      return { records: [], validation, state: nextState };
+      return { records: [], validation, state: storage.saveState(nextState) };
     }
 
     const picked = await dialog.showOpenDialog(mainWindow, {
@@ -390,31 +412,33 @@ function registerIpc() {
       };
     }
 
+    assertExportAvailable();
     const result = await exportReview({
       review,
       formats: requestedFormats,
+      mode,
       outputDir: picked.filePaths[0]
     });
     let state = storage.loadState();
+    const currentReview = state.reviews?.[review.project?.project_id] || review;
     state = {
       ...state,
       activeProjectId: review.project?.project_id || state.activeProjectId,
-      reviews: { ...(state.reviews || {}), [review.project?.project_id]: review },
+      reviews: { ...(state.reviews || {}) },
       auditRecords: [
         auditEntry(
           "导出审查结果",
           review.project?.project_id || "unknown-project",
-          "成功",
-          result.records.map((item) => item.format).join(",")
+          mode === "draft" ? "草稿已生成" : "正式报告已生成",
+          `${result.records.map((item) => item.format).join(",")} · ${mode} · 待核验代码：${result.validation.warningCodes.join(",") || "无"}`
         )
       ].concat(state.auditRecords || [])
     };
     state.reviews[review.project?.project_id] = {
-      ...review,
-      exportRecords: [...(review.exportRecords || []), ...result.records]
+      ...currentReview,
+      exportRecords: [...(currentReview.exportRecords || []), ...result.records]
     };
-    storage.saveState(state);
-    return { ...result, state };
+    return { ...result, state: storage.saveState(state) };
   });
 }
 
