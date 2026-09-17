@@ -7,6 +7,7 @@ const http = require("node:http");
 const { invokeModel, testModelConnection } = require("../electron/model-gateway.cjs");
 const { extractWithModel, extractionBatches, MAX_BUDGET_ESCALATIONS } = require("../electron/model-extraction.cjs");
 const { extractContractFacts } = require("../electron/contract-facts.cjs");
+const { compact } = require("../electron/contract-evidence.cjs");
 const { createKnowledgeRetriever, createVectorCache } = require("../electron/knowledge-retrieval.cjs");
 const { runReview } = require("../electron/review-runner.cjs");
 const { executionModel } = require("../electron/model-runtime.cjs");
@@ -17,6 +18,71 @@ const model = (role, patch = {}) => ({ configId: role, name: `test-${role}`, mod
 const document = (text) => ({ text, documentType: "docx", pages: [{ page: 1, text }], blocks: [{ block_id: "b1", page: null, logical_page: 1, text }] });
 const source = (patch = {}) => ({ file: "law.md", id: "law-v1", source_id: "law-v1", fileVersionId: "law-v1", kind: "legalSnapshots", selected: true,
   clauses: [{ clause_no: "第五百七十七条", title: "违约责任", text: "当事人不履行义务，应承担相应责任。" }], ...patch });
+
+test("引文含修饰语时仍能解析数值，不再整条丢弃", async () => {
+  // 真实模型常把数值连同上下文一起引用，例如"即人民币 634,000 元""签订后 7 个工作日内"。
+  // 原实现要求引文恰好是纯数值，否则丢弃——这是抽取事实被大面积丢弃的主因。
+  const text = "2.3 本合同签订后 7 个工作日内，甲方向乙方支付合同总价款的 50%，即人民币 634,000 元。";
+  const doc = document(text);
+  const cases = [
+    { fact_type: "money", value: "634000", raw_text: "即人民币 634,000 元" },
+    { fact_type: "money", value: "634000", raw_text: "支付合同总价款的 50%，即人民币 634,000 元" },
+    { fact_type: "ratio", value: 0.5, raw_text: "合同总价款的 50%" },
+    { fact_type: "duration", value: 7, raw_text: "本合同签订后 7 个工作日内", calendar_type: "workday" }
+  ];
+  for (const item of cases) {
+    const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [{ ...item, block_id: "b1" }] } }) });
+    assert.equal(result.summary.rejected_fact_count, 0, `${item.raw_text} 不应被丢弃`);
+    const fact = result.facts.find((entry) => entry.fact_type === item.fact_type);
+    assert.ok(fact, `${item.raw_text} 必须被采纳`);
+    assert.equal(String(fact.value), String(item.value));
+    // 引文里含修饰语时必须记录解析依据的数值片段，便于人工核对
+    if (item.raw_text.includes("支付") || item.raw_text.includes("签订后") || item.fact_type === "ratio") {
+      assert.ok(fact.value_span, `${item.raw_text} 应记录数值片段`);
+    }
+  }
+  // 数值被篡改时仍必须拒绝：放宽引文范围不等于放宽数值校验
+  const tampered = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    { fact_type: "money", value: "999999", raw_text: "即人民币 634,000 元", block_id: "b1" }] } }) });
+  assert.equal(tampered.summary.accepted_fact_count, 0);
+  assert.equal(tampered.summary.rejection_reasons.value_mismatch, 1);
+});
+
+test("同一条款内不同数值的事实不被误判为重复", async () => {
+  // 2.3 条同时含"50%"与"634,000"，两者起点可能都是块首偏移 0；
+  // 原实现用 `a.char_range[0] < b.char_range[1]` 做重叠判断，起点为 0 时结果为 0（falsy），
+  // 会被 some() 当成不重叠，从而把同块不同数值的事实错误合并。
+  const text = "2.3 支付合同总价款的 50%，即人民币 634,000 元。";
+  const doc = document(text);
+  const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    { fact_type: "ratio", value: 0.5, raw_text: "50%", block_id: "b1", clause_no: "2.3" },
+    { fact_type: "money", value: "634000", raw_text: "634,000", block_id: "b1", clause_no: "2.3" }
+  ] } }) });
+  const values = result.facts.filter((fact) => fact.origin === "model").map((fact) => String(fact.value)).sort();
+  assert.deepEqual(values, ["0.5", "634000"], "两个不同数值的事实都必须保留");
+  // 完全相同的事实仍然要判重
+  const repeated = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    { fact_type: "money", value: "634000", raw_text: "634,000", block_id: "b1", clause_no: "2.3" },
+    { fact_type: "money", value: "634000", raw_text: "634,000", block_id: "b1", clause_no: "2.3" }
+  ] } }) });
+  assert.equal(repeated.summary.duplicate_fact_count, 1, "完全相同的重复仍应合并");
+});
+
+test("丢弃告警说明采纳与剔除情况，并指向核验窗口", async () => {
+  const doc = document("2.3 首付款百分之三十。");
+  const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    { fact_type: "ratio", value: 0.3, block_id: "b1", raw_text: "百分之三十", clause_no: "2.3" },
+    { fact_type: "ratio", value: 0.9, block_id: "b1", raw_text: "百分之九十", clause_no: "2.3" }
+  ] } }) });
+  const warning = result.warnings.find((item) => item.code === "EXTRACTION_FACTS_REJECTED");
+  assert.ok(warning, "必须给出丢弃告警");
+  assert.ok(warning.message.includes("采纳"), "告警必须说明采纳数量");
+  assert.ok(warning.message.includes("未通过本地原文/数值校验"), "告警必须说明是本地校验剔除");
+  assert.ok(warning.reason_summary.includes("原文中不存在该引文"), "告警必须给出可读的丢弃原因");
+  assert.ok(warning.suggestion.includes("条款核验"), "告警必须指向核验入口");
+  // 这不是抽取失败：模型事实仍被采纳
+  assert.ok(result.summary.accepted_fact_count >= 1);
+});
 
 test("向量请求走 embeddings 协议，按 index 排序且不带聊天参数", async () => {
   let request;
@@ -404,6 +470,30 @@ test("超长普通块按偏移完整切分，不丢任何原文", async () => {
   const restored = units.map((unit) => long.slice(unit.offset, unit.offset + unit.text.length)).join("");
   assert.equal(restored, long, "切分必须无损");
   assert.ok(units.every((unit) => unit.block_id === "b1"), "切分后仍指向同一块");
+});
+
+test("抽取事实被丢弃时记录原因分布与涉及类型，便于人工核验", async () => {
+  const doc = document("2.3 首付款百分之三十。\n2.4 乙方负责交付源代码。");
+  const valid = { fact_type: "ratio", value: 0.3, block_id: "b1", raw_text: "百分之三十", clause_no: "2.3" };
+  const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    valid,
+    { ...valid, raw_text: "百分之九十" },        // 引文不存在 -> quote_not_found
+    { ...valid, value: 0.8 },                    // 数值不符 -> value_mismatch
+    { ...valid, block_id: "fake" }               // 块不在请求范围 -> block_not_in_batch
+  ] } }) });
+  const reasons = result.summary.rejection_reasons;
+  assert.ok(reasons, "必须记录丢弃原因分布");
+  assert.equal(Object.values(reasons).reduce((sum, count) => sum + count, 0), result.summary.rejected_fact_count,
+    "原因计数之和必须等于丢弃总数");
+  assert.ok(reasons.quote_not_found >= 1, "编造引文必须归因到 quote_not_found");
+  assert.ok(reasons.value_mismatch >= 1, "数值不符必须归因到 value_mismatch");
+  assert.ok(reasons.block_not_in_batch >= 1, "越界块号必须归因到 block_not_in_batch");
+  assert.equal(result.summary.rejected_fact_types.ratio >= 1, true, "必须记录被丢弃的事实类型");
+  // 不得把模型原文带进进度事件（进度会流向渲染层）
+  const events = [];
+  await extractWithModel(doc, { model: model("extraction"), onProgress: (event) => events.push(event),
+    invokeModel: async () => ({ ok: true, data: { facts: [{ ...valid, raw_text: "伪造原文不得外发" }] } }) });
+  assert.equal(JSON.stringify(events).includes("伪造原文不得外发"), false, "丢弃原因不得携带模型原文");
 });
 
 test("向量语义召回非同词知识，保留候选状态、快照和来源定位", async () => {

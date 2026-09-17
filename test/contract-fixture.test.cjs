@@ -72,7 +72,7 @@ test("真实合同的 DOCX 与 PDF 均覆盖确定性关键风险并保留证据
     assert.equal(review.task.status, "partial");
     assert.ok(review.task.errors.some((error) => error.code === "CHECKLIST_REVIEW_REQUIRED" && error.check_ids.length > 0));
     const { validateReview } = require("../electron/validator.cjs");
-    const draft = validateReview(review, { formats: ["DOCX", "PDF", "XLSX", "JSON"], mode: "draft" });
+    const draft = validateReview(review, { formats: ["PDF", "XLSX", "JSON"], mode: "draft" });
     assert.equal(draft.canExport, true, draft.blockingCodes.join(","));
     assert.equal(draft.formalReady, false);
     for (const id of priorityIds) {

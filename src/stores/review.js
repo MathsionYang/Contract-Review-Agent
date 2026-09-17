@@ -8,6 +8,9 @@ import { knowledgeLabels } from "../services/knowledgeManagement.mjs";
 import { createSampleState, knowledgeData, capabilityData, defaultSettings } from "../data/sampleData";
 import { buildReviewExecutionConfig, createKnowledgeItem, createManualReviewRisk, createSelectionAnnotation, mergeSettings, removeDemoModels, updateEnterpriseMemory as updateEnterpriseMemoryState, updateLegalSnapshot as updateLegalSnapshotState } from "../services/managementState.mjs";
 
+// 可导出格式必须与 electron/validator.cjs 的 ALLOWED_FORMATS 保持一致。
+const EXPORTABLE_FORMATS = ["PDF", "XLSX", "JSON"];
+
 export const useReviewStore = defineStore("review", () => {
   const state = ref(createSampleState());
   const isReady = ref(false);
@@ -113,6 +116,15 @@ export const useReviewStore = defineStore("review", () => {
           },
           settings: mergeSettings(defaultSettings, saved.settings || {})
         };
+        // 默认导出格式里可能残留已下架的格式（历史版本保存过 DOCX）：
+        // 就地清理并回写，使设置自愈，避免导出时因"格式不受支持"被门禁阻断。
+        const savedFormats = state.value.settings.defaultExportFormats;
+        if (Array.isArray(savedFormats)) {
+          const usable = savedFormats.map((format) => String(format).toUpperCase()).filter((format) => EXPORTABLE_FORMATS.includes(format));
+          const nextFormats = usable.length ? usable : [...defaultSettings.defaultExportFormats];
+          state.value.settings.defaultExportFormats = nextFormats;
+          if (nextFormats.join(",") !== savedFormats.map((f) => String(f).toUpperCase()).join(",")) await persist();
+        }
         if (JSON.stringify(savedModels) !== JSON.stringify(saved.capabilities?.models || [])) await persist();
       } else {
         state.value = await electronApi.saveState(state.value);
@@ -885,7 +897,7 @@ export const useReviewStore = defineStore("review", () => {
     notify("系统设置已保存", "ok");
   }
 
-  async function runValidator(formats = ["DOCX", "PDF", "XLSX", "JSON"], mode = "formal") {
+  async function runValidator(formats = ["PDF", "XLSX", "JSON"], mode = "formal") {
     if (!review.value) return null;
     if (isBusy.value || chatBusy.value) throw new Error("任务正在处理，请完成后再校验导出");
     isBusy.value = true;

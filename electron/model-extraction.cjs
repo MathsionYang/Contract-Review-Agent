@@ -233,6 +233,47 @@ function splitBatchUnits(batch, model, scope = "full") {
     .map((blocks) => ({ blocks, messages: wrap(blocks.map(unitPayload)) }));
 }
 
+// 丢弃原因的用户可读名称：告警、界面与报告共用同一套措辞。
+const REJECTION_REASON_LABELS = {
+  block_not_in_batch: "来源块不在请求范围",
+  quote_not_found: "原文中不存在该引文",
+  clause_mismatch: "条款号与原文不符",
+  value_mismatch: "数值与引文不一致",
+  obligation_incomplete: "义务事实不完整",
+  party_incomplete: "主体事实不完整",
+  unknown_type: "事实类型不受支持",
+  quote_missing: "缺少原文引文",
+  invalid_shape: "候选结构无效"
+};
+
+// 在引文内部寻找可解析的数值片段。
+// 模型常把数值连同修饰语一起引用（如"即人民币 634,000 元""合同总价款的 50%"），
+// 原实现要求整段恰好是纯数值，否则直接丢弃事实——这是抽取事实被大面积拒收的主因之一。
+// 这里改为在引文内定位数值片段：只要片段解析出的数值与模型自报的 value 一致即可采纳。
+function numericValueInQuote(raw, type) {
+  const text = compact(raw);
+  if (!text) return null;
+  const direct = numericValue(text, type);
+  if (direct !== null && direct !== undefined) return { parsed: direct, text };
+  const patterns = {
+    // 金额：阿拉伯数字可带千分位/万亿单位，或中文大写金额
+    money: [/\d[\d,]*(?:\.\d+)?(?:万|亿)?元/, /[壹贰叁肆伍陆柒捌玖零〇一二三四五六七八九十拾佰仟百千万亿两]+[元圆]整?/],
+    // 比例：百分数，或"百分之X"
+    ratio: [/\d+(?:\.\d+)?%/, /百分之[零一二三四五六七八九十百两]+/],
+    // 期限：数字 + 单位（工作日/自然日/日/天/月/年）
+    duration: [/\d+(?:个)?(?:工作日|自然日|日|天|月|年)/, /[零一二三四五六七八九十百两]+(?:个)?(?:工作日|自然日|日|天|月|年)/]
+  }[type] || [];
+  // 在压紧空白后的文本上匹配：原文里数值与单位之间常有空格（"634,000 元"），
+  // 直接对原文匹配会漏掉。返回的片段也是压紧形式，仅用于人工核对解析依据。
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const parsed = numericValue(match[0], type);
+    if (parsed !== null && parsed !== undefined) return { parsed, text: match[0] };
+  }
+  return null;
+}
+
 function numericValue(raw, type) {
   // 中文合同常在数字中使用全角逗号（960，000），必须与半角一样先剥离，否则金额无法解析。
   const text = compact(raw).replace(/[,，]/g, "");
@@ -255,12 +296,22 @@ function numericValue(raw, type) {
   return null;
 }
 
+/**
+ * 锚定与数值校验。
+ * 返回 { fact } 或 { reason, message }：被丢弃的原因必须对外可见。
+ * 原实现只返回 null，界面上只能看到"N 条被丢弃"却不知道丢在哪一步，
+ * 用户无法判断是模型乱编还是本地校验过严。
+ * 注意：这里只新增"原因上报"，不改变任何既有的接受/丢弃判定。
+ */
 function anchoredFact(candidate, document, batch) {
-  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const reject = (reason, message, fact = null) => ({ reason, message, fact });
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return reject("invalid_shape", "候选不是对象");
   const type = candidate.fact_type;
-  if (!["money", "ratio", "duration", "party", "obligation", "penalty", "condition", "date", "reference", "clause"].includes(type)) return null;
+  if (!["money", "ratio", "duration", "party", "obligation", "penalty", "condition", "date", "reference", "clause"].includes(type)) {
+    return reject("unknown_type", `fact_type=${String(type)} 不在允许范围`);
+  }
   const quote = typeof candidate.raw_text === "string" ? candidate.raw_text.trim() : "";
-  if (!quote || quote.length > 4800) return null;
+  if (!quote || quote.length > 4800) return reject("quote_missing", "缺少 raw_text 或引文过长");
   // 表格行合并后一个单元含多个单元格的文本，因此范围校验必须回到来源块的长度，
   // 而不是单元的文本长度，否则单元格内的事实会被整体拒收。
   const originals = new Map(extractionBlocks(document).map((block) => [block.block_id, block]));
@@ -278,7 +329,7 @@ function anchoredFact(candidate, document, batch) {
     // 不允许把 A 格的引文算到同单元的 B 格上。
     return sources.has(String(candidate.block_id || ""));
   });
-  if (!windows.length) return null;
+  if (!windows.length) return reject("block_not_in_batch", `来源块 ${String(candidate.block_id || "(缺失)")} 不在本次请求范围内`);
   const refs = resolveRefs({ ...document, blocks: extractionBlocks(document) }, quote).filter((ref) => {
     if (ref.block_id !== String(candidate.block_id || "")) return false;
     const source = originals.get(ref.block_id);
@@ -293,37 +344,64 @@ function anchoredFact(candidate, document, batch) {
         && (!Number.isInteger(candidate.quote_start) || ref.char_range[0] === offset + candidate.quote_start);
     });
   });
-  if (refs.length !== 1) return null;
+  if (refs.length !== 1) {
+    return reject("quote_not_found",
+      refs.length ? `引文在来源块内出现 ${refs.length} 次，无法唯一定位` : `引文在来源块中不存在：${quote.slice(0, 40)}`);
+  }
   const ref = refs[0];
-  if (candidate.clause_no && compact(candidate.clause_no) !== compact(ref.clause_no)) return null;
+  if (candidate.clause_no && compact(candidate.clause_no) !== compact(ref.clause_no)) {
+    return reject("clause_mismatch", `条款号 ${candidate.clause_no} 与原文 ${ref.clause_no || "(空)"} 不符`);
+  }
   const fact = { fact_type: type, raw_text: ref.quote, clause_no: ref.clause_no, source_refs: refs, confidence: 0.8,
     file_version_id: document.fileVersionId || document.file_version_id || "", origin: "model", verification_status: "anchored_candidate" };
   if (["money", "ratio", "duration"].includes(type)) {
-    const parsed = numericValue(quote, type);
+    // 允许引文内包含修饰语：模型常把数值连同上下文一起引用
+    //（如"即人民币 634,000 元""本合同签订后 7 个工作日内"）。
+    // 原实现要求整段恰好是纯数值，否则丢弃事实——这是抽取事实被大面积丢弃的主因。
+    const located = numericValueInQuote(quote, type);
+    const parsed = located ? located.parsed : null;
     const value = type === "duration" ? parsed?.value : parsed;
     if (value === null || value === undefined || !Number.isFinite(value) || !["string", "number"].includes(typeof candidate.value)
-      || !String(candidate.value).trim() || !Number.isFinite(Number(candidate.value)) || Math.abs(value - Number(candidate.value)) > 1e-9) return null;
+      || !String(candidate.value).trim() || !Number.isFinite(Number(candidate.value)) || Math.abs(value - Number(candidate.value)) > 1e-9) {
+      return reject("value_mismatch", `引文解析为 ${value === null || value === undefined ? "无数值" : value}，模型自报 ${String(candidate.value)}`);
+    }
     fact.value = type === "money" ? String(value) : value;
     if (type === "money") fact.currency = "CNY";
     if (type === "duration") Object.assign(fact, parsed);
+    // 记录实际解析所用的数值片段，便于人工核验"这条事实值来自哪几个字"。
+    if (located && compact(located.text) !== compact(quote)) fact.value_span = located.text;
   } else {
     fact.value = typeof candidate.value === "string" && compact(quote).includes(compact(candidate.value)) ? candidate.value.slice(0, 2000) : ref.quote;
     for (const key of ["party_id", "name", "address", "subject", "object_party", "action", "rate_basis", "fixed_amount"]) {
       if (typeof candidate[key] === "string" && compact(quote).includes(compact(candidate[key]))) fact[key] = candidate[key];
     }
-    if (type === "obligation" && (!fact.subject || !fact.action)) return null;
-    if (type === "party" && !fact.name && !fact.address) return null;
+    if (type === "obligation" && (!fact.subject || !fact.action)) return reject("obligation_incomplete", "义务事实缺少 subject 或 action");
+    if (type === "party" && !fact.name && !fact.address) return reject("party_incomplete", "主体事实缺少名称与住所");
     if (Array.isArray(candidate.references)) fact.references = candidate.references.filter((value) => typeof value === "string" && quote.includes(value));
   }
   fact.fact_id = `fact_model_${crypto.createHash("sha256").update(JSON.stringify([type, fact.value, ref.block_id, ref.char_range])).digest("hex").slice(0, 20)}`;
-  return fact;
+  return { fact };
 }
 
 function sameFact(a, b) {
   if (a.fact_type !== b.fact_type || a.clause_no !== b.clause_no) return false;
-  if (["money", "ratio", "duration"].includes(a.fact_type) && String(a.value) !== String(b.value)) return false;
-  return a.source_refs?.some((left) => b.source_refs.some((right) => left.block_id === right.block_id
-    && left.char_range && right.char_range && left.char_range[0] < right.char_range[1] && right.char_range[0] < left.char_range[1]));
+  // 只在两侧都能解析出具体数值时才比较数值。
+  // 原实现写 `["money","ratio","duration"].includes(...) && String(a.value) !== String(b.value)`，
+  // 对 value 为 undefined 的规则事实会拿 "undefined" 去比较；
+  // 更要命的是下面的区间重叠判断 `a.char_range[0] < b.char_range[1]`：起点为 0 时结果为 0（falsy），
+  // 被 some() 当成"不重叠"，于是同一块内的不同数值无法判重（例如 2.3 条的 50% 与 634,000）。
+  // 这里显式转成布尔值，并只在两者都是有效数值时要求数值相同。
+  if (["money", "ratio", "duration"].includes(a.fact_type)) {
+    const left = a.value ?? a.raw_text;
+    const right = b.value ?? b.raw_text;
+    if (Number.isFinite(Number(left)) && Number.isFinite(Number(right)) && String(left) !== String(right)) return false;
+  }
+  const overlaps = (one, other) => Boolean(
+    one.block_id === other.block_id
+    && Array.isArray(one.char_range) && Array.isArray(other.char_range)
+    && one.char_range[0] < other.char_range[1] && other.char_range[0] < one.char_range[1]
+  );
+  return Boolean(a.source_refs?.some((one) => b.source_refs?.some((other) => overlaps(one, other))));
 }
 
 async function extractWithModel(document, options = {}) {
@@ -342,6 +420,9 @@ async function extractWithModel(document, options = {}) {
     batch_started_at: null, first_delta_at: null, last_delta_at: null,
     output_token_budget: Number(model?.maxTokens) || null, truncated_batch_count: 0, split_batch_count: 0,
     budget_escalation_count: 0, max_output_tokens_used: 0,
+    // 丢弃原因分布：只统计原因与事实类型，不携带模型原文。
+    // 进度事件会流向渲染层，必须遵守"不把模型原始输出外发"的既有约束。
+    rejection_reasons: {}, rejected_fact_types: {},
     // 抽出口径与提示词版本必须进快照：缓存键和审计都要用它判断结果是否可复用。
     scope, scope_fact_types: [...allowedTypes], prompt_version: EXTRACTION_PROMPT_VERSION, out_of_scope_fact_count: 0 };
   // Progress contains only real input excerpts and validated facts, never raw model output.
@@ -461,8 +542,17 @@ async function extractWithModel(document, options = {}) {
       for (const candidate of response.data.facts) {
         // 收敛输出范围：非本档位需要的类型直接丢弃，也不进入事实集，避免下游出现无消费者的数据。
         if (!allowedTypes.has(String(candidate?.fact_type || ""))) { summary.out_of_scope_fact_count += 1; continue; }
-        const fact = anchoredFact(candidate, document, batch);
-        if (!fact) { summary.rejected_fact_count += 1; continue; }
+        const anchored = anchoredFact(candidate, document, batch);
+        if (!anchored || anchored.reason) {
+          summary.rejected_fact_count += 1;
+          // 记录丢弃原因与事实类型（不含模型原文），让"为什么被丢弃"可核查。
+          const reason = anchored?.reason || "unknown";
+          summary.rejection_reasons[reason] = (summary.rejection_reasons[reason] || 0) + 1;
+          const factType = String(candidate?.fact_type || "unknown");
+          summary.rejected_fact_types[factType] = (summary.rejected_fact_types[factType] || 0) + 1;
+          continue;
+        }
+        const fact = anchored.fact;
         const existing = facts.find((item) => sameFact(item, fact));
         if (existing) { summary.duplicate_fact_count += 1; continue; }
         facts.push(fact);
@@ -477,8 +567,17 @@ async function extractWithModel(document, options = {}) {
     }
     summary.status = summary.rejected_fact_count ? "partial" : "completed";
     if (summary.rejected_fact_count) {
-      summary.fallback = "rules";
-      warnings.push({ code: "EXTRACTION_FACTS_REJECTED", message: `${summary.rejected_fact_count} 条抽取事实因原文定位或数值校验失败被丢弃` });
+      // 注意：falsy-zero here 必须显式判断，accepted 为 0 也走同一分支。
+      // 丢弃是本地校验在拦截模型编造内容，属于保护机制而不是抽取失败；
+      // 措辞必须说清楚"哪些留下了、哪些被拦了、去哪看原因"，避免用户以为流程坏了。
+      const reasons = Object.entries(summary.rejection_reasons || {})
+        .sort((left, right) => right[1] - left[1])
+        .map(([reason, count]) => `${REJECTION_REASON_LABELS[reason] || reason} ${count} 条`)
+        .join("、");
+      warnings.push({ code: "EXTRACTION_FACTS_REJECTED",
+        message: `模型输出的 ${summary.rejected_fact_count} 条候选未通过本地原文/数值校验，已剔除（采纳 ${summary.accepted_fact_count} 条、与规则重复 ${summary.duplicate_fact_count} 条）`,
+        reason_summary: reasons,
+        suggestion: "被剔除多为模型编造或引用错位，属于保护机制；可在“条款核验”窗口中逐条查看原因。若剔除比例长期过高，建议更换抽取模型或检查其输出格式。" });
     }
   } catch (error) {
     summary.status = "degraded";
@@ -486,8 +585,7 @@ async function extractWithModel(document, options = {}) {
     summary.error_code = error.code || "EXTRACTION_FAILED";
     summary.message = error.message;
     warnings.push({ code: "EXTRACTION_DEGRADED", message: `条款抽取未全部完成，已保留规则事实和已校验的模型事实：${error.message}` });
-  }
-  summary.phase = "finished";
+  }  summary.phase = "finished";
   summary.completed_at = new Date().toISOString();
   summary.latency_ms = Date.now() - started;
   report();
@@ -495,4 +593,4 @@ async function extractWithModel(document, options = {}) {
 }
 
 module.exports = { extractWithModel, extractionBatches, anchoredFact, EXTRACTION_PROMPT_VERSION, SCOPE_FACT_TYPES,
-  MAX_BUDGET_ESCALATIONS, MAX_SPLIT_DEPTH, maxOutputTokensFor };
+  MAX_BUDGET_ESCALATIONS, MAX_SPLIT_DEPTH, maxOutputTokensFor, REJECTION_REASON_LABELS };

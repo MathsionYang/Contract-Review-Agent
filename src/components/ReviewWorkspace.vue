@@ -1,13 +1,14 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import {
-  Bot, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, FileCog, FileDown, Flag, Highlighter, ListChecks, LoaderCircle, Maximize2, MessageSquare, Minus, Play, Plus, RotateCcw, ScanSearch, Search, Send, Settings2, Square, SquarePen, Trash2, UserRound, X
+  Bot, Check, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Clock3, FileCog, FileDown, Flag, Highlighter, ListChecks, LoaderCircle, Maximize2, MessageSquare, Minus, Play, Plus, RotateCcw, ScanSearch, Search, Send, Settings2, Square, SquarePen, Trash2, UserRound, X
 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
 import { riskCategories, riskLevels } from "../data/sampleData";
 import { buildReviewPipeline, pipelineOverallLabel, pipelineStatusLabel } from "../services/reviewPipeline.mjs";
 import ReviewChecklist from "./ReviewChecklist.vue";
 import ReviewModelActivity from "./ReviewModelActivity.vue";
+import ExtractionReview from "./ExtractionReview.vue";
 import { locationLabel, locationPage, quoteRange } from "../services/checklistReview.mjs";
 
 const emit = defineEmits(["configure", "export"]);
@@ -20,6 +21,7 @@ const documentTextElement = ref(null);
 const selectionMenu = ref(null);
 const lastSelection = ref(null);
 const executionPanelOpen = ref(false);
+const extractionModalOpen = ref(false);
 const chatInput = ref("");
 const memoryEdits = reactive({});
 const selectionReviewForm = reactive({ reviewType: "legal_risk", topic: "general", contextScope: "selected_clause" });
@@ -552,6 +554,7 @@ function displaySize(bytes) {
         <header class="pane-header">
           <div><h2>合同原文</h2><p>{{ store.review?.document?.documentType === "scanned_pdf" ? "扫描 PDF · OCR 不可用" : "解析文本层 · 可搜索" }}</p></div>
           <div class="document-tools">
+            <button class="button small-button" type="button" title="查看并核验条款抽取结果" @click="extractionModalOpen = true"><ClipboardList :size="14" />条款核验<span class="count-label">{{ store.review?.contract_facts?.length || 0 }}</span></button>
             <div class="search-box"><Search :size="14" /><input v-model="searchQuery" type="search" placeholder="搜索本页" aria-label="搜索本页" /><small v-if="searchQuery">{{ searchMatchCount }}</small></div>
             <button class="icon-button small" type="button" title="缩小" aria-label="缩小" @click="store.setZoom(store.zoom - 0.1)"><Minus :size="14" /></button>
             <span class="zoom-value">{{ Math.round(store.zoom * 100) }}%</span>
@@ -706,5 +709,6 @@ function displaySize(bytes) {
         <div class="selection-form-footer"><small>结果将以待核验风险加入当前清单</small><button class="icon-button" type="button" title="提交局部审查" aria-label="提交局部审查" @click="submitSelectionReview"><ClipboardCheck :size="16" /></button></div>
       </template>
     </div>
+    <ExtractionReview v-if="extractionModalOpen" :review="store.review" @close="extractionModalOpen = false" />
   </div>
 </template>

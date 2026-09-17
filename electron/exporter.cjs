@@ -107,14 +107,20 @@ function textOf(value) {
   return String(value ?? "");
 }
 
+/**
+ * 报告头部上下文。
+ * 需求：导出件是给业务/法务阅读的报告，不再携带门禁的"待核验事项"明细——
+ * 那些代码、建议与校验项属于工具内部状态，平铺在报告里对读者没有帮助。
+ * 门禁仍然照常工作（不通过就不导出），只是不再把明细写进文件。
+ * 保留的只有"草稿/正式"这个对人最关键的结论性标记。
+ */
 function reportContext(validation) {
   const draft = validation.mode === "draft";
   return {
     draft,
     title: draft ? "合同审查报告 草稿" : "合同审查报告 正式版",
     notice: draft ? "草稿 DRAFT / NOT FINAL：仅供核验与讨论，不代表已完成法务确认，不得作为正式审查结论。"
-      : "正式报告：本次导出已通过正式报告校验。",
-    issues: validation.items.filter((item) => item.status !== "passed")
+      : "正式报告：本次导出已通过正式报告校验。"
   };
 }
 
@@ -133,10 +139,6 @@ function locationText(review, risk) {
     return `${block ? `逻辑块 ${block.block_id}` : "逻辑块待定位"}${logicalPage ? ` / 逻辑页 ${logicalPage}` : ""}${clause}（物理页码未确认）`;
   }
   return `${location.page ? `第 ${location.page} 页` : "待定位"}${clause}`;
-}
-
-function issueText(issue) {
-  return `${issue.riskId ? `${issue.riskId} / ` : ""}${issue.label} [${issue.code}]：${issue.message}；${issue.suggestion}`;
 }
 
 // DOCX 里的"图表"用表格实现：Word 表中表格是最稳定、最兼容的可视化载体。
@@ -227,10 +229,6 @@ async function writeDocx(review, filePath, generatedAt, validation) {
     docxRiskTable(review)
   );
 
-  if (context.issues.length) {
-    children.push(new Paragraph({ text: "待核验事项", heading: HeadingLevel.HEADING_1 }));
-    context.issues.forEach((issue) => children.push(new Paragraph(issueText(issue))));
-  }
   children.push(
     new Paragraph({ text: "审查配置", heading: HeadingLevel.HEADING_1 }),
     new Paragraph(`法律快照：${textOf(review.config?.snapshot?.id || "未绑定")}`),
@@ -409,11 +407,6 @@ async function writePdf(review, filePath, generatedAt, validation) {
   cursor -= 4;
   drawLines(`法律快照：${textOf(review.config?.snapshot?.id || "未绑定")}`);
   drawLines(`模板版本：${TEMPLATE_VERSION}`);
-  if (context.issues.length) {
-    cursor -= 10;
-    drawLines("待核验事项", { size: 14, lineHeight: 22 });
-    context.issues.forEach((issue) => drawLines(issueText(issue)));
-  }
   pdf.setTitle(context.title);
   pdf.setSubject(context.notice);
   fs.writeFileSync(filePath, await pdf.save());
@@ -511,18 +504,31 @@ async function writeXlsx(review, filePath, generatedAt, validation) {
   for (const row of sheet.getRows(4, sheet.rowCount) || []) {
     row.alignment = { vertical: "top", wrapText: true };
   }
-  const checks = workbook.addWorksheet("导出校验");
-  checks.columns = [{ key: "risk", width: 28 }, { key: "label", width: 24 }, { key: "code", width: 40 }, { key: "message", width: 70 }, { key: "suggestion", width: 60 }];
-  checks.mergeCells("A1:E1");
-  checks.getCell("A1").value = context.notice;
-  checks.getCell("A1").font = { bold: true };
-  checks.getCell("A1").alignment = { wrapText: true };
-  checks.getRow(1).height = 42;
-  checks.getRow(2).values = ["风险标识", "待核验项目", "校验代码", "问题", "处理建议"];
-  context.issues.forEach((issue) => checks.addRow({ risk: issue.riskId || "整体审查", label: issue.label, code: issue.code, message: issue.message, suggestion: issue.suggestion }));
-  if (!context.issues.length) checks.addRow({ message: "本次导出没有未处理的校验项" });
-  checks.views = [{ state: "frozen", ySplit: 2 }];
-  checks.eachRow((row) => { row.alignment = { vertical: "top", wrapText: true }; });
+  // 说明页：只保留"这份报告是什么状态"的结论性信息，不再平铺门禁校验明细。
+  const notes = workbook.addWorksheet("报告说明");
+  notes.columns = [{ key: "item", width: 22 }, { key: "value", width: 96 }];
+  notes.mergeCells("A1:B1");
+  notes.getCell("A1").value = context.notice;
+  notes.getCell("A1").font = { bold: true, color: { argb: context.draft ? "FF9C3B10" : "FF1A2233" } };
+  notes.getCell("A1").alignment = { wrapText: true, vertical: "middle" };
+  notes.getRow(1).height = 44;
+  const summary = reportSummary(review);
+  for (const [item, value] of [
+    ["报告状态", context.draft ? "草稿 / 待核验（不得作为正式审查结论）" : "正式报告"],
+    ["项目", textOf(review.project?.project_name || review.project?.project_id)],
+    ["合同文件", textOf(review.document?.fileName)],
+    ["文件版本", textOf(review.project?.file_version_id)],
+    ["审查版本", textOf(review.review_version_id || "未命名")],
+    ["生成时间", generatedAt],
+    ["风险总数", `${summary.total} 条（严重 ${summary.critical} / 高 ${summary.high} / 中 ${summary.medium} / 低 ${summary.low}）`],
+    ["待人工复核", `${summary.pending} 条`],
+    ["模板版本", TEMPLATE_VERSION]
+  ]) notes.addRow([item, value]);
+  notes.eachRow((row, index) => {
+    if (index === 1) return;
+    row.getCell(1).font = { bold: true };
+    row.alignment = { vertical: "top", wrapText: true };
+  });
   await workbook.xlsx.writeFile(filePath);
 }
 
@@ -533,7 +539,14 @@ function writeJson(review, filePath, generatedAt, validation) {
     export_mode: validation.mode,
     report_status: validation.mode === "draft" ? "draft" : "formal",
     export_notice: reportContext(validation).notice,
-    validation,
+    // JSON 是数据交付物，不再内嵌门禁的逐项校验明细（那是工具内部状态）；
+    // 只保留校验通过与否的结论与策略版本，便于机器判断报告是否可作为正式件使用。
+    validation_summary: {
+      can_export: validation.canExport,
+      formal_ready: validation.formalReady,
+      policy_version: validation.policyVersion,
+      warning_codes: validation.warningCodes
+    },
     review_version_id: review.review_version_id || null,
     file_version_id: review.project?.file_version_id || null,
     project: review.project || null,

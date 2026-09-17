@@ -21,7 +21,11 @@ const modal = ref(null);
 const uploadForm = reactive({ projectName: "", contractType: "procurement", reviewMode: "standard", selection: null });
 const configForm = reactive({ snapshotId: "", reviewMode: "standard" });
 const knowledgeTab = ref("rules");
-const exportFormats = ref(["DOCX", "PDF", "JSON"]);
+// 导出格式与 Validator 的可选集合保持一致（DOCX 已下架）。
+// 模板与默认值共用这两个常量，避免两处各写一份而漂移。
+const EXPORTABLE_FORMATS = ["PDF", "XLSX", "JSON"];
+const DEFAULT_EXPORT_FORMATS = ["PDF", "JSON"];
+const exportFormats = ref([...DEFAULT_EXPORT_FORMATS]);
 const exportMode = ref("draft");
 const isValidating = ref(false);
 const isExporting = ref(false);
@@ -123,7 +127,13 @@ async function openExport() {
     return;
   }
   exportMode.value = store.state.settings?.defaultExportMode === "formal" ? "formal" : "draft";
-  exportFormats.value = [...(store.state.settings?.defaultExportFormats || ["DOCX", "PDF", "JSON"])];
+  // 已保存的默认格式可能包含后来下架的格式（如 DOCX）。必须过滤掉，
+  // 否则会提交一个不受支持的格式列表，门禁直接以 UNSUPPORTED_EXPORT_FORMAT 阻断导出。
+  const savedFormats = Array.isArray(store.state.settings?.defaultExportFormats)
+    ? store.state.settings.defaultExportFormats.map((format) => String(format).toUpperCase())
+    : [];
+  const usableFormats = savedFormats.filter((format) => EXPORTABLE_FORMATS.includes(format));
+  exportFormats.value = usableFormats.length ? usableFormats : [...DEFAULT_EXPORT_FORMATS];
   modal.value = "export";
   await validateExport();
 }
@@ -208,7 +218,7 @@ function statusClass(status) { return status === "published" || status === "acti
 
   <Modal :open="modal === 'export'" title="导出审查报告" @close="!isExporting && !isValidating && (modal = null)">
     <div class="form-field"><label>导出模式</label><div class="mode-grid" role="group" aria-label="导出模式"><label v-for="mode in [['draft','草稿'],['formal','正式报告']]" :key="mode[0]" class="mode-card" :class="{ active: exportMode === mode[0] }"><input v-model="exportMode" type="radio" name="export-mode" :value="mode[0]" :disabled="isValidating || isExporting" @change="validateExport" /> {{ mode[1] }}</label></div></div>
-    <div class="form-field"><label>导出格式</label><div class="format-grid"><label v-for="format in ['DOCX','PDF','XLSX','JSON']" :key="format" class="format-option"><input v-model="exportFormats" type="checkbox" :value="format" :disabled="isValidating || isExporting" @change="validateExport" /><span><FileDown :size="15" />{{ format }}</span></label></div></div>
+    <div class="form-field"><label>导出格式</label><div class="format-grid"><label v-for="format in EXPORTABLE_FORMATS" :key="format" class="format-option"><input v-model="exportFormats" type="checkbox" :value="format" :disabled="isValidating || isExporting" @change="validateExport" /><span><FileDown :size="15" />{{ format }}</span></label></div></div>
     <ExportValidation :validation="validator" :loading="isValidating" />
     <template #footer><button class="button" type="button" :disabled="isValidating || isExporting" @click="modal = null">取消</button><button class="button button-primary" type="button" :disabled="!validator?.canExport || validator?.mode !== exportMode || store.isBusy || store.chatBusy || isValidating || isExporting" @click="startExport"><LoaderCircle v-if="isValidating || isExporting" class="spin" :size="15" /><FileDown v-else :size="15" />{{ exportMode === 'draft' ? '导出草稿' : '导出正式报告' }}</button></template>
   </Modal>

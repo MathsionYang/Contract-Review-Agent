@@ -74,7 +74,7 @@ function reviewFixture() {
 
 async function exportAll() {
   const outputDir = tempDir();
-  const result = await exportReview({ review: reviewFixture(), formats: ["DOCX", "PDF", "XLSX", "JSON"], outputDir, mode: "draft" });
+  const result = await exportReview({ review: reviewFixture(), formats: ["PDF", "XLSX", "JSON"], outputDir, mode: "draft" });
   const byFormat = Object.fromEntries(result.records.map((record) => [record.format, record.filePath]));
   return { outputDir, byFormat };
 }
@@ -95,20 +95,17 @@ test("风险按等级从严重到轻排序，同级按待复核优先，已删�
   assert.ok(payload.level_meta.every((item) => item.label && item.color));
 });
 
-test("DOCX 报告包含等级分布图与风险条款表格", async () => {
-  const { byFormat } = await exportAll();
-  const xml = readZipEntry(byFormat.DOCX, "word/document.xml");
-  assert.ok(xml, "DOCX 必须包含 word/document.xml");
-  // 两张表：等级分布图 + 风险条款清单
-  assert.equal((xml.match(/<w:tbl>/g) || []).length, 2, "应有分布图与风险清单两张表");
-  assert.equal((xml.match(/<w:tr>/g) || []).length >= 18, true, "分布 6 行 + 清单表头 1 行 + 5 条风险");
-  // 分布图用等宽方块条表达数量
-  assert.ok((xml.match(/█/g) || []).length >= 20, "分布图必须包含条形字符");
-  assert.ok(xml.includes("风险等级分布"));
-  assert.ok(xml.includes("风险条款清单"));
-  assert.ok(xml.includes("按严重程度排序"));
-  // 严重项在文档中必须出现在轻微项之前
-  assert.ok(xml.indexOf("风险 r-critical") < xml.indexOf("风险 r-low"), "严重风险必须排在轻微风险之前");
+test("DOCX 已从导出格式下架，请求时被门禁拦截", async () => {
+  const outputDir = tempDir();
+  const result = await exportReview({ review: reviewFixture(), formats: ["DOCX"], outputDir, mode: "draft" });
+  assert.equal(result.validation.canExport, false, "DOCX 不再作为可导出格式");
+  assert.ok(result.validation.blockingCodes.includes("UNSUPPORTED_EXPORT_FORMAT"));
+  assert.equal(result.records.length, 0);
+  assert.deepEqual(fs.readdirSync(outputDir), [], "被拦截时不得写出任何文件");
+  // 其余三种格式仍然可用
+  const allowed = await exportReview({ review: reviewFixture(), formats: ["PDF", "XLSX", "JSON"], outputDir, mode: "draft" });
+  assert.equal(allowed.validation.canExport, true);
+  assert.deepEqual(allowed.records.map((record) => record.format).sort(), ["JSON", "PDF", "XLSX"]);
 });
 
 test("XLSX 包含风险分布表与数据条条件格式", async () => {
@@ -116,7 +113,9 @@ test("XLSX 包含风险分布表与数据条条件格式", async () => {
   const workbook = readZipEntry(byFormat.XLSX, "xl/workbook.xml");
   assert.ok(workbook.includes("审查风险清单"));
   assert.ok(workbook.includes("风险分布"));
-  assert.ok(workbook.includes("导出校验"));
+  // 门禁明细页已移除，取而代之的是只陈述报告状态的说明页
+  assert.equal(workbook.includes("导出校验"), false, "不应再生成门禁明细页");
+  assert.ok(workbook.includes("报告说明"));
   // ExcelJS 4.4 没有图表 API，可视化必须靠数据条条件格式实现，且必须真的写进文件
   const sheet = readZipEntry(byFormat.XLSX, "xl/worksheets/sheet2.xml");
   assert.ok(sheet, "风险分布表必须存在");
@@ -129,6 +128,10 @@ test("PDF 报告可生成且大小随风险数量增长", async () => {
   const pdf = fs.readFileSync(byFormat.PDF);
   assert.equal(pdf.slice(0, 5).toString(), "%PDF-", "必须是合法 PDF 文件头");
   assert.ok(pdf.length > 3000, "PDF 不应为空壳");
-  // 加密后仍应包含页对象
-  assert.ok(pdf.includes(Buffer.from("/Type /Page", "latin1")) || pdf.includes(Buffer.from("/Page", "latin1")));
+  // pdf-lib 会把对象流压缩，无法直接搜 /Page；用"风险更多则文件更大"验证内容确实写入了。
+  const richer = { ...reviewFixture(),
+    risks: [...reviewFixture().risks, ...Array.from({ length: 12 }, (_, index) => riskFixture(`r-extra-${index}`, "medium", `7.${index}`, "pending_review", 0.5))] };
+  const dir = tempDir();
+  const bigger = await exportReview({ review: richer, formats: ["PDF"], outputDir: dir, mode: "draft" });
+  assert.ok(fs.statSync(bigger.records[0].filePath).size > pdf.length, "风险更多时 PDF 应当更大");
 });

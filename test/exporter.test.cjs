@@ -52,21 +52,30 @@ function reviewFixture() {
   };
 }
 
-test("通过门禁时四种格式各生成一个实际文件和独立记录", async () => {
+test("通过门禁时三种格式各生成一个实际文件和独立记录", async () => {
   const outputDir = tempDir();
   const result = await exportReview({
     review: reviewFixture(),
-    formats: ["DOCX", "PDF", "XLSX", "JSON"],
+    formats: ["PDF", "XLSX", "JSON"],
     outputDir
   });
 
   assert.equal(result.validation.canExport, true);
-  assert.equal(result.records.length, 4);
+  assert.equal(result.records.length, 3);
   for (const record of result.records) {
     assert.equal(record.status, "completed");
     assert.equal(fs.existsSync(record.filePath), true);
     assert.ok(fs.statSync(record.filePath).size > 0);
   }
+});
+
+test("DOCX 已下架：请求 DOCX 会被门禁拦截，不生成任何文件", async () => {
+  const outputDir = tempDir();
+  const result = await exportReview({ review: reviewFixture(), formats: ["DOCX"], outputDir });
+  assert.equal(result.validation.canExport, false);
+  assert.ok(result.validation.blockingCodes.includes("UNSUPPORTED_EXPORT_FORMAT"));
+  assert.equal(result.records.length, 0);
+  assert.equal(fs.readdirSync(outputDir).length, 0, "被拦截时不应写出任何文件");
 });
 
 test("门禁失败时不生成 completed 导出记录", async () => {
@@ -104,15 +113,15 @@ test("JSON 导出保存完整通用清单、专项统计和人工复核记录", 
   assert.deepEqual(data.coverage, review.coverage);
 });
 
-test("四种草稿文件携带明确标记和完整待核验事项，PDF 每页重复草稿标记", async (t) => {
+test("三种草稿文件携带明确标记，且不再输出门禁明细", async (t) => {
   const review = reviewFixture();
   review.risks[0].human_status = "pending_review";
   review.risks[0].evidence_status = "unverified";
   review.risks[0].analysis = "本项尚需核对合同原件、补充材料和业务立场。".repeat(100);
   const before = JSON.stringify(review);
-  const result = await exportReview({ review, mode: "draft", formats: ["DOCX", "PDF", "XLSX", "JSON"], outputDir: tempDir() });
+  const result = await exportReview({ review, mode: "draft", formats: ["PDF", "XLSX", "JSON"], outputDir: tempDir() });
   assert.equal(result.validation.canExport, true);
-  assert.equal(result.records.length, 4);
+  assert.equal(result.records.length, 3);
   assert.equal(JSON.stringify(review), before);
   for (const record of result.records) {
     assert.equal(record.export_mode, "draft");
@@ -125,23 +134,20 @@ test("四种草稿文件携带明确标记和完整待核验事项，PDF 每页�
   const json = JSON.parse(fs.readFileSync(fileFor("JSON"), "utf8"));
   assert.equal(json.export_mode, "draft");
   assert.deepEqual(json.risks, review.risks);
-  assert.ok(json.validation.items.some((item) => item.code === "PENDING_HUMAN_REVIEW" && item.status === "warning"));
-  const mammoth = require("mammoth");
-  const docx = (await mammoth.extractRawText({ path: fileFor("DOCX") })).value;
-  assert.ok(docx.includes("合同审查报告 草稿"));
-  assert.ok(docx.includes("DRAFT / NOT FINAL"));
-  assert.ok(docx.includes("待核验事项") && docx.includes("PENDING_HUMAN_REVIEW"));
-  const archive = await require("jszip").loadAsync(fs.readFileSync(fileFor("DOCX")));
-  const headers = Object.keys(archive.files).filter((name) => /^word\/header\d+\.xml$/.test(name));
-  assert.ok(headers.length > 0);
-  assert.ok((await archive.file(headers[0]).async("string")).includes("DRAFT / NOT FINAL"));
+  // JSON 只保留校验结论，不再内嵌逐项门禁明细
+  assert.equal(json.validation, undefined, "JSON 不应再内嵌门禁逐项明细");
+  assert.equal(json.validation_summary.can_export, true);
+  assert.equal(json.validation_summary.formal_ready, false);
+  assert.ok(json.validation_summary.warning_codes.includes("PENDING_HUMAN_REVIEW"));
   const ExcelJS = require("exceljs");
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(fileFor("XLSX"));
   assert.ok(workbook.getWorksheet("审查风险清单").getCell("A1").value.includes("DRAFT / NOT FINAL"));
-  const checks = workbook.getWorksheet("导出校验");
-  assert.ok(checks.getCell("A1").value.includes("不得作为正式审查结论"));
-  assert.ok(checks.getSheetValues().flat().includes("PENDING_HUMAN_REVIEW"));
+  // 门禁明细页已移除，改为只陈述报告状态的说明页
+  assert.equal(workbook.getWorksheet("导出校验"), undefined, "不应再生成门禁明细页");
+  const notes = workbook.getWorksheet("报告说明");
+  assert.ok(notes.getCell("A1").value.includes("不得作为正式审查结论"));
+  assert.equal(notes.getSheetValues().flat().includes("PENDING_HUMAN_REVIEW"), false, "说明页不应出现内部校验代码");
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const loadingTask = getDocument({ data: new Uint8Array(fs.readFileSync(fileFor("PDF"))), useSystemFonts: true });
   const document = await loadingTask.promise;
@@ -158,8 +164,10 @@ test("四种草稿文件携带明确标记和完整待核验事项，PDF 每页�
       }
       text += pageText;
     }
-    assert.ok(text.includes("PENDING_HUMAN_REVIEW"));
-    assert.ok(text.includes("待核验事项"));
+    // 报告只保留"草稿"结论性标记，不再平铺门禁明细
+    assert.ok(text.includes("DRAFT - NOT FINAL"));
+    assert.equal(text.includes("PENDING_HUMAN_REVIEW"), false, "PDF 不应出现内部校验代码");
+    assert.equal(text.includes("待核验事项"), false, "PDF 不应再输出门禁明细章节");
   } finally {
     await loadingTask.destroy();
   }

@@ -10,7 +10,8 @@ defineEmits(["new-review", "open-review", "configure", "export"]);
 const settings = reactive({ ...defaultSettings });
 const legalAllowlistText = ref("");
 const cacheBusy = ref(false);
-const exportOptions = ["DOCX", "PDF", "XLSX", "JSON"];
+// 导出格式以 Validator 的可选集合为准；DOCX 已下架。
+const exportOptions = ["PDF", "XLSX", "JSON"];
 
 watch(
   () => store.state.settings,

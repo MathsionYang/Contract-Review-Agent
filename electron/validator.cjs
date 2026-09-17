@@ -14,7 +14,10 @@ const ALLOWED_HUMAN = new Set([
   "added_by_human",
   "deleted"
 ]);
-const ALLOWED_FORMATS = new Set(["DOCX", "PDF", "XLSX", "JSON"]);
+// 可供用户选择的导出格式。DOCX 已按需求下架：报告以 PDF / XLSX / JSON 交付。
+// 注意 writeDocx 仍保留在 exporter 中（历史导出记录与测试仍可复现），但不在可选集合内。
+const ALLOWED_FORMATS = new Set(["PDF", "XLSX", "JSON"]);
+const EXPORT_FORMAT_LABEL = "PDF、XLSX 或 JSON";
 const EXPORT_POLICY_VERSION = "review-export@2.0.0";
 const DRAFT_WARNING_CODES = new Set([
   "CONTRACT_TYPE_MISSING", "DOCUMENT_TEXT_UNAVAILABLE", "SNAPSHOT_NOT_FOUND",
@@ -170,7 +173,7 @@ function validateReview(review, options = {}) {
 
   const formats = Array.isArray(options.formats) ? options.formats : [];
   if (!formats.length) {
-    block("output.formats", "导出格式", "NO_EXPORT_FORMAT", "没有选择导出格式", "至少选择 DOCX、PDF、XLSX 或 JSON 之一");
+    block("output.formats", "导出格式", "NO_EXPORT_FORMAT", "没有选择导出格式", `至少选择 ${EXPORT_FORMAT_LABEL} 之一`);
   }
   const unsupportedFormats = formats
     .map((format) => String(format).toUpperCase())
@@ -181,7 +184,7 @@ function validateReview(review, options = {}) {
       "导出格式",
       "UNSUPPORTED_EXPORT_FORMAT",
       `包含不支持的导出格式：${unsupportedFormats.join(", ")}`,
-      "仅选择 DOCX、PDF、XLSX 或 JSON"
+      `仅选择 ${EXPORT_FORMAT_LABEL}`
     );
   } else if (formats.length) {
     pass("output.formats", "导出格式", "导出格式可用");

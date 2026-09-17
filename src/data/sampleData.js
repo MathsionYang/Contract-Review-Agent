@@ -195,7 +195,7 @@ export const capabilityData = {
 export const defaultSettings = {
   autoSave: true,
   autoSaveInterval: 5,
-  defaultExportFormats: ["DOCX", "PDF", "JSON"],
+  defaultExportFormats: ["PDF", "JSON"],
   defaultExportMode: "draft",
   forceValidator: true,
   blockScannedPdfWithoutOcr: true,
