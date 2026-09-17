@@ -272,3 +272,26 @@ test("已删除或判定误报并驳回的风险不继续阻断正式报告", ()
     assert.equal(validateReview(review, { formats: ["JSON"] }).canExport, false);
   }
 });
+
+test("被用户停止的审查即使证据完整也不能导出，草稿模式也不放行", () => {
+  const review = baseReview();
+  review.task = { status: "cancelled", errors: [{ code: "REVIEW_CANCELLED", stage: "model" }] };
+  const formal = validateReview(review, { formats: ["JSON"] });
+  assert.equal(formal.canExport, false);
+  assert.ok(formal.blockingCodes.includes("REVIEW_CANCELLED"));
+  // 取消是硬阻断：草稿模式同样不得把已停止的审查当作可交付结果。
+  const draft = validateReview(review, { formats: ["JSON"], mode: "draft" });
+  assert.equal(draft.canExport, false);
+  assert.ok(draft.blockingCodes.includes("REVIEW_CANCELLED"));
+});
+
+test("取消不改变既有风险门禁，未复核的高风险仍独立阻断正式报告", () => {
+  const review = baseReview();
+  review.risks[0].human_status = "pending_review";
+  const formal = validateReview(review, { formats: ["JSON"] });
+  assert.ok(formal.blockingCodes.includes("PENDING_HUMAN_REVIEW"));
+  review.task = { status: "cancelled" };
+  const cancelled = validateReview(review, { formats: ["JSON"] });
+  assert.ok(cancelled.blockingCodes.includes("REVIEW_CANCELLED"));
+  assert.ok(cancelled.blockingCodes.includes("PENDING_HUMAN_REVIEW"));
+});

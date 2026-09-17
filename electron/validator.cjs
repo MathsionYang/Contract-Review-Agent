@@ -103,6 +103,8 @@ function validateReview(review, options = {}) {
     block("task.running", "审查任务状态", "EXPORT_TASK_RUNNING", "审查正在执行，结果尚未稳定", "等待任务完成后再导出");
   } else if (["partial", "failed"].includes(review.task?.status)) {
     block("task.incomplete", "审查任务状态", "REVIEW_INCOMPLETE", "本次审查未全部完成", "补齐任务失败或未执行的检查后再生成正式报告");
+  } else if (review.task?.status === "cancelled") {
+    block("task.cancelled", "审查任务状态", "REVIEW_CANCELLED", "本次审查已被用户停止，结果只保留已生成的候选风险", "重新执行完整审查后再生成正式报告");
   }
   if (!project || !project.project_id) {
     block("input.project", "项目身份", "PROJECT_MISSING", "当前审查缺少项目标识", "请从当前项目重新发起导出");

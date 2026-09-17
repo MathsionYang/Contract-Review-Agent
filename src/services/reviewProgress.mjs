@@ -18,12 +18,13 @@ export function applyReviewProgress(review, payload, run) {
   run.sequence = payload.sequence;
   if (payload.executionSummary && typeof payload.executionSummary === "object") review.execution_summary = payload.executionSummary;
   run.latestRiskTitle = update?.type === "reset" ? "" : update?.risk?.title || run.latestRiskTitle || "";
+  // 采用主进程给出的任务状态：停止请求发出后必须显示"正在停止"，不能被此前的 running 覆盖。
   const progress = {
     projectId: payload.projectId,
     runId: payload.runId,
     step: String(payload.step || review.task?.current_step || ""),
     progress: Math.min(Math.max(Number(payload.progress) || 0, 0), 100),
-    status: String(payload.status || "running"),
+    status: String(payload.status || review.task?.status || "running"),
     riskCount: review.risks?.length || 0,
     latestRiskTitle: run.latestRiskTitle
   };

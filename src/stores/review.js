@@ -356,7 +356,9 @@ export const useReviewStore = defineStore("review", () => {
         status: status || "unknown",
         riskCount: result.review.risks?.length || 0
       } : null;
-      notify(status === "completed" ? `审查完成，生成 ${result.review.risks?.length || 0} 条风险` : `审查${status === "partial" ? "部分完成" : "未完成"}，请查看任务状态`, status === "completed" ? "ok" : "warn");
+      notify(status === "completed" ? `审查完成，生成 ${result.review.risks?.length || 0} 条风险`
+        : status === "cancelled" ? `审查已停止，保留 ${result.review.risks?.length || 0} 条候选风险`
+        : `审查${status === "partial" ? "部分完成" : "未完成"}，请查看任务状态`, status === "completed" ? "ok" : "warn");
       return result;
     } catch (error) {
       notify(error.message || "合同审查执行失败", "warn");
@@ -364,6 +366,26 @@ export const useReviewStore = defineStore("review", () => {
     } finally {
       activeReviewRun = null;
       isBusy.value = false;
+    }
+  }
+
+  // 只请求中断当前项目的审查；主进程中断模型与检索后，已发布的候选风险会随取消结果一起保存。
+  async function cancelReview() {
+    if (!activeReviewRun) return null;
+    // 立即进入"正在停止"，避免用户在等待主进程收尾期间以为按钮没有生效。
+    if (review.value?.task) review.value.task = { ...review.value.task, status: "cancelling" };
+    if (reviewProgress.value) reviewProgress.value = { ...reviewProgress.value, status: "cancelling" };
+    try {
+      const result = await electronApi.cancelReview({ projectId: activeReviewRun.projectId });
+      if (!result?.ok) {
+        if (review.value?.task) review.value.task = { ...review.value.task, status: "running" };
+        notify(result?.message || "当前没有正在运行的审查任务", "warn");
+      } else notify("正在停止审查，已生成的风险会保留", "warn");
+      return result;
+    } catch (error) {
+      if (review.value?.task) review.value.task = { ...review.value.task, status: "running" };
+      notify(error.message || "无法停止审查任务", "warn");
+      return null;
     }
   }
 
@@ -876,7 +898,7 @@ export const useReviewStore = defineStore("review", () => {
     chatBusy, chatRequestId, chatStreamText, selectedChatModel, chatContextPreferences, isModelTesting,
     activeProject, review, risks, activeRisk, pendingRiskCount, selectedRules, selectedPolicies, reviewExecution,
     activeAnalysisModels, chatSessions, activeChatSession, chatMessages, chatMemoryCandidates,
-    bootstrap, persist, notify, selectRisk, clearRisk, selectProject, deleteReviewTask, saveChecklistReview, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract, runReview, importKnowledgeFiles, importLegalSnapshot, verifyLegalRealtime,
+    bootstrap, persist, notify, selectRisk, clearRisk, selectProject, deleteReviewTask, saveChecklistReview, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract, runReview, cancelReview, importKnowledgeFiles, importLegalSnapshot, verifyLegalRealtime,
     saveConfig, updateLegalSnapshot, updateEnterpriseMemory, toggleKnowledge, addKnowledge, updateKnowledge, deleteKnowledge, saveModel, deleteModel,
     saveSelectionAnnotation, reviewSelection, setChatModel, updateChatContextPreferences, chatReview, retryChat, cancelChat, confirmMemoryCandidate, dismissMemoryCandidate,
     toggleModel, validateModel, toggleSkill, updateSettings, runValidator, runExport, resetSample

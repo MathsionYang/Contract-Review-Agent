@@ -152,10 +152,14 @@ async function invokeModel(options = {}) {
     let totalTimedOut = false;
     let receivedActivity = false;
     const attemptTimeoutMs = Math.min(timeoutMs * (attempt + 1), 120000);
+    // 首个字节之前的等待单独放宽：推理模型可能在输出 JSON 前先思考很久，
+    // 用同一空闲阈值会把"还没开始输出"误判成"卡死"。
+    const firstDeltaTimeoutMs = Math.min(Math.max(Number(options.firstDeltaTimeoutMs) || 0, 0), 600000);
     let timer;
     const resetIdleTimeout = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => { timedOut = true; controller.abort(); }, attemptTimeoutMs);
+      const deadline = receivedActivity || !firstDeltaTimeoutMs ? attemptTimeoutMs : Math.max(attemptTimeoutMs, firstDeltaTimeoutMs);
+      timer = setTimeout(() => { timedOut = true; controller.abort(); }, deadline);
     };
     resetIdleTimeout();
     // 流式内容持续到达时不按请求总时长误判超时，但仍限制单次调用最长十分钟。
@@ -214,6 +218,10 @@ async function invokeModel(options = {}) {
             emittedDelta = true;
             if (typeof options.onDelta === "function") options.onDelta(delta);
           }
+          // 推理增量单独回调：调用方目前只用于统计活跃度，原始推理文本不会进入审查结果或进度事件。
+          if (typeof reasoning === "string" && reasoning.length && typeof options.onReasoningDelta === "function") {
+            options.onReasoningDelta(reasoning);
+          }
           if (choice?.finish_reason) finishReason = choice.finish_reason;
           if (part?.usage) usage = { ...part.usage };
         };
@@ -264,7 +272,7 @@ async function invokeModel(options = {}) {
           ? gatewayError("MODEL_REQUEST_TIMEOUT", `模型调用超过单次总时限 ${totalTimeoutMs / 1000} 秒`, error)
         : timedOut
           ? gatewayError("MODEL_REQUEST_TIMEOUT", options.stream
-            ? `${receivedActivity ? "模型连续" : "等待模型首段响应超过"} ${attemptTimeoutMs / 1000} 秒${receivedActivity ? "没有新内容" : ""}`
+            ? `${receivedActivity ? "模型连续" : "等待模型首段响应超过"} ${Math.round((receivedActivity ? attemptTimeoutMs : Math.max(attemptTimeoutMs, firstDeltaTimeoutMs)) / 1000)} 秒${receivedActivity ? "没有新内容" : ""}`
             : "模型请求超时", error)
           : error;
       const retryableTimeout = timedOut && !userCancelled && !emittedDelta;

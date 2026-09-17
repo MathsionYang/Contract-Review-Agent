@@ -33,6 +33,20 @@ test("部分完成显示各自失败阶段，不把已持久化的任务显示�
   assert.deepEqual(pipeline.map((step) => step.status), ["completed", "completed", "failed", "completed", "failed", "completed", "completed"]);
 });
 
+test("停止审查的任务显示为已取消并保留中断前的已完成阶段", async () => {
+  const { buildReviewPipeline, pipelineOverallLabel } = await import("../src/services/reviewPipeline.mjs");
+  const pipeline = buildReviewPipeline({ status: "cancelled", current_step: "model", progress: 70,
+    errors: [{ code: "REVIEW_CANCELLED", stage: "validate", message: "审查已被用户停止" }] });
+  assert.deepEqual(pipeline.map((step) => step.status), ["completed", "completed", "completed", "completed", "pending", "failed", "pending"]);
+  assert.equal(pipelineOverallLabel({ status: "cancelled" }), "已取消");
+});
+
+test("取消阶段无法定位时按当前游标收尾，不把整条流水线标成待执行", async () => {
+  const { buildReviewPipeline } = await import("../src/services/reviewPipeline.mjs");
+  const pipeline = buildReviewPipeline({ status: "cancelled", current_step: "retrieve", progress: 52, errors: [] });
+  assert.deepEqual(pipeline.map((step) => step.status), ["completed", "completed", "completed", "pending", "pending", "pending", "pending"]);
+});
+
 test("审查进度事件携带规则和模型阶段的风险数量", async () => {
   const { runReview } = require("../electron/review-runner.cjs");
   const events = [];

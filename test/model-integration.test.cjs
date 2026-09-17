@@ -155,6 +155,72 @@ test("抽取分批覆盖长文，失败保留规则及已完成批次，小窗�
   assert.equal(tooSmall.summary.status, "degraded");
 });
 
+test("抽取按批限制原文与请求数，未配置超时时补足以跑完抽取的默认值", async () => {
+  // 复现真实事故配置：timeoutMs=60000、contextLength/maxTokens 均为 0（用户只填了角色和模型名）。
+  const bare = { configId: "extract", name: "qwen", modelId: "qwen-plus", role: "extraction", status: "active", testStatus: "passed" };
+  const doc = document("第一条 付款\n预付款 40%。\n第二条 交付\n交付时间为 2026 年 10 月 15 日。");
+  const batches = extractionBatches(doc, bare);
+  assert.ok(batches.length >= 1);
+  const requested = [];
+  const result = await extractWithModel(doc, { model: bare, invokeModel: async (request) => {
+    requested.push(request);
+    return { ok: true, data: { facts: [] } };
+  } });
+  // 未配置超时会补足到能容纳推理延迟的默认值，而不是沿用网关的 60 秒。
+  assert.equal(requested[0].model.timeoutMs, 180000);
+  assert.equal(result.summary.timeout_ms, 180000);
+  assert.equal(requested[0].firstDeltaTimeoutMs, 180000, "首段响应必须获得独立宽限");
+  assert.equal(requested[0].stream, true);
+});
+
+test("单批原文与块数受限，避免一次响应承载整份合同", async () => {
+  const blocks = Array.from({ length: 60 }, (_, index) => ({ block_id: `b${index + 1}`, page: null, logical_page: 1, text: "第 X 条 付款与交付约定内容。".repeat(30) }));
+  const doc = { text: blocks.map((block) => block.text).join(""), documentType: "docx", pages: [{ page: 1, text: "" }], blocks };
+  const batches = extractionBatches(doc, model("extraction", { timeoutMs: 180000 }));
+  assert.ok(batches.length > 1, "长合同必须拆成多个批次");
+  for (const batch of batches) {
+    assert.ok(batch.blocks.length <= 24, "单批请求块数必须受限");
+    const chars = batch.blocks.reduce((total, block) => total + block.text.length, 0);
+    assert.ok(chars <= 2400, `单批原文过长：${chars}`);
+  }
+  // 覆盖率不能因为拆批而丢失任何原文偏移（offset 是块内偏移，按 block_id 分别核对）。
+  const covered = new Map();
+  for (const batch of batches) {
+    for (const block of batch.blocks) {
+      const range = covered.get(block.block_id) || new Set();
+      for (let index = 0; index < block.text.length; index += 1) range.add(block.offset + index);
+      covered.set(block.block_id, range);
+    }
+  }
+  assert.equal(covered.size, blocks.length);
+  for (const block of blocks) assert.equal(covered.get(block.block_id).size, block.text.length);
+});
+
+test("空闲超时按首字节前后区分，推理长时间无输出也能等到结果", async () => {
+  const call = (firstDeltaTimeoutMs, deltas) => invokeModel({
+    model: { name: "m", modelId: "m", role: "analysis", endpoint: "https://models.invalid/v1", timeoutMs: 1000, retries: 0, maxTokens: 64 },
+    stream: true,
+    firstDeltaTimeoutMs,
+    onDelta: () => {},
+    retryTimeouts: false,
+    fetchImpl: async (_url, options) => new Promise((resolve, reject) => {
+      options.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+      setTimeout(() => resolve({ ok: true, body: new ReadableStream({ start(controller) {
+        for (const delta of deltas) controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`));
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+        controller.close();
+      } }) }), 1200);
+    })
+  });
+  // 未给首段宽限时，1000ms 内没有首字节即判定空闲超时。
+  const timedOut = await call(0, [{ content: '{"risks":[]}' }]);
+  assert.equal(timedOut.ok, false);
+  assert.equal(timedOut.errorCode, "MODEL_REQUEST_TIMEOUT");
+  // 给了首段宽限后，同样的延迟可以正常拿到结果。
+  const recovered = await call(5000, [{ content: '{"risks":[]}' }]);
+  assert.equal(recovered.ok, true);
+});
+
 test("向量语义召回非同词知识，保留候选状态、快照和来源定位", async () => {
   const retriever = createKnowledgeRetriever({ sources: [source()], model: model("embedding"), invokeModel: async ({ input }) => ({ ok: true, data: { vectors: input.map(() => [1, 0]) } }) });
   const hits = await retriever.search("迟延交货如何追偿");

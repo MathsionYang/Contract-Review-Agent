@@ -2,14 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { AlertCircle, Bot, Check, ChevronDown, ChevronUp, LoaderCircle } from "lucide-vue-next";
 
-const props = defineProps({ summary: { type: Object, required: true }, role: { type: String, default: "extraction" }, active: { type: Boolean, default: false } });
+const props = defineProps({ summary: { type: Object, required: true }, role: { type: String, default: "extraction" }, active: { type: Boolean, default: false }, cancelling: { type: Boolean, default: false } });
 const expanded = ref(props.active);
 const analysis = computed(() => props.role === "analysis");
 const title = computed(() => analysis.value ? "语义分析" : "条款抽取");
 const now = ref(Date.now());
 let timer;
-const running = computed(() => props.active && ["pending", "running"].includes(props.summary.status));
-const interrupted = computed(() => !props.active && props.summary.status === "running");
+const running = computed(() => props.active && !props.cancelling && ["pending", "running"].includes(props.summary.status));
+const interrupted = computed(() => !running.value && !props.cancelling && props.summary.status === "running");
 const warning = computed(() => interrupted.value || ["partial", "degraded", "failed"].includes(props.summary.status) || props.summary.context?.truncated_pages?.length > 0);
 const count = (value) => Math.max(0, Math.floor(Number(value) || 0));
 const totalBatches = computed(() => count(props.summary.total_batches));
@@ -19,18 +19,20 @@ const percent = computed(() => totalBatches.value ? Math.round(completedBatches.
 const recentFacts = computed(() => (props.summary.recent_facts || []).slice(-5).reverse());
 const recentRisks = computed(() => (props.summary.recent_risks || []).slice(-5).reverse());
 const typeLabels = { money: "金额", ratio: "比例", duration: "期限", party: "主体", obligation: "义务", penalty: "违约责任", condition: "条件", date: "日期", reference: "引用", clause: "条款" };
-const statusLabel = computed(() => running.value ? "进行中" : interrupted.value ? "已中断" : ({
-  pending: "待开始", completed: "已完成", partial: "部分完成", degraded: "已降级", failed: "未完成", not_configured: analysis.value ? "未调用" : "规则抽取"
+const statusLabel = computed(() => props.cancelling ? "正在停止" : running.value ? "进行中" : interrupted.value ? "已中断" : ({
+  pending: "待开始", completed: "已完成", partial: "部分完成", degraded: "已降级", failed: "未完成", cancelled: "已取消", not_configured: analysis.value ? "未调用" : "规则抽取"
 })[props.summary.status] || "待开始");
 const message = computed(() => {
+  if (props.cancelling) return "正在停止模型请求，已收到的完整结果会保留。";
   if (analysis.value) {
     if (interrupted.value) return "语义分析已中断，已接收的完整风险仍保留。";
     if (running.value) {
       if (props.summary.phase === "preparing") return "正在整理合同、事实和检索依据。";
-      if (props.summary.phase === "receiving") return `已接收模型响应，正在整理风险；已识别 ${count(props.summary.received_risk_count)} 条候选。`;
-      return "已提交语义分析请求，等待模型返回。";
+      if (props.summary.phase === "receiving") return `正在接收模型输出：已收到约 ${count(props.summary.received_char_count)} 字，已识别 ${count(props.summary.received_risk_count)} 条候选。`;
+      return "已提交语义分析请求，等待模型返回首个片段。";
     }
     if (props.summary.status === "completed") return `语义分析完成，共收到 ${count(props.summary.received_risk_count)} 条模型候选风险，待人工核验。`;
+    if (props.summary.status === "cancelled") return `语义分析已被用户停止，保留 ${count(props.summary.received_risk_count)} 条完整模型候选。`;
     if (props.summary.status === "failed") return `语义分析未完成，已保留 ${count(props.summary.received_risk_count)} 条完整模型候选和本地检查结果。`;
     if (props.summary.status === "not_configured") return "未配置可用的语义分析模型，本次仅保留本地检查结果。";
     return "等待语义分析。";
@@ -40,10 +42,12 @@ const message = computed(() => {
     if (!totalBatches.value) return "正在整理合同原文，准备分批抽取。";
     if (props.summary.phase === "validating") return `第 ${batch.value} 批已返回，正在校验引文与数值。`;
     if (props.summary.phase === "batch_completed") return `第 ${completedBatches.value} 批已完成原文校验。`;
-    return `正在抽取第 ${batch.value} / ${totalBatches.value} 批，等待模型返回。`;
+    if (props.summary.phase === "receiving") return `第 ${batch.value} / ${totalBatches.value} 批正在接收模型输出，已收到约 ${count(props.summary.received_char_count)} 字。`;
+    return `正在抽取第 ${batch.value} / ${totalBatches.value} 批，已提交请求，等待模型返回首个片段。`;
   }
   if (props.summary.status === "degraded") return "模型抽取未全部完成，已保留规则事实和通过原文校验的模型事实。";
   if (props.summary.status === "partial") return "抽取完成，部分候选未通过原文或数值校验，未纳入审查。";
+  if (props.summary.status === "cancelled") return "条款抽取已被用户停止，已保留规则事实。";
   if (props.summary.status === "not_configured") return "未配置可用的条款抽取模型，本次使用本地规则抽取。";
   if (props.summary.status === "completed") return "条款抽取完成，结果已交给后续风险审查。";
   return "等待条款抽取。";
@@ -55,10 +59,51 @@ const elapsed = computed(() => {
   const seconds = Math.max(0, Math.floor((end - start) / 1000));
   return seconds >= 60 ? `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒` : `${seconds} 秒`;
 });
+// 距离"空闲超时"还有多久：让用户能区分"模型在慢慢想"和"请求已经卡住"。
+const lastOutputAt = computed(() => Number.isFinite(Date.parse(props.summary.last_delta_at || ""))
+  ? props.summary.last_delta_at
+  : Number.isFinite(Date.parse(props.summary.current_source ? props.summary.batch_started_at || "" : ""))
+    ? props.summary.batch_started_at
+    : props.summary.started_at);
+const silenceSeconds = computed(() => {
+  if (!running.value) return 0;
+  const base = Date.parse(lastOutputAt.value || "");
+  if (!Number.isFinite(base)) return 0;
+  return Math.max(0, Math.floor((now.value - base) / 1000));
+});
+const idleTimeoutSeconds = computed(() => Math.round(Math.max(Number(props.summary.timeout_ms) || 0, 0) / 1000));
+const waitingForFirstDelta = computed(() => running.value && !props.summary.first_delta_at);
 const sourceLabel = computed(() => {
   const source = props.summary.current_source || {};
   return [source.page ? `第 ${source.page} 页` : source.logical_page ? `逻辑页 ${source.logical_page}` : "原文块", source.clause_no].filter(Boolean).join(" · ");
 });
+// 推理时间线：由主进程上报的结构化事件渲染，只包含阶段、计数和已验证摘要，没有模型原始输出。
+const activityEventLabels = {
+  preparing: "整理输入", requesting: "已提交模型请求", receiving: "正在接收模型输出",
+  validating: "校验引文与数值", batch_completed: "本批抽取完成", first_delta: "收到首个输出片段",
+  risk_received: "识别到候选风险", finished: "阶段结束", context_error: "上下文不足",
+  local_checks_done: "本地确定性检查完成", retrieval_done: "依据检索完成"
+};
+const timeline = computed(() => (props.summary.activities || []).slice(-8).reverse());
+function activityLabel(entry) {
+  return activityEventLabels[entry.event] || entry.event;
+}
+function activityDetail(entry) {
+  if (entry.event === "risk_received") return `${entry.title || "候选风险"}${entry.location_status === "unresolved" ? " · 原文待定位" : " · 原文已定位"}`;
+  if (entry.event === "retrieval_done") return `状态 ${entry.status || "unknown"} · 查询 ${count(entry.query_count)} · 缓存命中 ${count(entry.cache_hit_count)}`;
+  if (entry.event === "finished") return `收到候选 ${count(entry.received_risk_count)} 条 · 输出约 ${count(entry.received_char_count)} 字`;
+  const parts = [];
+  if (entry.batch) parts.push(`第 ${entry.batch}${entry.total_batches ? ` / ${entry.total_batches}` : ""} 批`);
+  if (entry.received_char_count) parts.push(`已接收约 ${count(entry.received_char_count)} 字`);
+  if (entry.reasoning_char_count) parts.push(`推理活跃 ${count(entry.reasoning_char_count)} 字`);
+  if (entry.clause_no) parts.push(entry.clause_no);
+  return parts.join(" · ");
+}
+function activityTime(value) {
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return "";
+  return new Date(time).toLocaleTimeString("zh-CN", { hour12: false });
+}
 onMounted(() => {
   watch(running, (value, previous) => {
     clearInterval(timer);
@@ -81,6 +126,13 @@ onBeforeUnmount(() => clearInterval(timer));
       </header>
       <p class="extraction-description" role="status">{{ message }}</p>
       <div class="extraction-meta"><span>{{ summary.model_name || (analysis ? '未配置模型' : '本地规则') }}</span><span v-if="elapsed" aria-live="off">{{ running ? '已用时' : '用时' }} {{ elapsed }}</span></div>
+      <div v-if="running && (summary.received_char_count || summary.reasoning_char_count || silenceSeconds >= 10)" class="extraction-ticker" aria-live="off">
+        <span v-if="!analysis && totalBatches">第 {{ batch }}/{{ totalBatches }} 批</span>
+        <span>已接收 <b>{{ count(summary.received_char_count) }}</b> 字</span>
+        <span v-if="summary.reasoning_char_count">推理活跃 <b>{{ count(summary.reasoning_char_count) }}</b> 字</span>
+        <span v-if="summary.first_delta_at">首段响应 {{ activityTime(summary.first_delta_at) }}</span>
+        <span v-else-if="silenceSeconds >= 10" class="ticker-waiting">{{ waitingForFirstDelta ? "等待首段响应" : "等待新内容" }} {{ silenceSeconds }} 秒<span v-if="idleTimeoutSeconds"> · {{ idleTimeoutSeconds }} 秒无响应判定超时</span></span>
+      </div>
       <div v-if="!analysis && totalBatches && expanded" class="extraction-progress">
         <progress :value="completedBatches" :max="totalBatches" aria-label="已完成抽取批次" />
         <span>{{ completedBatches }}/{{ totalBatches }} 批 · {{ percent }}%</span>
@@ -96,6 +148,12 @@ onBeforeUnmount(() => clearInterval(timer));
       <p v-if="analysis && summary.context?.truncated_pages?.length" class="extraction-error">{{ summary.context.truncated_pages.length }} 页原文有删节，未覆盖全部内容。</p>
       <p v-if="summary.message" class="extraction-error">{{ summary.message }}</p>
       <div v-if="expanded" class="extraction-details">
+        <div v-if="timeline.length" class="extraction-timeline">
+          <small>推理时间线 · 仅结构化进展，不含模型原始输出</small>
+          <ol>
+            <li v-for="entry in timeline" :key="entry.activity_id + entry.at"><span class="timeline-dot" :class="`timeline-${entry.event}`"></span><div><strong>{{ activityLabel(entry) }}</strong><em v-if="activityTime(entry.at)">{{ activityTime(entry.at) }}</em><p v-if="activityDetail(entry)">{{ activityDetail(entry) }}</p></div></li>
+          </ol>
+        </div>
         <div v-if="running && summary.current_source?.quote" class="extraction-source">
           <small>当前原文 · {{ sourceLabel }}</small>
           <blockquote>{{ summary.current_source.quote }}</blockquote>

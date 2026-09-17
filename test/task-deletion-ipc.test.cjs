@@ -37,7 +37,10 @@ function createHarness(runReview = async ({ review }) => ({ review }), chooseDir
     },
     module: { exports: {} },
     __dirname: path.dirname(mainPath),
-    process: { env: {}, platform: "win32" }
+    process: { env: {}, platform: "win32" },
+    // vm 沙箱默认不继承宿主全局对象，主进程取消审查所用的 AbortController 需要显式注入。
+    AbortController,
+    AbortSignal
   }, { filename: mainPath });
   const projects = [{ project_id: "one" }, { project_id: "two" }];
   const initial = storage.saveState({

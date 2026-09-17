@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import {
-  Bot, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, FileCog, FileDown, Flag, Highlighter, ListChecks, LoaderCircle, Maximize2, MessageSquare, Minus, Plus, RotateCcw, ScanSearch, Search, Send, Settings2, SquarePen, Trash2, UserRound, X
+  Bot, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, FileCog, FileDown, Flag, Highlighter, ListChecks, LoaderCircle, Maximize2, MessageSquare, Minus, Play, Plus, RotateCcw, ScanSearch, Search, Send, Settings2, Square, SquarePen, Trash2, UserRound, X
 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
 import { riskCategories, riskLevels } from "../data/sampleData";
@@ -84,7 +84,10 @@ const taskStatusClass = computed(() => "task-" + taskStatus.value);
 const taskStepLabel = computed(() => taskStepLabels[task.value.current_step] || "准备执行");
 const taskProgress = computed(() => Math.min(Math.max(Number(task.value.progress) || 0, 0), 100));
 const taskErrors = computed(() => Array.isArray(task.value.errors) ? task.value.errors : []);
-const taskCanRetry = computed(() => ["partial", "failed"].includes(taskStatus.value) && !store.isBusy);
+const taskCanRetry = computed(() => ["partial", "failed", "cancelled"].includes(taskStatus.value) && !store.isBusy);
+// 运行中或正在停止时都显示停止入口：停止请求发出后按钮保持可见，但不可重复点击。
+const reviewRunning = computed(() => ["running", "cancelling"].includes(taskStatus.value) && store.isBusy);
+const taskCanStart = computed(() => Boolean(store.review) && !reviewRunning.value && !store.isBusy && !store.chatBusy);
 const pipelineRiskCount = computed(() => store.risks.length);
 const taskErrorDetails = (error) => error.details || (error.check_ids || []).map((checkId) => ({ check_id: checkId,
   message: [...(store.review?.check_results || []), ...(store.review?.checklist_results || [])].find((check) => check.check_id === checkId)?.message || "需要补充输入或人工核验" }));
@@ -335,6 +338,13 @@ async function retryReview() {
     // store 已将执行错误转换为顶部通知。
   }
 }
+async function startReview() {
+  if (!taskCanStart.value) return;
+  await retryReview();
+}
+async function stopReview() {
+  await store.cancelReview();
+}
 async function handleRiskAction(action) {
   if (!currentRisk.value) return;
   await store.applyRiskAction(currentRisk.value.risk_id, action);
@@ -440,7 +450,7 @@ function displaySize(bytes) {
                 <div class="pipeline-title-row"><strong>审查任务流水线</strong><span class="pipeline-status" :class="`pipeline-status-${taskStatus}`">{{ pipelineOverallStatus }}</span></div>
                 <p>{{ taskStatus === 'running' ? '当前结果为待核验候选' : '通用检查与专项检查' }}</p>
               </div>
-              <div class="pipeline-header-actions"><div class="pipeline-summary"><strong>{{ pipelineRiskCount }}</strong><span>条风险</span><small>{{ pipelineCompletedCount }}/{{ reviewPipeline.length }} 阶段完成</small></div><button v-if="taskCanRetry" class="icon-button small" type="button" title="重试审查任务" aria-label="重试审查任务" @click="retryReview"><RotateCcw :size="14" /></button></div>
+              <div class="pipeline-header-actions"><div class="pipeline-summary"><strong>{{ pipelineRiskCount }}</strong><span>条风险</span><small>{{ pipelineCompletedCount }}/{{ reviewPipeline.length }} 阶段完成</small></div><button v-if="taskCanStart" class="button small-button pipeline-run-button" type="button" :disabled="!taskCanStart" title="开始合同审查" aria-label="开始合同审查" @click="startReview"><Play :size="14" />开始审查</button><button v-if="reviewRunning" class="icon-button danger" type="button" title="停止合同审查" aria-label="停止合同审查" @click="stopReview"><Square :size="15" /></button><button v-if="taskCanRetry" class="icon-button small" type="button" :title="taskStatus === 'cancelled' ? '重新开始审查' : '重试审查任务'" :aria-label="taskStatus === 'cancelled' ? '重新开始审查' : '重试审查任务'" @click="retryReview"><RotateCcw :size="14" /></button></div>
             </header>
             <div class="pipeline-overall-progress"><div class="task-progress-track"><span :style="{ width: taskProgress + '%' }"></span></div><strong>{{ taskProgress }}%</strong><span>{{ taskStepLabel }}</span></div>
             <div class="pipeline-steps">
@@ -454,6 +464,7 @@ function displaySize(bytes) {
             </div>
             <div v-if="taskErrors.length" class="task-error-list"><div v-for="error in taskErrors" :key="error.code + '-' + error.message" class="task-error-entry"><b>{{ error.code || "TASK_ERROR" }}</b> {{ error.message }}<details v-if="taskErrorDetails(error).length"><summary>{{ taskErrorDetails(error).length }} 项检查明细</summary><ul><li v-for="detail in taskErrorDetails(error)" :key="detail.check_id"><strong>{{ detail.check_id }}</strong>：{{ detail.message }}</li></ul></details><p v-if="error.suggestion">{{ error.suggestion }}</p></div></div>
             <div v-if="pipelineActiveStep && taskStatus === 'running'" class="pipeline-live-note"><LoaderCircle class="spin" :size="13" /><div>正在{{ pipelineActiveStep.label }}，当前已识别 {{ pipelineRiskCount }} 条候选风险<p v-if="store.reviewProgress?.latestRiskTitle" class="latest-risk-title">最新识别：{{ store.reviewProgress.latestRiskTitle }}</p></div></div>
+            <div v-else-if="taskStatus === 'cancelled'" class="pipeline-live-note pipeline-live-note-cancelled"><Square :size="13" />审查已停止，已保留已生成的风险；可点击右侧重试按钮从当前配置重新开始</div>
             <div v-else-if="taskStatus === 'completed'" class="pipeline-live-note pipeline-live-note-success"><Check :size="13" />审查步骤已完成，可在右侧风险清单中逐条复核</div>
           </section>
         </div>
@@ -503,7 +514,7 @@ function displaySize(bytes) {
             <span v-if="lastSelection" class="chat-selection-note">{{ lastSelection.clause_no || "选区" }} · {{ lastSelection.text_snapshot?.slice(0, 18) }}{{ lastSelection.text_snapshot?.length > 18 ? "..." : "" }}</span>
           </div>
           <div class="chat-message-list" aria-live="polite">
-            <ReviewModelActivity v-for="activity in reviewActivities" :key="`${store.activeProject?.project_id}:${activity.role}:${activity.summary.started_at || ''}`" :role="activity.role" :summary="activity.summary" :active="store.isBusy && taskStatus === 'running' && task.current_step === activity.step" />
+            <ReviewModelActivity v-for="activity in reviewActivities" :key="`${store.activeProject?.project_id}:${activity.role}:${activity.summary.started_at || ''}`" :role="activity.role" :summary="activity.summary" :active="['running', 'cancelling'].includes(taskStatus) && store.isBusy && task.current_step === activity.step" :cancelling="taskStatus === 'cancelling'" />
             <div v-if="!chatMessages.length && !reviewActivities.length" class="chat-empty"><Bot :size="22" /><span>可以问我“审查当前选区”“检查付款责任”或“生成待核验风险”。</span></div>
             <article v-for="message in chatMessages" :key="message.message_id" class="chat-message" :class="`chat-message-${message.role} chat-message-${message.status || 'completed'}`">
               <span class="chat-avatar"><UserRound v-if="message.role === 'user'" :size="14" /><Bot v-else :size="15" /></span>

@@ -177,14 +177,43 @@ async function runReview(options = {}) {
   const review = JSON.parse(JSON.stringify(original));
   const state = options.state || {};
   const services = options.services || {};
+  const signal = services.signal;
   const errors = [];
+  let cancelled = false;
+  // 取消只终止后续阶段：已发布的候选风险保留在 review.risks，最终状态落为 cancelled 而不是伪完成。
+  const cancelledError = (stage) => Object.assign(new Error("审查已被用户停止"), { code: "REVIEW_CANCELLED", stage });
   const progress = (step, value, details = {}) => {
     review.task = { ...(review.task || {}), current_step: step, progress: value };
-    if (typeof options.onProgress === "function") options.onProgress({ step, progress: value, status: review.task.status, riskCount: review.risks?.length || 0,
+    // 中断信号已发出但任务尚未收尾时，界面必须看到"正在停止"，不能继续显示执行中。
+    const status = signal?.aborted && review.task.status === "running" ? "cancelling" : review.task.status;
+    if (typeof options.onProgress === "function") options.onProgress({ step, progress: value, status, riskCount: review.risks?.length || 0,
       executionSummary: JSON.parse(JSON.stringify(review.execution_summary || {})), ...details });
+  };
+  // 推理时间线：只记录阶段、计数和已验证摘要，不记录模型原始输出，供界面在等待期间展示持续进展。
+  let activitySequence = 0;
+  let lastActivityAt = 0;
+  // 里程碑事件（提交请求、首个片段、识别到风险、阶段结束）立即上报；
+  // 只有高频的接收心跳才节流，否则界面会漏掉关键进展。
+  const MILESTONE_EVENTS = new Set(["requesting", "first_delta", "risk_received", "finished", "context_error", "local_checks_done", "retrieval_done"]);
+  const pushActivity = (phase, event, detail) => {
+    activitySequence += 1;
+    const entry = { activity_id: `act-${activitySequence}-${phase}`, phase, event, at: now(), ...(detail || {}) };
+    const timeline = [...(review.execution_summary?.[phase]?.activities || []), entry].slice(-12);
+    if (review.execution_summary?.[phase]) review.execution_summary[phase].activities = timeline;
+    if (MILESTONE_EVENTS.has(event) || Date.now() - lastActivityAt >= 300) {
+      lastActivityAt = Date.now();
+      progress(review.task.current_step || "rules", review.task.progress || 0);
+    }
+    return entry;
   };
 
   review.config = { ...(review.config || {}), execution: executionSnapshot(state, review) };
+  if (signal?.aborted) {
+    review.review_version_id = `RV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-CANCELLED-${Date.now().toString(36)}`;
+    review.task = { ...(review.task || {}), status: "cancelled", current_step: "parse", progress: 0,
+      errors: [{ code: "REVIEW_CANCELLED", stage: "parse", message: "审查在开始前已被用户停止" }] };
+    return { review, errors: review.task.errors, validation: null };
+  }
   review.task = {
     ...(review.task || {}),
     status: "running",
@@ -201,7 +230,7 @@ async function runReview(options = {}) {
   review.risks = [];
   review.execution_summary = Object.fromEntries(["analysis", "extraction", "embedding", "rerank", "vision"].map((role) => {
     const model = executionModel(state, review, role);
-    return [role, { ...modelIdentity(model), status: ["rerank", "vision"].includes(role) ? "not_integrated" : model ? "pending" : "not_configured", call_count: 0 }];
+    return [role, { ...modelIdentity(model), status: ["rerank", "vision"].includes(role) ? "not_integrated" : model ? "pending" : "not_configured", call_count: 0, activities: [] }];
   }));
   progress("extract", 12, { riskUpdate: { type: "reset" } });
   const ruleItems = selectedItems(state, "rules", review.config.rules);
@@ -214,16 +243,38 @@ async function runReview(options = {}) {
   ];
   const rules = rulesFromKnowledge(ruleItems);
   const document = { ...review.document, fileVersionId: review.project.file_version_id };
-  const extracted = await extractWithModel(document, { contractType: review.project.contract_type,
-    baseline: extractContractFacts(document, { contractType: review.project.contract_type }),
-    model: executionModel(state, review, "extraction"), invokeModel: services.invokeModel || invokeModel,
-    onProgress: (summary) => {
-      review.execution_summary.extraction = summary;
-      const fraction = summary.total_batches ? summary.completed_batches / summary.total_batches : 0;
-      progress("extract", Math.round(12 + 15 * fraction));
-    }
-  });
-  review.execution_summary.extraction = extracted.summary;
+  // 记录已上报的活动刻度，避免抽取阶段重复推送同一批次的相同状态。
+  const extractionMarks = new Map();
+  let extracted;
+  try {
+    extracted = await extractWithModel(document, { contractType: review.project.contract_type,
+      baseline: extractContractFacts(document, { contractType: review.project.contract_type }),
+      model: executionModel(state, review, "extraction"), invokeModel: services.invokeModel || invokeModel,
+      signal,
+      onProgress: (summary) => {
+        // 抽取模块不感知时间线，这里保留已累积的活动记录，避免被每批上报覆盖。
+        review.execution_summary.extraction = { ...summary, activities: review.execution_summary.extraction?.activities ?? [] };
+        const fraction = summary.total_batches ? summary.completed_batches / summary.total_batches : 0;
+        const key = `${summary.phase}:${summary.current_batch}:${summary.completed_batches}`;
+        if (summary.phase !== "finished" && extractionMarks.get("extract") !== key) {
+          extractionMarks.set("extract", key);
+          pushActivity("extraction", summary.phase, { batch: summary.current_batch, total_batches: summary.total_batches,
+            received_char_count: summary.received_char_count, received_token_estimate: summary.received_token_estimate,
+            reasoning_char_count: summary.reasoning_char_count, clause_no: summary.current_source?.clause_no || "" });
+        }
+        progress("extract", Math.round(12 + 15 * fraction));
+      }
+    });
+  } catch (error) {
+    if (String(error.code || "").includes("CANCEL")) {
+      cancelled = true;
+      extracted = { facts: extractContractFacts(document, { contractType: review.project.contract_type }), warnings: [],
+        summary: { ...review.execution_summary.extraction, status: "cancelled", message: "条款事实抽取已被用户停止" } };
+      errors.push({ code: "REVIEW_CANCELLED", stage: "extract", message: "审查在条款事实抽取阶段被用户停止" });
+    } else throw error;
+  }
+  // 抽取模块返回的是它自己的摘要，这里回填时间线，保证最终持久化的执行摘要仍带推理时间线。
+  review.execution_summary.extraction = { ...extracted.summary, activities: review.execution_summary.extraction?.activities ?? [] };
   errors.push(...extracted.warnings.filter((warning) => warning.code.startsWith("EXTRACTION_")).map((warning) => ({ ...warning, stage: "extract" })));
   progress("rules", 28);
   const checked = runContractChecks({
@@ -276,15 +327,29 @@ async function runReview(options = {}) {
     }
   }
   for (const finding of initialFindings) publishFinding(finding, "rules", 45);
+  pushActivity("embedding", "local_checks_done", { local_risk_count: review.risks.length, check_count: review.check_results.length });
   progress("retrieve", 52, { riskCount: review.risks.length });
 
   const retriever = createKnowledgeRetriever({ sources, model: executionModel(state, review, "embedding"),
-    invokeModel: services.invokeModel || invokeModel, cache: services.vectorCache,
-    onProgress: (summary) => { review.execution_summary.embedding = summary; progress(review.task.current_step, review.task.progress); }
+    invokeModel: services.invokeModel || invokeModel, cache: services.vectorCache, signal,
+    onProgress: (summary) => {
+      review.execution_summary.embedding = { ...summary, activities: review.execution_summary.embedding?.activities ?? [] };
+      progress(review.task.current_step, review.task.progress);
+    }
   });
   const retrievalQueries = [...initialFindings.map(evidenceQuery), ...review.checklist_results.filter((item) => item.status !== "not_applicable").map((item) => item.criterion)];
-  const retrievalHits = await retriever.searchMany(retrievalQueries);
-  review.execution_summary.embedding = { ...retriever.summary };
+  let retrievalHits = [];
+  try {
+    retrievalHits = await retriever.searchMany(retrievalQueries);
+  } catch (error) {
+    // 检索阶段被停止时，保留已经发布且已带本地依据的候选风险，直接进入取消收尾。
+    if (!String(error.code || "").includes("CANCEL")) throw error;
+    cancelled = true;
+    errors.push({ code: "REVIEW_CANCELLED", stage: "retrieve", message: "审查在检索审查依据阶段被用户停止" });
+  }
+  review.execution_summary.embedding = { ...retriever.summary, activities: review.execution_summary.embedding?.activities ?? [] };
+  pushActivity("embedding", "retrieval_done", { status: retriever.summary.status, query_count: retriever.summary.query_count,
+    chunk_count: retriever.summary.chunk_count, cache_hit_count: retriever.summary.cache_hit_count });
   initialFindings = attachEvidence(initialFindings, sources, retrievalHits.slice(0, initialFindings.length));
   for (const finding of initialFindings) publishFinding(finding, "retrieve", 60);
   const modelEvidence = [...new Map(retrievalHits.flat().map((hit) => [`${hit.source_id}:${hit.clause_no}:${hit.excerpt}`, hit])).values()];
@@ -292,10 +357,15 @@ async function runReview(options = {}) {
   const model = executionModel(state, review, "analysis");
   Object.assign(review.execution_summary, { deterministic: { status: "completed", check_count: review.check_results.length }, checklist: { version: checklist.catalogVersion, check_count: 95 }, analysis: {
     ...modelIdentity(model), status: model ? "running" : "not_configured", call_count: 0,
-    phase: model ? "preparing" : "not_configured", started_at: now(), received_risk_count: 0, recent_risks: [], received_char_count: 0
-  } });
+    phase: model ? "preparing" : "not_configured", started_at: now(), received_risk_count: 0, recent_risks: [], received_char_count: 0,
+    received_token_estimate: 0, reasoning_char_count: 0, first_response_at: null, last_delta_at: null, activities: [] } });
+  if (!cancelled && signal?.aborted) {
+    // 在进入语义分析前再次确认取消：避免已经停止的任务仍然发起新的模型请求。
+    cancelled = true;
+    errors.push({ code: "REVIEW_CANCELLED", stage: "model", message: "审查在语义风险分析开始前被用户停止，未发起模型请求" });
+  }
   progress("model", 70, { riskCount: review.risks.length });
-  if (model) {
+  if (model && !cancelled) {
     const summary = review.execution_summary.analysis;
     const call = services.invokeModel || invokeModel;
     const context = modelMessages(review, modelEvidence, model);
@@ -316,29 +386,47 @@ async function runReview(options = {}) {
         quote: (finding.contract_location?.quote || "").slice(0, 180), location_status: finding.contract_location?.location_status || "unresolved"
       }))].slice(-5);
       for (const finding of attachEvidence(normalized, sources)) publishFinding(finding, "model", 70);
-      if (normalized.length) pendingEvidence.push(retriever.searchMany(normalized.map(evidenceQuery)).then((hits) => {
-        for (const finding of attachEvidence(normalized, sources, hits)) publishFinding(finding, "model", 70);
-      }));
+      if (normalized.length) {
+        pushActivity("analysis", "risk_received", { received_risk_count: summary.received_risk_count,
+          title: normalized[0].title.slice(0, 80), risk_level: normalized[0].risk_level,
+          location_status: normalized[0].contract_location?.location_status || "unresolved" });
+        pendingEvidence.push(retriever.searchMany(normalized.map(evidenceQuery)).then((hits) => {
+          for (const finding of attachEvidence(normalized, sources, hits)) publishFinding(finding, "model", 70);
+        }));
+      }
     };
     const stream = createRiskStream(acceptModelRisk);
     let response;
     const modelStartedAt = Date.now();
-    let lastActivityAt = 0;
+    let lastBeatAt = 0;
     try {
       summary.call_count = context.error ? 0 : 1;
       summary.phase = context.error ? "preparing" : "requesting";
+      pushActivity("analysis", context.error ? "context_error" : "requesting", { model_name: summary.model_name || null });
       progress("model", 70);
       response = context.error ? { ok: false, errorCode: context.error.code, message: context.error.message } : await call({
         model,
         messages: context.messages,
         stream: true,
+        signal,
         onDelta: (delta) => {
           if (typeof delta !== "string" || !delta.length) return;
           summary.phase = "receiving";
           summary.received_char_count += delta.length;
+          summary.received_token_estimate = Math.round(summary.received_char_count / 4);
           summary.first_response_at ||= now();
+          summary.last_delta_at = now();
+          if (!summary.activity_first_delta) { summary.activity_first_delta = true; pushActivity("analysis", "first_delta", { received_char_count: summary.received_char_count }); }
           stream.write(delta);
-          if (Date.now() - lastActivityAt >= 500) { lastActivityAt = Date.now(); progress("model", 70); }
+          if (Date.now() - lastBeatAt >= 500) { lastBeatAt = Date.now(); progress("model", 70); }
+        },
+        // 只统计推理活跃度，用于证明模型仍在工作；推理原文不进入审查结果或进度事件。
+        onReasoningDelta: (delta) => {
+          if (typeof delta !== "string" || !delta.length) return;
+          summary.phase = "receiving";
+          summary.reasoning_char_count = (summary.reasoning_char_count || 0) + delta.length;
+          summary.first_response_at ||= now();
+          if (Date.now() - lastBeatAt >= 500) { lastBeatAt = Date.now(); progress("model", 70); }
         },
         responseSchema: { type: "object", properties: { risks: { type: "array" } } }
       });
@@ -355,6 +443,12 @@ async function runReview(options = {}) {
         errors.push({ code: "MODEL_OUTPUT_INVALID", message: "模型返回内容缺少 risks 数组，已保留接收完整的候选风险" });
       }
       progress("model", 78, { riskCount: review.risks.length });
+    } else if (signal?.aborted || String(response?.errorCode || "").includes("CANCEL")) {
+      // 用户停止：已流式发布的完整候选保留在风险清单，语义分析阶段记为已取消而不是失败。
+      cancelled = true;
+      review.execution_summary.analysis.status = "cancelled";
+      Object.assign(summary, { error_code: "REVIEW_CANCELLED", message: `语义风险分析已被用户停止，已保留 ${received.size} 条完整模型候选` });
+      errors.push({ code: "REVIEW_CANCELLED", stage: "model", message: `审查在语义风险分析阶段被用户停止；已保留 ${received.size} 条完整模型候选及本地检查结果` });
     } else {
       review.execution_summary.analysis.status = "failed";
       const attemptHint = Number(response?.attempts) > 1 ? `（已尝试 ${response.attempts} 次）` : "";
@@ -365,6 +459,9 @@ async function runReview(options = {}) {
     review.execution_summary.analysis.latency_ms = Date.now() - modelStartedAt;
     review.execution_summary.analysis.attempts = response?.attempts || 0;
     if (response?.ok === false) Object.assign(review.execution_summary.analysis, { error_code: response.errorCode, message: response.message });
+    pushActivity("analysis", "finished", { status: review.execution_summary.analysis.status, received_risk_count: received.size,
+      received_char_count: summary.received_char_count, reasoning_char_count: summary.reasoning_char_count,
+      latency_ms: Date.now() - modelStartedAt });
     summary.phase = "finished";
     summary.completed_at = now();
     progress("model", 78);
@@ -377,17 +474,19 @@ async function runReview(options = {}) {
   if (retriever.summary.status === "degraded") errors.push({ code: "EMBEDDING_DEGRADED", stage: "retrieve", message: `向量检索失败，已降级为关键词检索：${retriever.summary.message}` });
 
   review.risks = mergeReviewFindings(findings);
-  progress("validate", 88, { riskCount: review.risks.length });
-  review.review_version_id = `RV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-AUTO-${Date.now().toString(36)}`;
+  const cancelledStep = review.task?.current_step || "model";
+  progress(cancelled ? cancelledStep : "validate", cancelled ? Number(review.task?.progress) || 70 : 88, { riskCount: review.risks.length });
+  review.review_version_id = `RV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${cancelled ? "CANCELLED" : "AUTO"}-${Date.now().toString(36)}`;
   review.task = {
     ...(review.task || {}),
-    status: errors.length ? "partial" : "completed",
-    current_step: "persist",
-    progress: 100,
+    status: cancelled ? "cancelled" : errors.length ? "partial" : "completed",
+    current_step: cancelled ? cancelledStep : "persist",
+    progress: cancelled ? Math.min(Number(review.task?.progress) || 70, 99) : 100,
     errors
   };
-  progress("persist", 100, { riskCount: review.risks.length });
-  const validation = review.config?.snapshot?.status === "published" ? validateReview(review, { formats: ["JSON"] }) : null;
+  progress(review.task.current_step, review.task.progress, { riskCount: review.risks.length });
+  // 已取消的审查不作为可导出结果，验证结果保留为空以免被误当成正式报告来源。
+  const validation = !cancelled && review.config?.snapshot?.status === "published" ? validateReview(review, { formats: ["JSON"] }) : null;
   return { review, errors, validation };
 }
 

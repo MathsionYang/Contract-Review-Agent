@@ -8,15 +8,21 @@ export const REVIEW_PIPELINE_STEPS = [
   { key: "persist", label: "保存审查版本", domain: "审查输出与追踪", description: "保存风险、任务状态和审计记录" }
 ];
 
-const TERMINAL_STATUSES = new Set(["completed", "partial", "failed"]);
+const TERMINAL_STATUSES = new Set(["completed", "partial", "failed", "cancelled"]);
+// 被用户停止或出现错误的任务：按错误所在阶段标注失败步骤，其余步骤保留已完成状态。
+const INTERRUPTED_STATUSES = new Set(["failed", "partial", "cancelled"]);
+const STEP_KEYS = new Set(REVIEW_PIPELINE_STEPS.map((step) => step.key));
 
 function clampProgress(value) {
   return Math.min(Math.max(Number(value) || 0, 0), 100);
 }
 
 function errorStep(errors = []) {
-  if (errors.some((item) => item.stage === "extract" || String(item.code).startsWith("EXTRACTION_"))) return "extract";
-  if (errors.some((item) => item.stage === "retrieve" || String(item.code).startsWith("EMBEDDING_"))) return "retrieve";
+  // 编排写入的 stage 就是最准确的阶段归属，优先采用，避免只能定位到抽取和检索两步。
+  const staged = errors.find((item) => STEP_KEYS.has(String(item?.stage || "")));
+  if (staged) return String(staged.stage);
+  if (errors.some((item) => String(item.code).startsWith("EXTRACTION_"))) return "extract";
+  if (errors.some((item) => String(item.code).startsWith("EMBEDDING_"))) return "retrieve";
   const codes = errors.map((item) => String(item?.code || ""));
   if (codes.some((code) => code === "DOCUMENT_TEXT_UNAVAILABLE" || code.startsWith("FILE_"))) return "parse";
   if (codes.some((code) => code.startsWith("MODEL_"))) return "model";
@@ -29,18 +35,21 @@ export function buildReviewPipeline(task = {}, summary = {}) {
   const status = String(task.status || "queued");
   const currentKey = String(task.current_step || "parse");
   const currentIndex = Math.max(0, REVIEW_PIPELINE_STEPS.findIndex((step) => step.key === currentKey));
-  const failedKey = status === "failed" || status === "partial" ? errorStep(Array.isArray(task.errors) ? task.errors : []) : "";
+  const failedKey = INTERRUPTED_STATUSES.has(status) ? errorStep(Array.isArray(task.errors) ? task.errors : []) : "";
   const failedIndex = failedKey ? REVIEW_PIPELINE_STEPS.findIndex((step) => step.key === failedKey) : -1;
-  const activeIndex = failedIndex >= 0 ? failedIndex : currentIndex;
+  // 取消或错误未能定位到具体阶段时，退回已完成步骤之后的当前游标，避免整条流水线被标成待执行。
+  const activeIndex = failedIndex >= 0 ? failedIndex : INTERRUPTED_STATUSES.has(status) ? Math.max(currentIndex, 0) : currentIndex;
   const progress = clampProgress(task.progress);
   const riskCount = Math.max(0, Number(summary.riskCount) || 0);
 
   return REVIEW_PIPELINE_STEPS.map((step, index) => {
     let stepStatus = "pending";
     if (status === "completed") stepStatus = "completed";
-    else if (status === "partial") {
+    else if (INTERRUPTED_STATUSES.has(status)) {
+      // 带错误的步骤优先标记为失败；partial/failed 已走完全部步骤，cancelled 则停在当前步骤。
       const hasError = (task.errors || []).some((error) => errorStep([error]) === step.key);
-      stepStatus = hasError ? "failed" : index <= currentIndex ? "completed" : "pending";
+      const passed = status === "cancelled" ? index < currentIndex : true;
+      stepStatus = hasError ? "failed" : passed ? "completed" : "pending";
     }
     else if (status === "queued") stepStatus = index === 0 ? "queued" : "pending";
     else if (index < activeIndex) stepStatus = "completed";
@@ -59,9 +68,11 @@ export function pipelineStatusLabel(status) {
   return {
     queued: "待开始",
     running: "执行中",
+    cancelling: "正在停止",
     completed: "已完成",
     failed: "异常",
     partial: "部分完成",
+    cancelled: "已取消",
     pending: "待执行"
   }[status] || "待执行";
 }

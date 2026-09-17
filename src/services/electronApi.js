@@ -52,6 +52,10 @@ export const electronApi = {
     if (!bridge?.runReview) return Promise.reject(new Error("当前页面未连接 Electron 审查执行能力"));
     return bridge.runReview(toCloneable(payload));
   },
+  cancelReview(payload) {
+    if (!bridge?.cancelReview) return Promise.resolve({ ok: false, status: "unsupported", message: "请重启桌面端以启用停止审查功能" });
+    return bridge.cancelReview(toCloneable(payload));
+  },
   async deleteReviewTask(projectId) {
     if (bridge) {
       if (!bridge.deleteReviewTask) throw new Error("请重启桌面端以启用任务删除功能");

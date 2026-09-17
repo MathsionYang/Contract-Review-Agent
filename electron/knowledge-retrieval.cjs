@@ -169,6 +169,8 @@ function createKnowledgeRetriever(options = {}) {
           }
           summary.status = "completed";
         } catch (error) {
+          // 用户取消时向上抛出，避免把主动中断记成向量降级。
+          if (options.signal?.aborted) throw error;
           disabled = true;
           summary.status = "degraded";
           summary.fallback = "keyword";

@@ -88,6 +88,7 @@ function statusClass(status) {
     working: "badge-primary",
     completed: "badge-success",
     partial: "badge-muted",
+    cancelled: "badge-warning",
     failed: "badge-danger",
     validating: "badge-warning"
   }[status] || "badge-muted";
@@ -130,7 +131,7 @@ function statusClass(status) {
       <div class="panel-header">
         <div><h2>审查任务</h2><p>按状态筛选当前项目与历史任务</p></div>
         <div class="filter-row">
-          <button v-for="filter in [['all','全部'],['working','进行中'],['waiting_confirmation','待复核'],['completed','已完成'],['partial','部分完成'],['failed','失败']]" :key="filter[0]" class="filter-chip" :class="{ active: taskFilter === filter[0] }" type="button" @click="taskFilter = filter[0]">{{ filter[1] }}</button>
+          <button v-for="filter in [['all','全部'],['working','进行中'],['waiting_confirmation','待复核'],['completed','已完成'],['partial','部分完成'],['cancelled','已取消'],['failed','失败']]" :key="filter[0]" class="filter-chip" :class="{ active: taskFilter === filter[0] }" type="button" @click="taskFilter = filter[0]">{{ filter[1] }}</button>
         </div>
       </div>
       <div class="table-wrap">

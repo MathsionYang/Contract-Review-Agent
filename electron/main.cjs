@@ -22,6 +22,8 @@ let storage;
 let reviewChatService;
 let credentialStore;
 const runningReviewProjects = new Set();
+// 每个正在运行的审查任务保留一个中断控制器，用户点击“停止审查”时立即中断模型与检索调用。
+const runningReviewControllers = new Map();
 
 // 审查工作台不依赖 GPU；关闭硬件加速可兼容受限桌面、远程会话和无可用显卡驱动环境。
 app.disableHardwareAcceleration();
@@ -289,26 +291,40 @@ function registerIpc() {
     if (!review) throw new Error("当前项目没有可执行的审查版本");
     const runId = typeof options.runId === "string" && options.runId.length <= 100 ? options.runId : crypto.randomUUID();
     let sequence = 0;
+    const controller = new AbortController();
     runningReviewProjects.add(projectId);
+    runningReviewControllers.set(projectId, controller);
     try {
       const result = await runReview({
         review,
         state: stored,
-        services: { invokeModel: invokeConfiguredModel, vectorCache },
+        services: { invokeModel: invokeConfiguredModel, vectorCache, signal: controller.signal },
         onProgress: (progress) => sendReviewProgress(projectId, { ...progress, runId, sequence: ++sequence, fileVersionId: review.project?.file_version_id })
       });
       const latest = storage.loadState();
+      const statusResult = result.review.task.status;
+      const auditResult = statusResult === "completed" ? "成功" : statusResult === "cancelled" ? "已取消" : "部分完成";
       const nextState = {
         ...latest,
         activeProjectId: projectId,
         projects: (latest.projects || []).map((project) => project.project_id === projectId ? { ...project, updated_at: new Date().toISOString() } : project),
         reviews: { ...(latest.reviews || {}), [projectId]: result.review },
-        auditRecords: [auditEntry("执行合同审查", projectId, result.review.task.status === "completed" ? "成功" : "部分完成", `${result.review.risks.length} 条风险 · ${result.review.task.status}`), ...(latest.auditRecords || [])]
+        auditRecords: [auditEntry("执行合同审查", projectId, auditResult, `${result.review.risks.length} 条风险 · ${statusResult}`), ...(latest.auditRecords || [])]
       };
       return { ...result, state: storage.saveState(nextState) };
     } finally {
       runningReviewProjects.delete(projectId);
+      runningReviewControllers.delete(projectId);
     }
+  });
+
+  // 只中断当前项目的审查任务：已发布的候选风险会随最终状态一起保存，未被中断的其它任务不受影响。
+  ipcMain.handle("review:cancel", (_event, options = {}) => {
+    const projectId = String(options.projectId || "");
+    const controller = projectId ? runningReviewControllers.get(projectId) : null;
+    if (!controller) return { ok: false, status: "not_running", message: "当前没有正在运行的审查任务" };
+    controller.abort();
+    return { ok: true, status: "cancelling" };
   });
 
   ipcMain.handle("review:delete-task", (_event, options = {}) => {
