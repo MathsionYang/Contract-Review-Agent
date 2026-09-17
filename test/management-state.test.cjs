@@ -128,7 +128,8 @@ test("编辑法律快照保留快照 ID并更新治理字段", async () => {
     status: "draft",
     sources: 128,
     coverage: "采购",
-    hash: "sha256:demo"
+    hash: "sha256:demo",
+    clauses: [{ text: "法律条款正文" }]
   }];
   const updated = managementState.updateLegalSnapshot(initial, "CN-2026-09", {
     id: "should-not-replace-id",
@@ -136,7 +137,8 @@ test("编辑法律快照保留快照 ID并更新治理字段", async () => {
     status: "published",
     sources: 132,
     coverage: "采购、服务",
-    publishedAt: "2026-09-11 10:00"
+    publishedAt: "2026-09-11 10:00",
+    clauses: [{ text: "不允许修改原文" }]
   });
 
   assert.equal(updated[0].id, "CN-2026-09");
@@ -144,6 +146,8 @@ test("编辑法律快照保留快照 ID并更新治理字段", async () => {
   assert.equal(updated[0].status, "published");
   assert.equal(updated[0].sources, 132);
   assert.equal(updated[0].hash, "sha256:demo");
+  assert.equal(updated[0].clauses[0].text, "法律条款正文");
+  assert.ok(Number.isFinite(Date.parse(updated[0].publishedAt)));
   assert.equal(initial[0].name, "旧快照");
 });
 
@@ -170,6 +174,19 @@ test("编辑企业记忆允许修改内容并保留未传入字段", async () =>
   assert.equal(updated[0].status, "候选");
   assert.equal(updated[0].confidence, "0.80");
   assert.equal(initial[0].content, "原记忆内容");
+});
+
+test("法律快照草稿不伪装为校验任务，发布需要实际范围和正文", async () => {
+  const management = await managementStatePromise;
+  assert.equal(management.legalSnapshotStatusLabel("draft"), "草稿 · 待发布");
+  assert.equal(management.legalSnapshotStatusLabel("revoked"), "已撤销");
+  const snapshot = { id: "s1", name: "测试", status: "draft", coverage: "待填写", clauses: [{ text: "正文" }], hash: "hash" };
+  assert.throws(() => management.updateLegalSnapshot([snapshot], "s1", { status: "published" }), /实际覆盖范围/);
+  assert.throws(() => management.updateLegalSnapshot([{ ...snapshot, clauses: [] }], "s1", { status: "published", coverage: "设备采购" }), /条款正文/);
+  const published = management.updateLegalSnapshot([snapshot], "s1", { status: "published", coverage: "设备采购" })[0];
+  assert.equal(published.status, "published");
+  assert.equal(published.realtime_verification, undefined);
+  assert.ok(Number.isFinite(Date.parse(published.publishedAt)));
 });
 
 test("审查执行配置只使用已启用 Skill 和运行中的模型角色", async () => {

@@ -26,8 +26,7 @@ const statusLabels = {
   disabled: "已停用",
   validating: "校验中",
   isolated: "已隔离",
-  active: "运行中",
-  disabled: "已停用"
+  active: "已启用"
 };
 
 const modelModalOpen = ref(false);
@@ -130,11 +129,13 @@ async function saveModel() {
 }
 
 async function validateModel(model) {
-  await store.validateModel(model.configId || model.name);
+  try { await store.validateModel(model.configId || model.name); }
+  catch (error) { store.notify(error.message || "连接测试失败", "warn"); }
 }
 
 async function toggleModel(model) {
-  await store.toggleModel(model.configId || model.name);
+  try { await store.toggleModel(model.configId || model.name); }
+  catch (error) { store.notify(error.message || "模型状态保存失败", "warn"); }
 }
 
 async function toggleSkill(skill) {
@@ -143,7 +144,8 @@ async function toggleSkill(skill) {
 
 async function deleteModel(model) {
   if (!window.confirm(`确定删除模型“${model.name}”吗？`)) return;
-  await store.deleteModel(model.configId || model.name);
+  try { await store.deleteModel(model.configId || model.name); }
+  catch (error) { store.notify(error.message || "模型删除失败", "warn"); }
 }
 
 function formatTestedAt(value) {
@@ -199,7 +201,7 @@ function formatTestedAt(value) {
       <div class="panel-header">
         <div>
           <h2>模型配置</h2>
-          <p>模型不会预置测试数据；请人工填写、保存并校验，校验通过后手动启用，配置会保存在本地并供下次使用。</p>
+          <p>{{ models.filter(model => model.status === 'active').length }} 个已启用</p>
         </div>
         <span class="badge badge-muted">{{ models.length }} 个模型</span>
       </div>
@@ -234,12 +236,15 @@ function formatTestedAt(value) {
               <td><span class="badge badge-muted">{{ policyLabels[model.policy] || model.policy }}</span><span class="table-subtext">{{ model.credentialRef || "无凭据引用" }}</span></td>
               <td>
                 <span class="badge" :class="model.status === 'active' ? 'badge-success' : 'badge-muted'">{{ statusLabels[model.status] || model.status }}</span>
-                <span class="table-subtext" :class="model.testStatus === 'passed' ? 'success-text' : model.testStatus === 'failed' ? 'danger-text' : ''">{{ model.testStatus === "passed" ? "配置已校验" : model.testStatus === "failed" ? "校验失败" : formatTestedAt(model.lastTestedAt) }}</span>
+                <span class="table-subtext" :title="model.testMessage || ''" :class="model.testStatus === 'passed' && model.testKind === 'remote' ? 'success-text' : model.testStatus === 'failed' ? 'danger-text' : ''">{{ store.isModelTesting(model.configId) ? '连接测试中' : model.testStatus === 'passed' ? (model.testKind === 'remote' ? '连接已验证' : '仅字段已校验') : model.testStatus === 'failed' ? '连接测试失败' : '尚未测试' }}</span>
+                <span v-if="model.lastTestedAt" class="table-subtext">{{ formatTestedAt(model.lastTestedAt) }}</span>
+                <span v-if="model.testStatus === 'failed'" class="table-subtext danger-text">{{ model.testMessage }}</span>
+                <span v-if="['rerank', 'vision'].includes(model.role)" class="table-subtext">尚未接入执行</span>
               </td>
               <td class="action-column">
                 <div class="row-actions">
-                  <button class="icon-button small" type="button" title="校验配置" :aria-label="`校验 ${model.name} 配置`" @click="validateModel(model)"><PlugZap :size="14" /></button>
-                  <button class="icon-button small" type="button" :title="model.status === 'active' ? '停用模型' : '启用模型'" :aria-label="model.status === 'active' ? `停用 ${model.name}` : `启用 ${model.name}`" @click="toggleModel(model)"><Check v-if="model.status === 'active'" :size="14" /><Power v-else :size="14" /></button>
+                  <button class="icon-button small" type="button" :title="store.isModelTesting(model.configId) ? '连接测试中' : '测试连接（发送最小请求）'" :aria-label="`测试 ${model.name} 连接`" :disabled="store.isModelTesting(model.configId)" @click="validateModel(model)"><PlugZap :size="14" /></button>
+                  <button class="icon-button small" type="button" :title="model.status === 'active' ? '停用模型' : '启用模型'" :aria-label="model.status === 'active' ? `停用 ${model.name}` : `启用 ${model.name}`" :disabled="store.isModelTesting(model.configId)" @click="toggleModel(model)"><Check v-if="model.status === 'active'" :size="14" /><Power v-else :size="14" /></button>
                   <button class="icon-button small" type="button" title="编辑模型" :aria-label="`编辑 ${model.name}`" @click="openModelModal(model)"><Pencil :size="14" /></button>
                   <button class="icon-button small danger" type="button" title="删除模型" :aria-label="`删除 ${model.name}`" @click="deleteModel(model)"><Trash2 :size="14" /></button>
                 </div>
@@ -268,7 +273,7 @@ function formatTestedAt(value) {
       <div class="form-field"><label>首段响应 / 空闲超时（毫秒）</label><input v-model.number="modelForm.timeoutMs" class="text-input" type="number" min="1000" max="120000" step="1000" /></div>
       <div class="form-field"><label>失败重试次数</label><input v-model.number="modelForm.retries" class="text-input" type="number" min="0" max="5" step="1" /></div>
       <div class="form-field"><label>配置版本</label><input v-model="modelForm.version" class="text-input" placeholder="例如：cfg-v1" /></div>
-      <div class="form-field"><label>启用条件</label><div class="form-static-note">保存后默认停用，完成配置校验后可在列表中启用</div></div>
+      <div class="form-field"><label>连接状态</label><div class="form-static-note">保存后待测试</div></div>
       <div class="form-field"><label>Key 引用名 <span v-if="modelForm.apiKey">*</span></label><input v-model="modelForm.credentialRef" class="text-input" placeholder="例如：cred://deepseek/analysis" autocomplete="off" @change="refreshCredentialStatus" /><small class="inline-note">用于区分多组 Key；同一引用可绑定多个模型。</small></div>
       <div class="form-field"><label>API Key <span v-if="modelMode === 'create' && !credentialConfigured">*</span></label><input v-model="modelForm.apiKey" class="text-input" type="text" autocomplete="off" spellcheck="false" placeholder="在此填写本模型的明文 Key" @input="credentialConfigured = false" /><small v-if="credentialStatusLoading" class="inline-note">正在检查本机凭据...</small><small v-else-if="credentialConfigured" class="inline-note success-text">本机已配置；留空保存将沿用现有 Key</small><small v-else class="inline-note">仅用于本次保存，Electron 会在本机安全存储中加密保存，不写入模型配置。</small></div>
     </div>

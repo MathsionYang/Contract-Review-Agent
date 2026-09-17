@@ -77,6 +77,8 @@ function validateKnowledgeFile(filePath, kind, options = {}) {
 
 function clauseHeading(line) {
   const value = String(line || "").trim().replace(/^#+\s*/, "");
+  const legalHeading = value.match(/^(第[零〇一二三四五六七八九十百千万两\d]+条)\s*(.*)$/);
+  if (legalHeading) return { clause_no: legalHeading[1], title: legalHeading[2].trim() || legalHeading[1] };
   let match = value.match(/^第\s*([0-9]+(?:\.[0-9]+)+)\s*(?:条|节)?\s*(.*)$/);
   if (!match) match = value.match(/^([0-9]+(?:\.[0-9]+)+)\s*[、.．]?\s*(.*)$/);
   if (!match) match = value.match(/^([A-Z]{1,4}-\d+)\s*[、.．]?\s*(.*)$/i);
@@ -205,6 +207,7 @@ function searchKnowledgeSources(sources = [], query, options = {}) {
         file_name: source.file_name,
         file_version_id: source.file_version_id,
         version: source.version,
+        snapshot_id: source.source_type === "legal_snapshot" ? source.id : undefined,
         clause_no: clause.clause_no,
         clause_title: clause.title,
         excerpt: clause.text,
@@ -258,10 +261,10 @@ async function parseLegalSnapshotFile(filePath, options = {}) {
     allowedExtensions: [".json", ".md", ".txt"]
   });
   try {
-    const raw = fs.readFileSync(metadata.filePath, "utf8");
+    const raw = fs.readFileSync(metadata.filePath, "utf8").replace(/^\uFEFF/, "");
     let payload;
     if (metadata.extension === ".json") payload = JSON.parse(raw);
-    else payload = { name: metadata.fileName, status: "draft", coverage: "待填写", text: raw };
+    else payload = { id: `LOCAL-${metadata.sha256.slice(0, 16)}`, name: path.basename(metadata.fileName, metadata.extension), status: "draft", coverage: "待填写", text: raw };
     if (!payload || typeof payload !== "object" || Array.isArray(payload) || !String(payload.id || "").trim() || !String(payload.name || "").trim()) {
       throw createError("LEGAL_SNAPSHOT_INVALID", "法律快照缺少 id 或 name");
     }
@@ -272,10 +275,16 @@ async function parseLegalSnapshotFile(filePath, options = {}) {
         text: String(clause.text || clause.excerpt || "").trim(),
         keywords: Array.isArray(clause.keywords) ? clause.keywords : tokenizeChinese(`${clause.title || ""} ${clause.text || clause.excerpt || ""}`)
       }))
-      : extractKnowledgeClauses(payload.text || payload.content || raw, "legalSnapshots");
+      : extractKnowledgeClauses(payload.text || payload.content || "", "legalSnapshots");
+    if (!clauses.length || clauses.some((clause) => !clause.text.trim())) {
+      throw createError("LEGAL_SNAPSHOT_INVALID", "法律快照必须包含非空条款正文（clauses、text 或 content）");
+    }
     const status = String(payload.status || "draft");
     if (!["published", "draft", "historical", "superseded", "revoked"].includes(status)) {
       throw createError("LEGAL_SNAPSHOT_INVALID", "法律快照状态无效");
+    }
+    if (payload.sources !== undefined && (!Number.isInteger(Number(payload.sources)) || Number(payload.sources) < 0)) {
+      throw createError("LEGAL_SNAPSHOT_INVALID", "法律来源数必须是非负整数");
     }
     return {
       id: String(payload.id).trim(),
@@ -308,5 +317,6 @@ module.exports = {
   parseLegalSnapshotFile,
   parseKnowledgeFile,
   searchKnowledgeSources,
+  sourceMatchesQuery,
   validateKnowledgeFile
 };

@@ -108,7 +108,7 @@ function statusClass(status) {
           <button class="button button-hero-ghost" type="button" :disabled="!store.activeProject" @click="emit('open-review')"><ArrowRight :size="16" />进入审查工作区</button>
         </div>
       </div>
-      <div class="hero-seal"><ShieldAlert :size="32" /><span>证据<br />可追溯</span></div>
+      <div class="hero-seal"><ShieldAlert :size="24" /><span>证据可追溯</span></div>
     </section>
 
     <section class="stats-grid">

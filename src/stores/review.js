@@ -4,8 +4,9 @@ import { locationPage, recordChecklistReview } from "../services/checklistReview
 import { ensureModelIds, findModel } from "../services/managementState.mjs";
 import { electronApi } from "../services/electronApi";
 import { applyReviewProgress } from "../services/reviewProgress.mjs";
+import { knowledgeLabels } from "../services/knowledgeManagement.mjs";
 import { createSampleState, knowledgeData, capabilityData, defaultSettings } from "../data/sampleData";
-import { buildReviewExecutionConfig, createKnowledgeItem, createManualReviewRisk, createSelectionAnnotation, mergeSettings, removeDemoModels, removeKnowledgeItems, removeModel, updateEnterpriseMemory as updateEnterpriseMemoryState, updateLegalSnapshot as updateLegalSnapshotState, upsertModel } from "../services/managementState.mjs";
+import { buildReviewExecutionConfig, createKnowledgeItem, createManualReviewRisk, createSelectionAnnotation, mergeSettings, removeDemoModels, updateEnterpriseMemory as updateEnterpriseMemoryState, updateLegalSnapshot as updateLegalSnapshotState } from "../services/managementState.mjs";
 
 export const useReviewStore = defineStore("review", () => {
   const state = ref(createSampleState());
@@ -18,6 +19,7 @@ export const useReviewStore = defineStore("review", () => {
   const validatorResult = ref(null);
   const reviewProgress = ref(null);
   const chatBusy = ref(false);
+  const modelTests = ref({});
   const chatRequestId = ref(null);
   const chatStreamText = ref("");
   const selectedChatModel = ref("");
@@ -217,6 +219,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function applyRiskAction(riskId, action, note = "") {
+    if (activeReviewRun || chatBusy.value) { notify("审查正在运行，请结束后再处理风险", "warn"); return; }
     const target = risks.value.find((risk) => risk.risk_id === riskId);
     if (!target) return;
     const previous = target.human_status;
@@ -244,6 +247,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function saveSelectionAnnotation(input) {
+    if (activeReviewRun) throw new Error("审查正在运行，请结束后再标记选区");
     if (!review.value) throw new Error("当前没有可标记的审查版本");
     const annotation = createSelectionAnnotation(input);
     review.value.annotations = review.value.annotations || [];
@@ -257,6 +261,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function reviewSelection(input) {
+    if (activeReviewRun) throw new Error("审查正在运行，请结束后再局部审查");
     if (!review.value) throw new Error("当前没有可局部审查的审查版本");
     const annotation = await saveSelectionAnnotation(input);
     const risk = createManualReviewRisk({
@@ -331,6 +336,7 @@ export const useReviewStore = defineStore("review", () => {
   async function runReview() {
     if (!review.value) return null;
     if (activeReviewRun || chatBusy.value) throw new Error("审查或对话正在运行，请稍后重试");
+    syncActiveReviewExecutionSnapshot();
     activeReviewRun = { id: globalThis.crypto.randomUUID(), projectId: activeProject.value.project_id, sequence: 0 };
     validatorResult.value = null;
     isBusy.value = true;
@@ -370,6 +376,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function chatReview(options = {}) {
+    if (isBusy.value || chatBusy.value) { notify("审查或对话正在运行，请稍后重试", "warn"); return null; }
     if (!review.value || !activeProject.value) return null;
     if (!activeAnalysisModels.value.length) {
       notify("请先配置并启用通过校验的 analysis 模型", "warn");
@@ -408,6 +415,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function retryChat(options = {}) {
+    if (isBusy.value || chatBusy.value) { notify("审查或对话正在运行，请稍后重试", "warn"); return null; }
     if (!activeProject.value) return null;
     chatBusy.value = true;
     chatStreamText.value = "";
@@ -465,6 +473,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function importKnowledgeFiles(kind, files) {
+    if (isBusy.value || chatBusy.value) throw new Error("当前任务正在处理，请稍后导入");
     if (!Array.isArray(files) || !files.length) return null;
     isBusy.value = true;
     try {
@@ -493,6 +502,7 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function importLegalSnapshot(options = {}) {
+    if (isBusy.value || chatBusy.value) throw new Error("当前任务正在处理，请稍后导入");
     isBusy.value = true;
     try {
       const result = await electronApi.importLegalSnapshot({
@@ -503,7 +513,7 @@ export const useReviewStore = defineStore("review", () => {
           settings: state.value.settings
         }
       });
-      if (result.state) state.value = result.state;
+      if (!result.canceled && result.state) state.value = result.state;
       if (!result.canceled) notify(`已导入法律快照 ${result.snapshot?.name || ""}`, "ok");
       return result;
     } catch (error) {
@@ -543,30 +553,64 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function saveConfig(config) {
-    if (!review.value) return;
+    if (!review.value) throw new Error("请先选择一个审查任务");
+    if (isBusy.value || chatBusy.value) throw new Error("审查正在处理，请稍后保存配置");
+    if (config.snapshot?.id) {
+      const snapshot = (state.value.knowledge?.legalSnapshots || []).find((item) => item.id === config.snapshot.id);
+      if (!snapshot || snapshot.status !== "published") throw new Error("只能绑定已发布且未删除的法律快照");
+      config = { ...config, snapshot: { id: snapshot.id, status: snapshot.status } };
+    }
     const execution = config.execution || review.value.config?.execution || buildReviewExecutionConfig(state.value.capabilities || {});
-    review.value.config = { ...review.value.config, ...config, execution };
-    review.value.task = { ...(review.value.task || {}), execution };
-    if (config.reviewMode && review.value.project) review.value.project.review_mode = config.reviewMode;
-    review.value.project.updated_at = new Date().toISOString();
-    await persist();
-    notify("本次审查配置已保存", "ok");
+    const projectId = activeProject.value.project_id;
+    const nextReview = {
+      ...review.value,
+      config: { ...review.value.config, ...config, execution },
+      task: { ...(review.value.task || {}), execution },
+      project: { ...review.value.project, ...(config.reviewMode ? { review_mode: config.reviewMode } : {}), updated_at: new Date().toISOString() }
+    };
+    isBusy.value = true;
+    try {
+      state.value = await electronApi.saveState({ ...state.value, reviews: { ...state.value.reviews, [projectId]: nextReview } });
+      validatorResult.value = null;
+      notify("本次审查配置已保存", "ok");
+    } finally {
+      isBusy.value = false;
+    }
   }
 
-  async function updateLegalSnapshot(snapshotId, patch = {}) {
+  async function updateLegalSnapshot(snapshotId, patch = {}, options = {}) {
+    if (isBusy.value || chatBusy.value) throw new Error("审查正在处理，请稍后发布或编辑快照");
     const snapshots = state.value.knowledge?.legalSnapshots || [];
     const nextSnapshots = updateLegalSnapshotState(snapshots, snapshotId, patch);
-    state.value.knowledge.legalSnapshots = nextSnapshots;
     const snapshot = nextSnapshots.find((item) => item.id === snapshotId);
-    for (const reviewItem of Object.values(state.value.reviews || {})) {
+    const publishing = snapshots.find((item) => item.id === snapshotId)?.status !== "published" && snapshot.status === "published";
+    if (publishing && !options.confirmPublication) throw new Error("请先确认已核对快照内容及适用范围");
+    if (options.bindToCurrentReview && (!review.value || snapshot.status !== "published")) throw new Error("只有已发布快照可以绑定到当前审查任务");
+    const reviews = Object.fromEntries(Object.entries(state.value.reviews || {}).map(([id, reviewItem]) => {
       if (reviewItem.config?.snapshot?.id === snapshot.id) {
-        reviewItem.config.snapshot = { ...reviewItem.config.snapshot, status: snapshot.status };
+        return [id, { ...reviewItem, config: { ...reviewItem.config, snapshot: { ...reviewItem.config.snapshot, status: snapshot.status } } }];
       }
+      return [id, reviewItem];
+    }));
+    if (options.bindToCurrentReview) {
+      const id = activeProject.value.project_id;
+      reviews[id] = { ...reviews[id], config: { ...reviews[id].config, snapshot: { id: snapshot.id, status: snapshot.status } } };
     }
-    addAudit("编辑法律快照", snapshot.id, "已更新快照名称、覆盖范围、来源数、发布时间或状态");
-    await persist();
-    notify("法律快照已更新", "ok");
-    return snapshot;
+    const auditRecord = {
+      audit_id: `audit_snapshot_${globalThis.crypto.randomUUID()}`,
+      created_at: new Date().toISOString(), actor: "法务用户", result: "成功",
+      action: publishing ? "发布法律快照" : "编辑法律快照", resource: snapshot.id,
+      detail: `${snapshot.name} · ${snapshot.coverage}${options.bindToCurrentReview ? ` · 绑定审查 ${activeProject.value.project_id}` : ""}`
+    };
+    isBusy.value = true;
+    try {
+      state.value = await electronApi.saveState({ ...state.value, knowledge: { ...state.value.knowledge, legalSnapshots: nextSnapshots }, reviews, auditRecords: [auditRecord, ...(state.value.auditRecords || [])] });
+      validatorResult.value = null;
+      notify(options.bindToCurrentReview ? "法律快照已发布并绑定到当前审查" : publishing ? "法律快照已发布" : "法律快照已更新", "ok");
+      return snapshot;
+    } finally {
+      isBusy.value = false;
+    }
   }
 
   async function updateEnterpriseMemory(originalContent, patch = {}) {
@@ -581,11 +625,13 @@ export const useReviewStore = defineStore("review", () => {
   }
 
   async function toggleKnowledge(type, index) {
+    if (isBusy.value || chatBusy.value) { notify("审查正在处理，请稍后修改知识选择", "warn"); return; }
     const items = state.value.knowledge?.[type];
     if (!items?.[index]) return;
     items[index].selected = !items[index].selected;
-    if (type === "rules") await saveConfig({ rules: selectedRules.value });
-    if (type === "policies") await saveConfig({ policies: selectedPolicies.value });
+    if (!review.value) await persist();
+    else if (type === "rules") await saveConfig({ rules: selectedRules.value });
+    else if (type === "policies") await saveConfig({ policies: selectedPolicies.value });
   }
 
   function addAudit(action, resource, detail) {
@@ -603,7 +649,7 @@ export const useReviewStore = defineStore("review", () => {
   async function addKnowledge(type, payload) {
     if (!["rules", "policies"].includes(type)) return null;
     const items = state.value.knowledge?.[type] || [];
-    const item = createKnowledgeItem(type, payload);
+    const item = { ...createKnowledgeItem(type, payload), entry_id: globalThis.crypto.randomUUID() };
     if (items.some((source) => source.file === item.file)) {
       throw new Error("同名知识文件已经存在");
     }
@@ -637,18 +683,42 @@ export const useReviewStore = defineStore("review", () => {
     return items[index];
   }
 
-  async function deleteKnowledge(type, files) {
-    if (!["rules", "policies"].includes(type)) return;
-    const targets = files.filter(Boolean);
-    const items = state.value.knowledge?.[type] || [];
-    state.value.knowledge[type] = removeKnowledgeItems(items, targets);
-    for (const reviewItem of Object.values(state.value.reviews || {})) {
-      const configFiles = reviewItem.config?.[type] || [];
-      reviewItem.config[type] = configFiles.filter((file) => !targets.includes(file));
+  async function deleteKnowledge(type, keys) {
+    if (isBusy.value || chatBusy.value) throw new Error("当前任务正在处理，请稍后删除");
+    isBusy.value = true;
+    try {
+      state.value = await electronApi.deleteKnowledge({ kind: type, keys, bootstrapState: { knowledge: state.value.knowledge } });
+      validatorResult.value = null;
+      notify(`${knowledgeLabels[type]}已删除，历史证据和磁盘文件已保留`, "ok");
+    } finally {
+      isBusy.value = false;
     }
-    addAudit(type === "rules" ? "删除确定性规则" : "删除企业制度", targets.join(", "), `已移除 ${targets.length} 个知识文件，未删除本地原始文件`);
-    await persist();
-    notify(`已删除 ${targets.length} 个知识文件`, "ok");
+  }
+
+  function isModelTesting(reference) {
+    const model = findModel(state.value.capabilities?.models || [], reference);
+    return Boolean(model && modelTests.value[model.configId]);
+  }
+
+  async function commitModel(current, next, action, detail) {
+    const configId = current?.configId || next.configId;
+    const auditRecord = {
+      audit_id: `audit_${globalThis.crypto.randomUUID()}`, created_at: new Date().toISOString(),
+      actor: "法务用户", action, resource: next?.name || current.name, result: "成功", detail
+    };
+    const saved = await electronApi.updateModel({
+      configId, expectedRevision: current ? current.configRevision || "" : null,
+      model: next ? { ...next, configId, configRevision: globalThis.crypto.randomUUID() } : null,
+      auditRecord
+    });
+    const models = state.value.capabilities?.models || [];
+    state.value.capabilities = { ...(state.value.capabilities || {}), models: saved.model
+      ? models.some((item) => item.configId === configId) ? models.map((item) => item.configId === configId ? saved.model : item) : [saved.model, ...models]
+      : models.filter((item) => item.configId !== configId) };
+    state.value.auditRecords = [auditRecord, ...(state.value.auditRecords || []).filter((item) => item.audit_id !== auditRecord.audit_id)];
+    // In-flight tasks retain the execution snapshot they started with.
+    if (!isBusy.value && !chatBusy.value) syncActiveReviewExecutionSnapshot();
+    return saved.model;
   }
 
   async function saveModel(model) {
@@ -656,74 +726,90 @@ export const useReviewStore = defineStore("review", () => {
     if (!name) throw new Error("模型名称不能为空");
     if (!String(model.modelId || "").trim()) throw new Error("模型标识不能为空");
     if (!String(model.endpoint || "").trim()) throw new Error("API 地址不能为空");
-    const models = state.value.capabilities?.models || [];
+    const current = model.configId ? findModel(state.value.capabilities?.models || [], model.configId) : null;
+    if (model.configId && !current) throw new Error("待编辑的模型配置不存在，请刷新列表");
     // 防御性丢弃敏感字段，避免未来其他调用方误把 API Key 写入业务状态。
     const { apiKey: _apiKey, ...safeModel } = model;
     const next = {
       ...safeModel,
+      configId: current?.configId || globalThis.crypto.randomUUID(),
       name,
       modelId: String(model.modelId).trim(),
       endpoint: String(model.endpoint).trim(),
       version: String(model.version || "cfg-v1").trim(),
-      // 保存后统一停用，完成“校验配置”后再由用户明确启用；编辑也必须重新校验。
+      // 保存后统一停用，真实连接测试通过后再由用户明确启用。
       status: "disabled",
-      // 修改任何配置都必须重新人工校验，防止旧校验结果继续生效。
+      // 修改配置后不能沿用旧的连接测试结果。
       testStatus: "untested",
+      testKind: "",
+      testMessage: "",
       lastTestedAt: "",
+      testLatencyMs: 0,
       source: "manual"
     };
-    state.value.capabilities.models = upsertModel(models, next);
-    syncActiveReviewExecutionSnapshot();
-    addAudit("保存模型配置", name, `${next.provider || "自定义服务"} · ${next.role || "未指定角色"}`);
-    await persist();
-    notify("模型配置已保存", "ok");
-    return next;
+    const saved = await commitModel(current, next, "保存模型配置", `${next.provider || "自定义服务"} · ${next.role || "未指定角色"}`);
+    delete modelTests.value[saved.configId];
+    notify("模型配置已保存，请测试连接后启用", "ok");
+    return saved;
   }
 
   async function deleteModel(name) {
-    state.value.capabilities.models = removeModel(state.value.capabilities?.models || [], name);
-    syncActiveReviewExecutionSnapshot();
-    addAudit("删除模型配置", name, "已从模型角色列表移除");
-    await persist();
+    const current = findModel(state.value.capabilities?.models || [], name);
+    if (!current) return;
+    await commitModel(current, null, "删除模型配置", "已从模型角色列表移除");
+    delete modelTests.value[current.configId];
     notify("模型配置已删除", "ok");
   }
 
   async function toggleModel(name) {
     const model = findModel(state.value.capabilities?.models || [], name);
     if (!model) return;
+    if (isModelTesting(model.configId)) { notify("该模型正在测试连接，请稍后启用或停用", "warn"); return false; }
     if (model.status !== "active" && model.testStatus !== "passed") {
-      notify("请先校验配置，通过后才能启用模型", "warn");
+      notify("请先测试连接，通过后才能启用模型", "warn");
       return false;
     }
-    model.status = model.status === "active" ? "disabled" : "active";
-    syncActiveReviewExecutionSnapshot();
-    addAudit(model.status === "active" ? "启用模型配置" : "停用模型配置", name, `当前状态：${model.status === "active" ? "启用" : "停用"}`);
-    await persist();
-    notify(model.status === "active" ? "模型已启用" : "模型已停用", "ok");
+    const status = model.status === "active" ? "disabled" : "active";
+    await commitModel(model, { ...model, status }, status === "active" ? "启用模型配置" : "停用模型配置", `当前状态：${status === "active" ? "启用" : "停用"}`);
+    notify(status === "active" ? "模型已启用" : "模型已停用", "ok");
+    return true;
   }
 
   async function validateModel(name) {
     const model = findModel(state.value.capabilities?.models || [], name);
-    if (!model) return false;
-    let valid = Boolean(String(model.modelId || "").trim() && String(model.endpoint || "").trim());
-    let credentialMessage = "";
-    const reference = String(model.credentialRef || "").trim();
-    if (valid && reference && reference !== "none") {
-      try {
-        const credentialStatus = await electronApi.getCredentialStatus({ reference });
-        valid = Boolean(credentialStatus?.configured);
-        if (!valid) credentialMessage = "，但对应 Key 尚未在本机配置";
-      } catch (_error) {
-        valid = false;
-        credentialMessage = "，本机凭据状态无法读取";
+    if (!model || isModelTesting(model.configId)) return false;
+    const configId = model.configId;
+    const revision = model.configRevision || "";
+    const requestId = globalThis.crypto.randomUUID();
+    modelTests.value[configId] = requestId;
+    try {
+      let result;
+      try { result = await electronApi.testModelConnection({ configId, expectedRevision: revision }); }
+      catch (error) { result = { ok: false, message: error.message || "连通性测试失败" }; }
+      const current = findModel(state.value.capabilities?.models || [], configId);
+      if (!current || (current.configRevision || "") !== revision || modelTests.value[configId] !== requestId) return false;
+      const valid = result?.ok === true;
+      const next = {
+        ...current, testStatus: valid ? "passed" : "failed", testKind: "remote",
+        testMessage: result?.message || (valid ? "连接测试通过" : "连通性测试失败"),
+        lastTestedAt: result?.testedAt || new Date().toISOString(), testLatencyMs: result?.latencyMs || 0,
+        status: valid ? current.status : "disabled"
+      };
+      try { await commitModel(current, next, "测试模型连接", next.testMessage); }
+      catch (error) {
+        const latest = findModel(state.value.capabilities?.models || [], configId);
+        if (!latest || (latest.configRevision || "") !== revision) return false;
+        latest.testStatus = "untested";
+        latest.status = "disabled";
+        latest.testMessage = "连接测试结果未能保存，请重新测试";
+        if (!isBusy.value && !chatBusy.value) syncActiveReviewExecutionSnapshot();
+        throw error;
       }
+      notify(next.testMessage, valid ? "ok" : "warn");
+      return valid;
+    } finally {
+      if (modelTests.value[configId] === requestId) delete modelTests.value[configId];
     }
-    model.testStatus = valid ? "passed" : "failed";
-    model.lastTestedAt = new Date().toISOString();
-    addAudit("校验模型配置", name, valid ? "本地字段和凭据状态校验通过，未发起外部网络请求" : `本地配置校验失败${credentialMessage || "，请补充模型标识和 API 地址"}`);
-    await persist();
-    notify(valid ? "模型配置校验通过" : `模型配置校验失败${credentialMessage || "，请检查必填字段"}`, valid ? "ok" : "warn");
-    return valid;
   }
 
   async function toggleSkill(name) {
@@ -787,7 +873,7 @@ export const useReviewStore = defineStore("review", () => {
 
   return {
     state, isReady, isBusy, activeRiskId, selectedPage, zoom, toasts, validatorResult, reviewProgress,
-    chatBusy, chatRequestId, chatStreamText, selectedChatModel, chatContextPreferences,
+    chatBusy, chatRequestId, chatStreamText, selectedChatModel, chatContextPreferences, isModelTesting,
     activeProject, review, risks, activeRisk, pendingRiskCount, selectedRules, selectedPolicies, reviewExecution,
     activeAnalysisModels, chatSessions, activeChatSession, chatMessages, chatMemoryCandidates,
     bootstrap, persist, notify, selectRisk, clearRisk, selectProject, deleteReviewTask, saveChecklistReview, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract, runReview, importKnowledgeFiles, importLegalSnapshot, verifyLegalRealtime,

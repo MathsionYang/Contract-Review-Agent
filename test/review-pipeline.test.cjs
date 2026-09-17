@@ -16,6 +16,7 @@ test("任务流水线按当前步骤和进度标记已完成、执行中与待�
   assert.deepEqual(pipeline.map((step) => step.status), [
     "completed",
     "completed",
+    "completed",
     "running",
     "pending",
     "pending",
@@ -23,6 +24,13 @@ test("任务流水线按当前步骤和进度标记已完成、执行中与待�
   ]);
   assert.equal(pipeline.find((step) => step.key === "retrieve").progress, 52);
   assert.equal(pipeline.find((step) => step.key === "retrieve").riskCount, 2);
+});
+
+test("部分完成显示各自失败阶段，不把已持久化的任务显示为仍在运行", async () => {
+  const { buildReviewPipeline } = await import("../src/services/reviewPipeline.mjs");
+  const pipeline = buildReviewPipeline({ status: "partial", current_step: "persist", progress: 100,
+    errors: [{ code: "CRITICAL_CHECKS_INCOMPLETE" }, { code: "MODEL_REQUEST_TIMEOUT" }] });
+  assert.deepEqual(pipeline.map((step) => step.status), ["completed", "completed", "failed", "completed", "failed", "completed", "completed"]);
 });
 
 test("审查进度事件携带规则和模型阶段的风险数量", async () => {

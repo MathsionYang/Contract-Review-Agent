@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
-import { Check, Cpu, FileDown, FileText, ListChecks, LoaderCircle, Save, UploadCloud } from "lucide-vue-next";
+import { BookOpenCheck, Check, Cpu, FileDown, FileText, ListChecks, LoaderCircle, Save, UploadCloud } from "lucide-vue-next";
 import AppShell from "./components/AppShell.vue";
 import DashboardView from "./components/DashboardView.vue";
 import ReviewWorkspace from "./components/ReviewWorkspace.vue";
@@ -12,13 +12,15 @@ import ExportValidation from "./components/ExportValidation.vue";
 import { useReviewStore } from "./stores/review";
 import { contractTypes } from "./data/sampleData";
 import { electronApi, hasElectronBridge } from "./services/electronApi";
+import { legalSnapshotStatusLabel } from "./services/managementState.mjs";
 
 const store = useReviewStore();
 const initialView = new URLSearchParams(window.location.search).get("view");
 const activeView = ref(["dashboard", "review", "knowledge", "capability", "settings"].includes(initialView) ? initialView : "dashboard");
 const modal = ref(null);
 const uploadForm = reactive({ projectName: "", contractType: "procurement", reviewMode: "standard", selection: null });
-const configForm = reactive({ snapshotId: "CN-2026-09", reviewMode: "standard" });
+const configForm = reactive({ snapshotId: "", reviewMode: "standard" });
+const knowledgeTab = ref("rules");
 const exportFormats = ref(["DOCX", "PDF", "JSON"]);
 const exportMode = ref("draft");
 const isValidating = ref(false);
@@ -84,9 +86,15 @@ async function startImport() {
   }
 }
 function openConfig() {
-  configForm.snapshotId = store.review?.config?.snapshot?.id || snapshots.value.find((item) => item.status === "published")?.id || "";
+  const bound = snapshots.value.find((item) => item.id === store.review?.config?.snapshot?.id && item.status === "published");
+  configForm.snapshotId = bound?.id || snapshots.value.find((item) => item.status === "published")?.id || "";
   configForm.reviewMode = store.activeProject?.review_mode || "standard";
   modal.value = "config";
+}
+function manageSnapshots() {
+  modal.value = null;
+  knowledgeTab.value = "snapshots";
+  activeView.value = "knowledge";
 }
 async function saveConfig() {
   const snapshot = snapshots.value.find((item) => item.id === configForm.snapshotId);
@@ -94,8 +102,12 @@ async function saveConfig() {
     store.notify("请选择已发布法律快照", "warn");
     return;
   }
-  await store.saveConfig({ snapshot: { id: snapshot.id, status: snapshot.status }, reviewMode: configForm.reviewMode, rules: store.selectedRules, policies: store.selectedPolicies, execution: store.reviewExecution });
-  modal.value = null;
+  try {
+    await store.saveConfig({ snapshot: { id: snapshot.id, status: snapshot.status }, reviewMode: configForm.reviewMode, rules: store.selectedRules, policies: store.selectedPolicies, execution: store.reviewExecution });
+    modal.value = null;
+  } catch (error) {
+    store.notify(error.message || "配置保存失败", "warn");
+  }
 }
 async function toggleConfig(type, file) {
   const index = (store.state.knowledge?.[type] || []).findIndex((item) => item.file === file);
@@ -157,7 +169,7 @@ function statusClass(status) { return status === "published" || status === "acti
 
 <template>
   <AppShell :active-view="activeView" @navigate="navigate" @new-review="openUpload" @refresh="store.bootstrap">
-    <component :is="pageComponent" @new-review="openUpload" @open-review="() => navigate('review')" @configure="openConfig" @export="openExport" />
+    <component :is="pageComponent" v-bind="activeView === 'knowledge' ? { initialTab: knowledgeTab } : {}" @new-review="openUpload" @open-review="() => navigate('review')" @configure="openConfig" @export="openExport" />
   </AppShell>
 
   <Modal :open="modal === 'upload'" title="新建合同审查" :wide="true" @close="modal = null">
@@ -183,10 +195,15 @@ function statusClass(status) { return status === "published" || status === "acti
       </div>
       <div class="execution-skills"><ListChecks :size="14" /><span>已启用 Skill</span><strong>{{ execution.skills?.length || 0 }}</strong><em v-for="skill in execution.skills || []" :key="`${skill.name}-${skill.version}`">{{ skill.name }} · {{ skill.version }}</em></div>
     </div>
-    <div class="form-field"><label>法律快照</label><div class="snapshot-grid"><button v-for="snapshot in snapshots" :key="snapshot.id" class="mode-card snapshot-card" :class="{ active: configForm.snapshotId === snapshot.id }" type="button" :disabled="snapshot.status !== 'published'" @click="configForm.snapshotId = snapshot.id"><strong>{{ snapshot.name }}</strong><small>{{ snapshot.sources }} 部法规 · {{ snapshot.status === "published" ? "已发布" : snapshot.status === "draft" ? "校验中" : "历史归档" }}</small></button></div></div>
+    <div class="form-field">
+      <div class="config-section-title"><strong>法律快照</strong><button class="text-action" type="button" @click="manageSnapshots"><BookOpenCheck :size="14" />管理法律快照</button></div>
+      <div class="snapshot-grid"><button v-for="snapshot in snapshots" :key="snapshot.id" class="mode-card snapshot-card" :class="{ active: configForm.snapshotId === snapshot.id }" type="button" :disabled="snapshot.status !== 'published'" :aria-pressed="configForm.snapshotId === snapshot.id" @click="configForm.snapshotId = snapshot.id"><strong>{{ snapshot.name }}</strong><small>{{ snapshot.clauses?.length || 0 }} 条检索记录 · {{ legalSnapshotStatusLabel(snapshot.status) }}</small><small>{{ snapshot.coverage || '范围未填写' }}</small></button></div>
+      <p v-if="!snapshots.length" class="muted-text">未导入法律快照</p>
+      <p v-else-if="!snapshots.some((item) => item.status === 'published')" class="muted-text">暂无已发布的法律快照</p>
+    </div>
     <div class="config-section"><div class="config-section-title"><strong>确定性规则库</strong><span>勾选本次启用规则集</span></div><div class="config-table-wrap"><table class="config-table"><thead><tr><th>勾选</th><th>文件名</th><th>文件摘要</th><th>状态</th></tr></thead><tbody><tr v-for="item in configRules" :key="item.file"><td><input type="checkbox" :checked="item.selected" :aria-label="`选择规则 ${item.file}`" @change="toggleConfig('rules', item.file)" /></td><td><strong>{{ item.file }}</strong></td><td>{{ item.summary }}</td><td><span class="badge" :class="statusClass(item.status)">{{ item.status === "active" ? "启用" : "草稿" }}</span></td></tr></tbody></table></div></div>
     <div class="config-section"><div class="config-section-title"><strong>企业制度</strong><span>勾选本次引用制度</span></div><div class="config-table-wrap"><table class="config-table"><thead><tr><th>勾选</th><th>文件名</th><th>文件摘要</th><th>版本 / 状态</th></tr></thead><tbody><tr v-for="item in configPolicies" :key="item.file"><td><input type="checkbox" :checked="item.selected" :aria-label="`选择制度 ${item.file}`" @change="toggleConfig('policies', item.file)" /></td><td><strong>{{ item.file }}</strong></td><td>{{ item.summary }}</td><td><span class="badge" :class="statusClass(item.status)">{{ item.version }} · {{ item.status === "published" ? "已发布" : "草稿" }}</span></td></tr></tbody></table></div></div>
-    <template #footer><button class="button" type="button" @click="modal = null">取消</button><button class="button button-primary" type="button" @click="saveConfig"><Save :size="15" />保存配置</button></template>
+    <template #footer><button class="button" type="button" @click="modal = null">取消</button><button class="button button-primary" type="button" :disabled="store.isBusy || store.chatBusy || !configForm.snapshotId" @click="saveConfig"><Save :size="15" />保存配置</button></template>
   </Modal>
 
   <Modal :open="modal === 'export'" title="导出审查报告" @close="!isExporting && !isValidating && (modal = null)">

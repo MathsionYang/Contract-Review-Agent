@@ -242,7 +242,7 @@ function mergeReviewFindings(findings = []) {
     existing.related_checks = [...new Set([...existing.related_checks, ...next.related_checks])];
     if (next.evidence_status === "verified") existing.evidence_status = "verified";
     if (existing.conclusion_status === "needs_verification" && next.conclusion_status) existing.conclusion_status = next.conclusion_status;
-    existing.evidence_origin = `${existing.evidence_origin},${next.evidence_origin}`;
+    existing.evidence_origin = [...new Set(`${existing.evidence_origin},${next.evidence_origin}`.split(",").filter(Boolean))].join(",");
   }
   return merged;
 }

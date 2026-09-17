@@ -12,7 +12,10 @@ const { runReview } = require("./review-runner.cjs");
 const { verifyLegalSource } = require("./legal-source.cjs");
 const { createReviewChatService } = require("./review-chat.cjs");
 const { createCredentialStore } = require("./credential-store.cjs");
-const { invokeModel } = require("./model-gateway.cjs");
+const { invokeModel, testModelConnection } = require("./model-gateway.cjs");
+const { createVectorCache } = require("./knowledge-retrieval.cjs");
+const { deleteKnowledgeEntries } = require("../src/services/knowledgeManagement.mjs");
+const { applyModelUpdate } = require("../src/services/modelState.mjs");
 
 let mainWindow;
 let storage;
@@ -73,6 +76,7 @@ function sendReviewProgress(projectId, progress) {
     runId: progress.runId,
     sequence: progress.sequence,
     fileVersionId: progress.fileVersionId,
+    ...(progress.executionSummary ? { executionSummary: progress.executionSummary } : {}),
     ...(progress.riskUpdate ? { riskUpdate: progress.riskUpdate } : {})
   });
 }
@@ -136,6 +140,7 @@ async function importKnowledgeFile(filePath, kind, options = {}) {
   const versionId = `${kind}_${metadata.sha256.slice(0, 16)}`;
   const saved = storage.saveKnowledgeFile({ kind, versionId, sourcePath: metadata.filePath, fileName: metadata.fileName });
   return buildKnowledgeItem({
+    entry_id: crypto.randomUUID(),
     kind,
     fileName: metadata.fileName,
     summary: options.summary || `${parsed.clauses.length} 个可检索条款 · ${metadata.sha256.slice(0, 12)}`,
@@ -176,16 +181,35 @@ function runModelWithCredential(options = {}) {
 
 function registerIpc() {
   const invokeConfiguredModel = (options = {}) => runModelWithCredential(options);
+  const vectorCache = createVectorCache(path.join(storage.rootDir, "cache", "embeddings"));
   reviewChatService = createReviewChatService({
     storage,
     sendEvent: sendChatEvent,
-    invokeModel: invokeConfiguredModel
+    invokeModel: invokeConfiguredModel,
+    vectorCache
+  });
+  ipcMain.handle("model:test-connection", async (_event, options = {}) => {
+    const candidates = (storage.loadState().capabilities?.models || []).filter((item) => item.configId === options.configId);
+    if (!options.configId || candidates.length !== 1) throw new Error("模型配置不存在，请保存后再测试");
+    if (options.expectedRevision !== undefined && (candidates[0].configRevision || "") !== options.expectedRevision) throw new Error("模型配置已更新，请重新测试");
+    return testModelConnection({ model: candidates[0], invokeModel: invokeConfiguredModel });
+  });
+  ipcMain.handle("model:update", (_event, payload = {}) => {
+    const saved = storage.saveState(applyModelUpdate(storage.loadState(), payload));
+    return { model: saved.capabilities.models.find((item) => item.configId === payload.configId) || null, auditRecord: payload.auditRecord };
   });
   ipcMain.handle("contract:select-file", chooseContractFile);
 
   ipcMain.handle("knowledge:select-files", (_event, options = {}) => chooseKnowledgeFiles(options.kind || "policies"));
 
+  ipcMain.handle("knowledge:delete", (_event, options = {}) => {
+    if (runningReviewProjects.size || reviewChatService.activeRequestCount()) throw new Error("审查或对话正在运行，请稍后删除知识记录");
+    const state = ensureKnowledgeState(mergeBootstrapContext(storage.loadState(), options.bootstrapState));
+    return storage.saveState(deleteKnowledgeEntries(state, options.kind, options.keys));
+  });
+
   ipcMain.handle("knowledge:import-files", async (_event, options = {}) => {
+    if (runningReviewProjects.size || reviewChatService.activeRequestCount()) throw new Error("审查或对话正在运行，请稍后导入");
     const kind = options.kind;
     const files = Array.isArray(options.files) ? options.files : [];
     if (!["rules", "policies"].includes(kind)) throw new Error("只能导入确定性规则或企业制度文件");
@@ -212,6 +236,7 @@ function registerIpc() {
   });
 
   ipcMain.handle("legal:import-snapshot", async (_event, options = {}) => {
+    if (runningReviewProjects.size || reviewChatService.activeRequestCount()) throw new Error("审查或对话正在运行，请稍后导入");
     let filePath = options.filePath;
     if (!filePath) {
       const selected = await dialog.showOpenDialog(mainWindow, {
@@ -235,7 +260,7 @@ function registerIpc() {
       sourcePath: parsed.sourcePath,
       fileName: parsed.fileName
     });
-    const snapshot = { ...parsed, source_path_ref: relativeStoragePath(saved.storedPath) };
+    const snapshot = { ...parsed, entry_id: crypto.randomUUID(), source_path_ref: relativeStoragePath(saved.storedPath) };
     delete snapshot.sourcePath;
     state.knowledge.legalSnapshots.unshift(snapshot);
     state.auditRecords.unshift(auditEntry("导入法律快照", snapshot.id, "成功", `${snapshot.name} · ${snapshot.clauses.length} 个条款`));
@@ -269,7 +294,7 @@ function registerIpc() {
       const result = await runReview({
         review,
         state: stored,
-        services: { invokeModel: invokeConfiguredModel },
+        services: { invokeModel: invokeConfiguredModel, vectorCache },
         onProgress: (progress) => sendReviewProgress(projectId, { ...progress, runId, sequence: ++sequence, fileVersionId: review.project?.file_version_id })
       });
       const latest = storage.loadState();

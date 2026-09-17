@@ -15,10 +15,35 @@ function resolveCredential(reference, resolver) {
   return process.env[`CONTRACT_REVIEW_CREDENTIAL_${suffix}`] || "";
 }
 
-function endpointFor(model) {
+function endpointFor(model, operation = "chat") {
   const endpoint = String(model?.endpoint || "").trim().replace(/\/$/, "");
   if (!endpoint) throw gatewayError("MODEL_CONFIG_INVALID", "模型 API 地址不能为空");
-  return /\/chat\/completions$/i.test(endpoint) ? endpoint : `${endpoint}/chat/completions`;
+  let url;
+  try { url = new URL(endpoint); } catch (_) { throw gatewayError("MODEL_CONFIG_INVALID", "模型 API 地址无效"); }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw gatewayError("MODEL_CONFIG_INVALID", "模型 API 地址必须为不含凭据的 HTTP(S) 地址");
+  url.pathname = `${url.pathname.replace(/\/$/, "").replace(/\/(?:chat\/completions|embeddings)$/i, "")}/${operation === "embedding" ? "embeddings" : "chat/completions"}`;
+  return url.toString();
+}
+
+function validateVectors(vectors, count) {
+  if (!Array.isArray(vectors) || vectors.length !== count || !count) return false;
+  const dimension = vectors[0]?.length;
+  return Number.isInteger(dimension) && dimension > 0 && dimension <= 65536 && Array.from(vectors).every((vector) => (
+    Array.isArray(vector) && vector.length === dimension && Array.from(vector).every((value) => typeof value === "number" && Number.isFinite(value))
+    && Number.isFinite(Math.hypot(...vector)) && Math.hypot(...vector) > 0
+  ));
+}
+
+function embeddingData(payload, count) {
+  const rows = payload?.data;
+  if (!Array.isArray(rows) || rows.length !== count) throw gatewayError("MODEL_OUTPUT_INVALID", "向量响应数量与输入不一致");
+  const vectors = new Array(count);
+  for (const row of rows) {
+    if (!Number.isInteger(row?.index) || row.index < 0 || row.index >= count || vectors[row.index]) throw gatewayError("MODEL_OUTPUT_INVALID", "向量响应 index 缺失、重复或越界");
+    vectors[row.index] = row.embedding;
+  }
+  if (!validateVectors(vectors, count)) throw gatewayError("MODEL_OUTPUT_INVALID", "向量维度不一致或包含无效数值");
+  return { vectors, dimension: vectors[0].length };
 }
 
 function modelConfigHint(model) {
@@ -75,6 +100,12 @@ function responseContent(payload) {
 
 async function invokeModel(options = {}) {
   const model = options.model || {};
+  const operation = options.operation || (model.role === "embedding" ? "embedding" : "chat");
+  if (!["chat", "embedding"].includes(operation)) return { ok: false, errorCode: "MODEL_ROLE_UNSUPPORTED", message: "当前模型协议尚未接入" };
+  if (operation === "embedding" && (!Array.isArray(options.input) || !options.input.length || options.input.some((value) => typeof value !== "string" || !value.trim()))) {
+    return { ok: false, errorCode: "MODEL_INPUT_INVALID", message: "向量输入必须为非空文本数组" };
+  }
+  if (operation === "embedding") options = { ...options, stream: false };
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== "function") {
     return { ok: false, data: null, usage: null, latencyMs: 0, errorCode: "MODEL_REQUEST_FAILED", message: "当前运行环境没有可用的网络请求能力" };
@@ -88,7 +119,7 @@ async function invokeModel(options = {}) {
   }
   let url;
   try {
-    url = endpointFor(model);
+    url = endpointFor(model, operation);
   } catch (error) {
     return { ok: false, data: null, usage: null, latencyMs: 0, errorCode: error.code, message: error.message };
   }
@@ -98,7 +129,7 @@ async function invokeModel(options = {}) {
   }
   const headers = { "Content-Type": "application/json", Accept: options.stream ? "text/event-stream, application/json" : "application/json" };
   if (credential) headers.Authorization = `Bearer ${credential}`;
-  const body = {
+  const body = operation === "embedding" ? { model: String(model.modelId), input: options.input, encoding_format: "float" } : {
     model: String(model.modelId),
     messages: Array.isArray(options.messages) ? options.messages : [],
     temperature: 0.1,
@@ -108,7 +139,7 @@ async function invokeModel(options = {}) {
   };
   const configuredRetries = Math.min(Math.max(Number(model.retries ?? 0), 0), MAX_RETRIES);
   // Recover once from transient timeouts, including older saved configs with retries=0.
-  const retryLimit = Math.max(configuredRetries, 1);
+  const retryLimit = options.retryTimeouts === false ? configuredRetries : Math.max(configuredRetries, 1);
   const timeoutMs = Math.min(Math.max(Number(model.timeoutMs || DEFAULT_TIMEOUT_MS), 1000), 120000);
   let lastFailure = null;
   let emittedDelta = false;
@@ -147,6 +178,11 @@ async function invokeModel(options = {}) {
         const status = Number(response?.status || 0);
         const detail = await readProviderError(response);
         throw gatewayError("MODEL_REQUEST_FAILED", `模型请求失败（HTTP ${status || "unknown"}）${detail ? `：${detail}` : ""}`);
+      }
+      if (operation === "embedding") {
+        const payload = await response.json();
+        return { ok: true, data: embeddingData(payload, options.input.length), usage: payload?.usage || null,
+          latencyMs: Date.now() - startedAt, attempts: attemptsUsed, errorCode: null, message: "向量模型调用成功" };
       }
       let payload;
       let content;
@@ -233,7 +269,7 @@ async function invokeModel(options = {}) {
           : error;
       const retryableTimeout = timedOut && !userCancelled && !emittedDelta;
       const retryableFailure = retryableTimeout || (attempt < configuredRetries && !emittedDelta && !userCancelled);
-      if (["MODEL_OUTPUT_INVALID", "MODEL_OUTPUT_TRUNCATED"].includes(lastFailure.code) || totalTimedOut || !retryableFailure) break;
+      if (["MODEL_OUTPUT_INVALID", "MODEL_OUTPUT_TRUNCATED"].includes(lastFailure.code) || totalTimedOut || !retryableFailure || attempt >= retryLimit) break;
       await new Promise((resolve) => setTimeout(resolve, Math.min(250 * 2 ** attempt, 1000)));
     } finally {
       clearTimeout(timer);
@@ -252,4 +288,22 @@ async function invokeModel(options = {}) {
   };
 }
 
-module.exports = { invokeModel, parseStructuredContent, resolveCredential };
+async function testModelConnection(options = {}) {
+  const model = { ...options.model, retries: 0, timeoutMs: Math.min(Number(options.model?.timeoutMs) || 15000, 15000), maxTokens: 256 };
+  if (!["analysis", "extraction", "embedding"].includes(model.role)) {
+    return { ok: false, errorCode: "MODEL_ROLE_UNSUPPORTED", message: "该角色尚未接入执行协议，不能标记为连通测试通过" };
+  }
+  const result = await (options.invokeModel || invokeModel)({
+    model, credentialResolver: options.credentialResolver, fetchImpl: options.fetchImpl, retryTimeouts: false,
+    ...(model.role === "embedding" ? { operation: "embedding", input: ["合同审查连通性测试"] } : {
+      messages: [{ role: "system", content: 'Return only the JSON object {"ok":true}.' }, { role: "user", content: "Connection test." }]
+    })
+  });
+  const valid = result?.ok && (model.role === "embedding" ? validateVectors(result.data?.vectors, 1) : result.data?.ok === true);
+  return { ok: Boolean(valid), errorCode: valid ? null : result?.errorCode || "MODEL_OUTPUT_INVALID",
+    message: valid ? "真实连通性测试通过" : result?.ok ? "模型响应不符合该角色的协议" : result?.message || "连通性测试失败",
+    latencyMs: result?.latencyMs || 0, testedAt: new Date().toISOString(), testKind: "remote",
+    ...(valid && model.role === "embedding" ? { dimension: result.data.vectors[0].length } : {}) };
+}
+
+module.exports = { invokeModel, parseStructuredContent, resolveCredential, validateVectors, testModelConnection };

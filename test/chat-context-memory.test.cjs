@@ -132,6 +132,53 @@ function baseState() {
   };
 }
 
+test("对话调用向量检索并将候选依据和执行记录写入上下文，关闭知识时不调用", async () => {
+  const storage = createStorage(fs.mkdtempSync(path.join(os.tmpdir(), "chat-embedding-")));
+  const state = baseState();
+  state.capabilities.models.push({ ...state.capabilities.models[0], name: "embedding-main", role: "embedding", modelId: "vector" });
+  storage.saveState(state);
+  const calls = [];
+  let payload;
+  const service = reviewChat.createReviewChatService({ storage, invokeModel: async (request) => {
+    calls.push(request.model.role);
+    if (request.model.role === "embedding") return { ok: true, data: { vectors: request.input.map(() => [1, 0]) } };
+    payload = JSON.parse(request.messages[1].content);
+    return { ok: true, data: { intent: "answer", answer: "需核验", citations: [] } };
+  } });
+  const result = await service.chat({ projectId: "project-chat", userInput: "迟延交货如何追偿？" });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, ["embedding", "embedding", "analysis"]);
+  assert.ok(payload.context.citations.some((citation) => citation.retrieval_method === "hybrid" && citation.verification_status === "candidate"));
+  assert.equal(result.message.retrieval.status, "completed");
+  const snapshot = storage.loadState().reviews["project-chat"].chat_sessions[0].context_snapshots[0];
+  assert.equal(snapshot.retrieval.call_count, 2);
+  calls.length = 0;
+  const noKnowledge = await service.chat({ projectId: "project-chat", userInput: "仅看合同原文", contextPreferences: { includeKnowledge: false } });
+  assert.equal(noKnowledge.ok, true);
+  assert.deepEqual(calls, ["analysis"]);
+});
+
+test("向量检索阶段可取消对话，不再启动分析或写入成功结果", async () => {
+  const storage = createStorage(fs.mkdtempSync(path.join(os.tmpdir(), "chat-embedding-cancel-")));
+  const state = baseState();
+  state.capabilities.models.push({ ...state.capabilities.models[0], name: "embedding-main", role: "embedding" });
+  storage.saveState(state);
+  let called;
+  const entered = new Promise((resolve) => { called = resolve; });
+  const service = reviewChat.createReviewChatService({ storage, invokeModel: async ({ model, signal }) => {
+    assert.equal(model.role, "embedding");
+    called();
+    return new Promise((resolve) => signal.addEventListener("abort", () => resolve({ ok: false, errorCode: "MODEL_REQUEST_CANCELLED" }), { once: true }));
+  } });
+  const pending = service.chat({ projectId: "project-chat", requestId: "embedding-cancel", userInput: "检查合同" });
+  await entered;
+  assert.equal(service.activeRequestCount(), 1);
+  service.cancel({ requestId: "embedding-cancel" });
+  const result = await pending;
+  assert.equal(result.errorCode, "MODEL_REQUEST_CANCELLED");
+  assert.equal(service.activeRequestCount(), 0);
+});
+
 test("上下文组装按选区扩圈并生成不含凭据的预算快照", () => {
   assert.equal(typeof contextAssembler.assembleContext, "function");
   const state = baseState();

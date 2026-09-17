@@ -8,6 +8,7 @@ test("preload 只暴露约定的本地桌面端 API", () => {
     "cancelChat",
     "chatReview",
     "confirmMemory",
+    "deleteKnowledge",
     "deleteReviewTask",
     "dismissMemory",
     "exportReview",
@@ -24,6 +25,8 @@ test("preload 只暴露约定的本地桌面端 API", () => {
     "saveState",
     "selectContractFile",
     "selectKnowledgeFiles",
+    "testModelConnection",
+    "updateModel",
     "validateExport",
     "verifyLegalRealtime"
   ]);

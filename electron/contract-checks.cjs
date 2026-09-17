@@ -141,7 +141,7 @@ function findingFor(check, document = {}, options = {}) {
     risk_level: level,
     risk_category: options.risk_category || "commercial",
     risk_topic: options.risk_topic || check.check_id.split(".")[0],
-    title: options.title || check.message,
+    title: check.status === "unverifiable" ? `待核验：${check.message}` : options.title || check.message,
     conclusion_status: conclusion,
     evidence_status: evidence,
     human_status: "pending_review",
@@ -155,7 +155,7 @@ function findingFor(check, document = {}, options = {}) {
       location_status: first.block_id && first.block_id !== "unresolved" ? "resolved" : "unresolved"
     },
     analysis: check.message,
-    suggestion: options.suggestion || "请结合合同原文和业务背景完成人工复核。",
+    suggestion: check.status === "unverifiable" ? "当前抽取结果不足以判断是否存在问题，请核对原文及所需材料后再确认。" : options.suggestion || "请结合合同原文和业务背景完成人工复核。",
     legal_basis: [],
     company_basis: [],
     related_checks: [check.check_id]
@@ -190,7 +190,7 @@ function runContractChecks({ document = {}, facts: extracted = {}, contractType 
     "amount.total_vs_uppercase",
     uppercaseTotal && lowercaseTotal ? (uppercaseTotal.value === lowercaseTotal.value ? "pass" : "conflict") : "unverifiable",
     SEVERITY.critical,
-    uppercaseTotal && lowercaseTotal ? `大写金额 ${uppercaseTotal.value} 与小写金额 ${lowercaseTotal.value}${uppercaseTotal.value === lowercaseTotal.value ? "一致" : "不一致"}。` : "缺少大写或小写总价金额，无法完成校验。",
+    uppercaseTotal && lowercaseTotal ? `大写金额 ${uppercaseTotal.value} 与小写金额 ${lowercaseTotal.value}${uppercaseTotal.value === lowercaseTotal.value ? "一致" : "不一致"}。` : "未能配对提取大写总价和小写总价（当前小写总价规则匹配第 2.1 条），无法完成校验。",
     facts,
     (fact) => fact === uppercaseTotal || fact === lowercaseTotal,
     { source_refs: totalRefs }
@@ -217,10 +217,10 @@ function runContractChecks({ document = {}, facts: extracted = {}, contractType 
     "amount.schedule_ratio_sum",
     scheduleRatios.length >= 3 ? (Math.abs(ratioSum - 1) < 1e-9 ? "pass" : "conflict") : "unverifiable",
     SEVERITY.critical,
-    scheduleRatios.length >= 3 ? `2.3 分期比例合计 ${(ratioSum * 100).toFixed(2)}%。` : "未能完整抽取分期比例。",
+    scheduleRatios.length >= 3 ? `2.3 分期比例合计 ${(ratioSum * 100).toFixed(2)}%。` : "未能完整抽取分期比例（当前规则匹配第 2.3 条且至少三期），请核对付款计划。",
     facts,
     (fact) => scheduleRatios.includes(fact)
-  ), { risk_category: "commercial", risk_topic: "amount_consistency", title: "分期付款比例合计超过 100%", suggestion: "将分期比例调整为合计 100%，并重算各期金额。" });
+  ), { risk_category: "commercial", risk_topic: "amount_consistency", title: "分期付款比例合计不等于 100%", suggestion: "将分期比例调整为合计 100%，并重算各期金额。" });
 
   const scheduleAmountFacts = allMoney.filter((fact) => fact.clause_no === "2.3");
   const scheduleTotal = lowercaseTotal?.value || "";

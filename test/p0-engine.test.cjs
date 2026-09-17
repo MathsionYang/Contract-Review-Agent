@@ -307,7 +307,7 @@ test("model timeout retries according to configured attempts", async () => {
   });
 
   assert.equal(result.ok, false);
-  assert.equal(result.errorCode, "MODEL_REQUEST_FAILED");
+  assert.equal(result.errorCode, "MODEL_REQUEST_TIMEOUT");
   assert.equal(attempts, 2);
   assert.ok(result.message);
 });
@@ -395,8 +395,8 @@ test("真实审查编排使用规则和知识检索生成带具体条款的风�
   assert.ok(result.review.risks.length > 0);
   const risk = result.review.risks[0];
   assert.equal(risk.source_type, "deterministic_rule");
-  assert.equal(risk.company_basis[0].file_name, "采购制度.docx");
-  assert.equal(risk.company_basis[0].clause_no, "4.2");
-  assert.match(risk.company_basis[0].excerpt, /30%/);
+  const policyBasis = risk.company_basis.find((basis) => basis.file_name === "采购制度.docx");
+  assert.equal(policyBasis.clause_no, "4.2");
+  assert.match(policyBasis.excerpt, /30%/);
   assert.equal(result.review.risks.some((item) => item.source_type === "sample_data"), false);
 });

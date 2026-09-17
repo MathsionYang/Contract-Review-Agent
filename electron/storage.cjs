@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { deleteReviewTask, reconcileDeletedTasks } = require("../src/services/reviewTasks.mjs");
+const { reconcileDeletedKnowledge } = require("../src/services/knowledgeManagement.mjs");
 
 const DEFAULT_STATE = {
   activeProjectId: null,
@@ -67,7 +68,8 @@ function createStorage(rootDir) {
     nextState.projects = Array.isArray(nextState.projects) ? nextState.projects : [];
     nextState.reviews = nextState.reviews && typeof nextState.reviews === "object" ? nextState.reviews : {};
     nextState.auditRecords = Array.isArray(nextState.auditRecords) ? nextState.auditRecords : [];
-    nextState = reconcileDeletedTasks(nextState, loadState());
+    const saved = loadState();
+    nextState = reconcileDeletedKnowledge(reconcileDeletedTasks(nextState, saved), saved);
     writeJsonAtomically(statePath, nextState);
     return nextState;
   }

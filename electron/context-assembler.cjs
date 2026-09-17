@@ -124,7 +124,11 @@ function buildCitations(state, review, query) {
     ...focusedQueries.flatMap((focused) => searchKnowledgeSources(sources, focused, { limit: 10, minScore: 0.1 }))
   ];
   const uniqueHits = [...new Map(hits.map((hit) => [`${hit.source_id}:${hit.clause_no}`, hit])).values()].slice(0, 10);
-  return uniqueHits
+  return citationsFromHits(uniqueHits);
+}
+
+function citationsFromHits(hits) {
+  return hits
     .map((hit, index) => ({
       citation_id: `citation_${hashText(`${hit.source_id}:${hit.clause_no}:${index}`).slice(-16)}`,
       source_type: hit.source_type === "deterministic_rule" ? "rule" : hit.source_type,
@@ -135,7 +139,8 @@ function buildCitations(state, review, query) {
       clause_title: hit.clause_title,
       excerpt: hit.excerpt,
       confidence: Math.min(1, Number(hit.score || 0)),
-      verification_status: "verified"
+      retrieval_method: hit.retrieval_method || "keyword",
+      verification_status: hit.retrieval_method === "hybrid" ? "candidate" : "verified"
     }));
 }
 
@@ -185,7 +190,7 @@ function assembleContext(options = {}) {
     ? (review.risks || []).find((risk) => risk.risk_id === options.activeRiskId) || null
     : null;
   const query = [options.userInput, selectionValue?.text, activeRisk?.title, activeRisk?.risk_topic].filter(Boolean).join(" ");
-  const citations = preferences.includeKnowledge === false ? [] : buildCitations(state, review, query);
+  const citations = preferences.includeKnowledge === false ? [] : options.knowledgeHits ? citationsFromHits(options.knowledgeHits) : buildCitations(state, review, query);
   const memories = preferences.includeMemory === false ? [] : (options.memories || []).map((item) => ({
     memory_id: item.memory_id,
     content: item.content,
@@ -289,6 +294,7 @@ function assembleContext(options = {}) {
     token_budget: tokenBudget,
     estimated_tokens: Math.min(usedTokens, tokenBudget),
     model: publicModel(options.model),
+    ...(options.retrievalSummary ? { retrieval: options.retrievalSummary } : {}),
     created_at: new Date().toISOString()
   };
   const messages = [
@@ -301,6 +307,7 @@ function assembleContext(options = {}) {
 module.exports = {
   DEFAULT_TOKEN_BUDGET,
   assembleContext,
+  configuredSources,
   estimateTokens,
   hashText,
   parseClauses,

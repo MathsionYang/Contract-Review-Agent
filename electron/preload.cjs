@@ -14,6 +14,7 @@ const api = {
   selectKnowledgeFiles: (kind) => ipcRenderer.invoke("knowledge:select-files", { kind }),
   importKnowledgeFiles: (payload) => ipcRenderer.invoke("knowledge:import-files", payload),
   importLegalSnapshot: (payload) => ipcRenderer.invoke("legal:import-snapshot", payload),
+  deleteKnowledge: (payload) => ipcRenderer.invoke("knowledge:delete", payload),
   verifyLegalRealtime: (payload) => ipcRenderer.invoke("legal:verify-realtime", payload),
   runReview: (payload) => ipcRenderer.invoke("review:run", payload),
   deleteReviewTask: (projectId) => ipcRenderer.invoke("review:delete-task", { projectId }),
@@ -24,6 +25,8 @@ const api = {
   dismissMemory: (payload) => ipcRenderer.invoke("review:memory-dismiss", payload),
   saveCredential: (payload) => ipcRenderer.invoke("credential:save", payload),
   getCredentialStatus: (payload) => ipcRenderer.invoke("credential:status", payload),
+  testModelConnection: (payload) => ipcRenderer.invoke("model:test-connection", payload),
+  updateModel: (payload) => ipcRenderer.invoke("model:update", payload),
   onChatEvent: (callback) => {
     if (typeof callback !== "function" || !ipcRenderer) return () => {};
     const listener = (_event, payload) => callback(payload);

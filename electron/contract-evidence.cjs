@@ -35,7 +35,10 @@ function clauseDefinitions(text = "") {
     !/条/.test(text.slice(m.index + m[0].length, m.index + m[0].length + 1))
     && !/第\s*$/.test(text.slice(Math.max(0, m.index - 5), m.index))
   ));
-  return starts.map((m, i) => ({ clause_no: m[1], index: m.index, text: text.slice(m.index, starts[i + 1]?.index ?? text.length).trim() }));
+  const chinese = [...String(text).matchAll(/(?:^|\n)[ \t]*(第[ \t]*[零〇一二三四五六七八九十百千万两\d]+[ \t]*条)(?=[\s、：:]|$)/g)]
+    .map((match) => ({ 1: match[1].replace(/\s/g, ""), index: match.index + match[0].indexOf("第") }));
+  const definitions = [...starts, ...chinese].sort((a, b) => a.index - b.index);
+  return definitions.map((m, i) => ({ clause_no: m[1], index: m.index, text: text.slice(m.index, definitions[i + 1]?.index ?? text.length).trim() }));
 }
 
 module.exports = { compact, resolveRefs, clauseDefinitions };

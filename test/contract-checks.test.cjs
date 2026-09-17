@@ -1,6 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+test("输入未匹配时显示待核验，不直接宣称金额不一致", () => {
+  const { runContractChecks } = require("../electron/contract-checks.cjs");
+  const result = runContractChecks({ document: { text: "设备采购合同" }, facts: [] });
+  const risk = result.findings.find((item) => item.rule_id === "amount.total_vs_uppercase");
+  assert.match(risk.title, /^待核验：/);
+  assert.doesNotMatch(risk.title, /金额不一致/);
+  assert.match(risk.suggestion, /不足以判断/);
+});
+
 const { extractContractFacts } = require("../electron/contract-facts.cjs");
 const { runContractChecks } = require("../electron/contract-checks.cjs");
 

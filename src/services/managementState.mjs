@@ -41,7 +41,7 @@ export function ensureModelIds(models = []) {
   return models.map((model) => {
     const configId = model.configId && !seen.has(model.configId) ? model.configId : crypto.randomUUID();
     seen.add(configId);
-    return { ...model, configId };
+    return { ...model, configId, ...(model.testStatus === "testing" ? { testStatus: "untested", testMessage: "上次连接测试未完成" } : {}) };
   });
 }
 
@@ -75,14 +75,18 @@ export function mergeSettings(current = {}, patch = {}) {
   return { ...current, ...patch };
 }
 
-// 法律快照属于版本化引用，编辑时允许修改展示和治理字段，但不能替换快照 ID 或哈希。
+export function legalSnapshotStatusLabel(status) {
+  return { published: "已发布", draft: "草稿 · 待发布", historical: "历史归档", superseded: "已被替代", revoked: "已撤销" }[status] || "状态未知";
+}
+
+// 法律快照属于版本化引用，编辑时允许修改展示和治理字段，但不能替换快照内容及身份。
 export function updateLegalSnapshot(snapshots = [], snapshotId, patch = {}) {
   const id = String(snapshotId || "").trim();
   const index = snapshots.findIndex((snapshot) => snapshot.id === id);
   if (!id || index < 0) throw new Error("法律快照不存在");
 
   const current = snapshots[index];
-  const next = { ...current, ...patch, id: current.id, hash: current.hash };
+  const next = { ...current, status: patch.status ?? current.status, source_url: String(patch.source_url ?? current.source_url ?? "").trim() };
   next.name = String(patch.name ?? current.name ?? "").trim();
   next.coverage = String(patch.coverage ?? current.coverage ?? "").trim();
   next.publishedAt = String(patch.publishedAt ?? current.publishedAt ?? "").trim();
@@ -90,7 +94,13 @@ export function updateLegalSnapshot(snapshots = [], snapshotId, patch = {}) {
   if (!next.name) throw new Error("法律快照名称不能为空");
   if (!next.coverage) throw new Error("法律快照覆盖范围不能为空");
   if (!Number.isInteger(next.sources) || next.sources < 0) throw new Error("来源数必须是非负整数");
-  if (!["published", "draft", "historical"].includes(next.status)) throw new Error("法律快照状态无效");
+  if (!["published", "draft", "historical", "superseded", "revoked"].includes(next.status)) throw new Error("法律快照状态无效");
+  if (next.status === "published") {
+    if (/^(待填写|未填写|待补充)$/.test(next.coverage)) throw new Error("发布前请填写实际覆盖范围，例如：设备采购、交付、质量检验、价款支付");
+    if (current.parse_status === "failed" || current.parseStatus === "failed" || !current.clauses?.length
+      || current.clauses.some((clause) => !String(clause?.text || clause?.excerpt || "").trim())) throw new Error("快照缺少可引用的条款正文，请重新导入后发布");
+    if (current.status !== "published") next.publishedAt = new Date().toISOString();
+  }
 
   return [...snapshots.slice(0, index), next, ...snapshots.slice(index + 1)];
 }
@@ -221,7 +231,7 @@ export function buildReviewExecutionConfig(capabilities = {}, previous = {}, upd
       version: skill.version,
       scope: skill.scope
     }));
-  // 新配置必须经过人工字段校验后才能进入审查执行快照。
+  // New configurations must pass a connection test before selection; keep legacy configs compatible.
   const activeModels = (capabilities.models || []).filter((model) => (
     model.status === "active" && (model.testStatus === "passed" || model.testStatus === undefined)
   ));

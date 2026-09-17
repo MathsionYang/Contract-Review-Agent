@@ -3,7 +3,10 @@ export function applyReviewProgress(review, payload, run) {
     || payload.fileVersionId !== review.project?.file_version_id
     || !Number.isInteger(payload.sequence) || payload.sequence <= run.sequence) return null;
   const update = payload.riskUpdate;
-  if (update?.type === "reset") review.risks = [];
+  if (update?.type === "reset") {
+    review.risks = [];
+    review.task = { ...(review.task || {}), errors: [] };
+  }
   if (update?.type === "upsert") {
     const risk = update.risk;
     if (!risk?.risk_id || risk.contract_location?.file_version_id !== review.project.file_version_id) return null;
@@ -13,6 +16,7 @@ export function applyReviewProgress(review, payload, run) {
     else risks.splice(index, 1, risk);
   }
   run.sequence = payload.sequence;
+  if (payload.executionSummary && typeof payload.executionSummary === "object") review.execution_summary = payload.executionSummary;
   run.latestRiskTitle = update?.type === "reset" ? "" : update?.risk?.title || run.latestRiskTitle || "";
   const progress = {
     projectId: payload.projectId,

@@ -490,7 +490,7 @@ function createReviewChatService(options = {}) {
       model,
       policy: state.settings?.chatPermissions || {}
     });
-    const assembled = assembleContext({
+    const contextOptions = {
       state,
       review,
       session,
@@ -503,7 +503,8 @@ function createReviewChatService(options = {}) {
       memories: recalled,
       tokenBudget: Math.max(320, Number(input.tokenBudget || model.contextLength || 12000) - Number(model.maxTokens || 2048)),
       model
-    });
+    };
+    let assembled = assembleContext(contextOptions);
     userMessage.context_snapshot_id = assembled.snapshot.context_snapshot_id;
     userMessage.model = publicModel(model);
     session.messages.push(userMessage);
@@ -526,6 +527,24 @@ function createReviewChatService(options = {}) {
     const emitAnswerDelta = createAnswerDeltaEmitter(sendEvent, requestId, session.chat_session_id);
     let modelResult;
     try {
+      if (preferences.includeKnowledge !== false) {
+        const { executionModel } = require("./model-runtime.cjs");
+        const { configuredSources } = require("./context-assembler.cjs");
+        const { createKnowledgeRetriever } = require("./knowledge-retrieval.cjs");
+        const retriever = createKnowledgeRetriever({ sources: configuredSources(state, review), model: executionModel(state, review, "embedding"),
+          invokeModel, cache: options.vectorCache, signal: controller.signal });
+        const query = [userInput, assembled.context.selection?.text, assembled.context.active_risk?.title].filter(Boolean).join(" ");
+        const hits = await retriever.search(query, { limit: 10 });
+        const previousId = assembled.snapshot.context_snapshot_id;
+        assembled = assembleContext({ ...contextOptions, knowledgeHits: hits, retrievalSummary: { ...retriever.summary } });
+        assembled.snapshot.context_snapshot_id = previousId;
+        const current = storage.loadState();
+        const currentSession = current.reviews?.[projectId]?.chat_sessions?.find((item) => item.chat_session_id === session.chat_session_id);
+        if (!currentSession) throw new Error("当前对话已不存在");
+        currentSession.context_snapshots = currentSession.context_snapshots.map((snapshot) => snapshot.context_snapshot_id === previousId ? assembled.snapshot : snapshot);
+        storage.saveState(current);
+      }
+      if (controller.signal.aborted) throw Object.assign(new Error("模型请求已取消"), { code: "MODEL_REQUEST_CANCELLED" });
       modelResult = await invokeModel({
         model,
         messages: assembled.messages,
@@ -686,6 +705,7 @@ function createReviewChatService(options = {}) {
       context_snapshot_id: assembled.snapshot.context_snapshot_id,
       model_call_ref: requestId,
       model: publicModel(model),
+      retrieval: assembled.snapshot.retrieval || null,
       risk_refs: riskRefs,
       memory_candidate_refs: memoryRefs,
       execution_refs: executionRecords.map((item) => item.execution_id),

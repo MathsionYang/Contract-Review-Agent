@@ -7,6 +7,7 @@ import { useReviewStore } from "../stores/review";
 import { riskCategories, riskLevels } from "../data/sampleData";
 import { buildReviewPipeline, pipelineOverallLabel, pipelineStatusLabel } from "../services/reviewPipeline.mjs";
 import ReviewChecklist from "./ReviewChecklist.vue";
+import ReviewModelActivity from "./ReviewModelActivity.vue";
 import { locationLabel, locationPage, quoteRange } from "../services/checklistReview.mjs";
 
 const emit = defineEmits(["configure", "export"]);
@@ -58,13 +59,21 @@ const executionModels = computed(() => [
   { key: "analysis", label: "语义分析" },
   { key: "extraction", label: "条款抽取" },
   { key: "embedding", label: "向量检索" },
-  { key: "rerank", label: "结果重排" }
+  { key: "rerank", label: "结果重排" },
+  { key: "vision", label: "视觉理解" }
 ]);
-const executionReady = computed(() => Boolean(execution.value.models?.analysis && execution.value.models?.extraction));
+const executionReady = computed(() => Boolean(execution.value.models?.analysis));
+const executionStatus = (role) => {
+  const summary = store.review?.execution_summary?.[role];
+  if (!summary) return ['rerank', 'vision'].includes(role) ? '尚未接入执行' : '尚未执行';
+  const label = { pending: '待调用', running: '执行中', completed: '已完成', partial: '部分完成', failed: '调用失败', degraded: '已降级', skipped: '无知识可检索', not_configured: '未配置', not_integrated: '尚未接入执行' }[summary.status] || summary.status;
+  return `${label} · ${summary.call_count || 0} 次调用${summary.fallback ? (summary.fallback === 'rules' ? ' · 规则抽取' : ' · 关键词检索') : ''}`;
+};
 const task = computed(() => store.review?.task || {});
 const taskStatus = computed(() => task.value.status || "queued");
 const taskStepLabels = {
   parse: "解析合同",
+  extract: "抽取条款事实",
   rules: "执行确定性规则",
   retrieve: "检索知识依据",
   model: "调用审查模型",
@@ -88,6 +97,12 @@ const searchMatchCount = computed(() => {
   return (currentPage.value.text.match(new RegExp(escapeRegExp(searchQuery.value.trim()), "gi")) || []).length;
 });
 const chatMessages = computed(() => store.chatMessages || []);
+const extractionSummary = computed(() => store.review?.execution_summary?.extraction || null);
+const analysisSummary = computed(() => store.review?.execution_summary?.analysis || null);
+const reviewActivities = computed(() => [
+  { role: 'analysis', step: 'model', summary: analysisSummary.value },
+  { role: 'extraction', step: 'extract', summary: extractionSummary.value }
+].filter(item => item.summary && (item.role === 'extraction' || item.summary.started_at || item.summary.status !== 'pending' && task.value.current_step !== 'extract')));
 const chatModels = computed(() => store.activeAnalysisModels || []);
 const chatSession = computed(() => store.activeChatSession);
 const chatCandidates = computed(() => store.chatMemoryCandidates || []);
@@ -102,6 +117,10 @@ const chatContextItems = computed(() => [
   { key: "includeCurrentRisk", label: "当前风险", enabled: store.chatContextPreferences.includeCurrentRisk },
   { key: "includeMemory", label: "企业记忆", enabled: store.chatContextPreferences.includeMemory }
 ]);
+const chatContextLabel = computed(() => {
+  const selected = chatContextItems.value.filter(item => item.enabled).map(item => item.label);
+  return `对话上下文：${['合同信息', '最近对话', ...selected].join('、')}`;
+});
 
 function escapeRegExp(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]); }
@@ -334,7 +353,7 @@ function memoryEdit(candidate) {
 }
 async function sendChat(prompt = "") {
   const content = String(prompt || chatInput.value || "").trim();
-  if (!content || store.chatBusy) return;
+  if (!content || store.chatBusy || store.isBusy) return;
   chatInput.value = "";
   try {
     await store.chatReview({ userInput: content, modelName: chatModelName.value, ...selectionForChat() });
@@ -343,6 +362,7 @@ async function sendChat(prompt = "") {
   }
 }
 async function retryChat(message) {
+  if (store.chatBusy || store.isBusy) return;
   try { await store.retryChat({ sessionId: chatSession.value?.chat_session_id, messageId: message.message_id, modelName: chatModelName.value }); } catch (_error) {}
 }
 async function confirmCandidate(candidate, resolution) {
@@ -400,6 +420,10 @@ function displaySize(bytes) {
                       <small>{{ item.label }}</small>
                       <strong>{{ execution.models?.[item.key]?.name || "未配置" }}</strong>
                       <em v-if="execution.models?.[item.key]">{{ execution.models[item.key].version }}</em>
+                      <small class="runtime-execution-status" :title="store.review?.execution_summary?.[item.key]?.message || ''">{{ executionStatus(item.key) }}</small>
+                      <small v-if="store.review?.execution_summary?.[item.key]?.model_name">最近执行：{{ store.review.execution_summary[item.key].model_name }}</small>
+                      <small v-if="item.key === 'extraction' && store.review?.execution_summary?.extraction?.call_count">模型新增 {{ store.review.execution_summary.extraction.accepted_fact_count }} 条事实 · 拒绝 {{ store.review.execution_summary.extraction.rejected_fact_count }} 条</small>
+                      <small v-if="item.key === 'embedding' && store.review?.execution_summary?.embedding?.chunk_count">{{ store.review.execution_summary.embedding.chunk_count }} 个知识块 · {{ store.review.execution_summary.embedding.cache_hit_count }} 个缓存命中</small>
                     </span>
                   </div>
                   <div class="runtime-config-footer">
@@ -479,12 +503,14 @@ function displaySize(bytes) {
             <span v-if="lastSelection" class="chat-selection-note">{{ lastSelection.clause_no || "选区" }} · {{ lastSelection.text_snapshot?.slice(0, 18) }}{{ lastSelection.text_snapshot?.length > 18 ? "..." : "" }}</span>
           </div>
           <div class="chat-message-list" aria-live="polite">
-            <div v-if="!chatMessages.length" class="chat-empty"><Bot :size="22" /><span>可以问我“审查当前选区”“检查付款责任”或“生成待核验风险”。</span></div>
+            <ReviewModelActivity v-for="activity in reviewActivities" :key="`${store.activeProject?.project_id}:${activity.role}:${activity.summary.started_at || ''}`" :role="activity.role" :summary="activity.summary" :active="store.isBusy && taskStatus === 'running' && task.current_step === activity.step" />
+            <div v-if="!chatMessages.length && !reviewActivities.length" class="chat-empty"><Bot :size="22" /><span>可以问我“审查当前选区”“检查付款责任”或“生成待核验风险”。</span></div>
             <article v-for="message in chatMessages" :key="message.message_id" class="chat-message" :class="`chat-message-${message.role} chat-message-${message.status || 'completed'}`">
               <span class="chat-avatar"><UserRound v-if="message.role === 'user'" :size="14" /><Bot v-else :size="15" /></span>
               <div class="chat-message-main">
                 <div class="chat-message-meta"><strong>{{ message.role === "user" ? "你" : "审查助手" }}</strong><small>{{ message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "" }}</small><span v-if="message.model?.name" class="chat-model-badge">{{ message.model.name }}</span></div>
                 <p>{{ message.content }}</p>
+                <small v-if="message.retrieval" class="table-subtext" :title="message.retrieval.message || ''">{{ message.retrieval.status === 'completed' ? '混合检索' : message.retrieval.status === 'degraded' ? '向量失败，已降级关键词' : message.retrieval.reason === 'no_knowledge' ? '无可检索知识' : '关键词检索' }} · 向量调用 {{ message.retrieval.call_count || 0 }} 次</small>
                 <div v-if="message.status === 'failed' || message.status === 'cancelled'" class="chat-message-error"><span>{{ message.error_code || "CHAT_FAILED" }}</span><button class="text-action" type="button" @click="retryChat(message)"><RotateCcw :size="13" />重试</button></div>
                 <div v-if="message.citations?.length" class="chat-citation-list"><span class="chat-result-label">依据</span><span v-for="citation in message.citations" :key="citation.citation_id" class="chat-citation">{{ citationLabel(citation) }}</span></div>
                 <div v-if="message.risk_refs?.length" class="chat-result-card chat-risk-result"><div><strong>已生成待核验风险</strong><span>{{ message.risk_refs.length }} 条，已加入右侧风险清单</span></div><button class="text-action" type="button" @click="store.selectRisk(message.risk_refs[0])"><ScanSearch :size="13" />查看风险</button></div>
@@ -504,7 +530,7 @@ function displaySize(bytes) {
           </div>
           <div class="chat-composer">
             <textarea v-model="chatInput" rows="2" placeholder="输入自然语言审核请求..." aria-label="输入对话审核请求" :disabled="store.chatBusy || !chatModels.length" @keydown.enter.exact.prevent="sendChat()"></textarea>
-            <div class="chat-composer-footer"><span>{{ chatModels.length ? "模型只会使用已勾选的上下文" : "请先在能力配置中启用 analysis 模型" }}</span><div><button v-if="store.chatBusy" class="icon-button small danger" type="button" title="停止对话审核" aria-label="停止对话审核" @click="store.cancelChat"><X :size="15" /></button><button class="icon-button chat-send-button" type="button" title="发送审核请求" aria-label="发送审核请求" :disabled="store.chatBusy || !chatInput.trim() || !chatModels.length" @click="sendChat()"><LoaderCircle v-if="store.chatBusy" class="spin" :size="16" /><Send v-else :size="16" /></button></div></div>
+            <div class="chat-composer-footer"><span :title="chatContextLabel">{{ chatModels.length ? chatContextLabel : "请先在能力配置中启用 analysis 模型" }}</span><div><button v-if="store.chatBusy" class="icon-button small danger" type="button" title="停止对话审核" aria-label="停止对话审核" @click="store.cancelChat"><X :size="15" /></button><button class="icon-button chat-send-button" type="button" title="发送审核请求" aria-label="发送审核请求" :disabled="store.chatBusy || !chatInput.trim() || !chatModels.length" @click="sendChat()"><LoaderCircle v-if="store.chatBusy" class="spin" :size="16" /><Send v-else :size="16" /></button></div></div>
           </div>
         </section>
 
@@ -528,10 +554,10 @@ function displaySize(bytes) {
             <p class="risk-location">{{ locationLabel(risk.contract_location) }}</p>
             <div class="risk-flags"><span v-if="risk.evidence_status === 'verified'" class="flag flag-ok">证据已核验</span><span v-else class="flag flag-warn">需核验</span><span v-if="risk.human_status === 'pending_review'" class="flag flag-warn">待人工确认</span></div>
             <div class="risk-actions" @click.stop>
-              <button class="icon-button small" type="button" title="接受风险" aria-label="接受风险" @click="handleRiskCardAction(risk, 'accepted')"><Check :size="14" /></button>
-              <button class="icon-button small" type="button" title="标记误报" aria-label="标记误报" @click="handleRiskCardAction(risk, 'false_positive')"><X :size="14" /></button>
-              <button class="icon-button small" type="button" title="标记为人工修改" aria-label="标记为人工修改" @click="handleRiskCardAction(risk, 'modified')"><SquarePen :size="14" /></button>
-              <button class="icon-button small" type="button" title="延期处理" aria-label="延期处理" @click="handleRiskCardAction(risk, 'deferred')"><Clock3 :size="14" /></button>
+              <button class="icon-button small" type="button" title="接受风险" aria-label="接受风险" :disabled="store.isBusy || store.chatBusy" @click="handleRiskCardAction(risk, 'accepted')"><Check :size="14" /></button>
+              <button class="icon-button small" type="button" title="标记误报" aria-label="标记误报" :disabled="store.isBusy || store.chatBusy" @click="handleRiskCardAction(risk, 'false_positive')"><X :size="14" /></button>
+              <button class="icon-button small" type="button" title="标记为人工修改" aria-label="标记为人工修改" :disabled="store.isBusy || store.chatBusy" @click="handleRiskCardAction(risk, 'modified')"><SquarePen :size="14" /></button>
+              <button class="icon-button small" type="button" title="延期处理" aria-label="延期处理" :disabled="store.isBusy || store.chatBusy" @click="handleRiskCardAction(risk, 'deferred')"><Clock3 :size="14" /></button>
             </div>
           </article>
           <div v-if="!filteredRisks.length" class="empty-state compact"><Flag :size="24" /><strong>暂时没有风险项</strong><span>导入合同并完成审查后，风险会显示在这里。</span></div>
@@ -548,11 +574,11 @@ function displaySize(bytes) {
             <div class="detail-badges"><span class="badge" :class="riskBadge(currentRisk).className">{{ riskBadge(currentRisk).label }}风险</span><span class="badge badge-category">{{ riskCategories[currentRisk.risk_category] || "待分类" }}</span></div>
           </header>
           <div class="detail-actionbar">
-            <button class="icon-button" type="button" title="接受风险" aria-label="接受风险" @click="handleRiskAction('accepted')"><Check :size="15" /></button>
-            <button class="icon-button" type="button" title="标记误报" aria-label="标记误报" @click="handleRiskAction('false_positive')"><X :size="15" /></button>
-            <button class="icon-button" type="button" title="人工修改" aria-label="人工修改" @click="handleRiskAction('modified')"><SquarePen :size="15" /></button>
-            <button class="icon-button" type="button" title="延期处理" aria-label="延期处理" @click="handleRiskAction('deferred')"><Clock3 :size="15" /></button>
-            <button class="icon-button danger" type="button" title="删除风险" aria-label="删除风险" @click="handleRiskAction('deleted')"><Trash2 :size="15" /></button>
+            <button class="icon-button" type="button" title="接受风险" aria-label="接受风险" :disabled="store.isBusy || store.chatBusy" @click="handleRiskAction('accepted')"><Check :size="15" /></button>
+            <button class="icon-button" type="button" title="标记误报" aria-label="标记误报" :disabled="store.isBusy || store.chatBusy" @click="handleRiskAction('false_positive')"><X :size="15" /></button>
+            <button class="icon-button" type="button" title="人工修改" aria-label="人工修改" :disabled="store.isBusy || store.chatBusy" @click="handleRiskAction('modified')"><SquarePen :size="15" /></button>
+            <button class="icon-button" type="button" title="延期处理" aria-label="延期处理" :disabled="store.isBusy || store.chatBusy" @click="handleRiskAction('deferred')"><Clock3 :size="15" /></button>
+            <button class="icon-button danger" type="button" title="删除风险" aria-label="删除风险" :disabled="store.isBusy || store.chatBusy" @click="handleRiskAction('deleted')"><Trash2 :size="15" /></button>
           </div>
           <div class="detail-body">
             <section class="detail-section quote-section"><div class="section-title">合同定位</div><div class="quote-box"><span>{{ locationLabel(currentRisk.contract_location) }}</span>{{ currentRisk.contract_location?.quote || "无可验证的原文片段" }}</div><div class="detail-meta"><div><small>文件版本</small><b>{{ currentRisk.contract_location?.file_version_id || "-" }}</b></div><div><small>定位置信度</small><b>{{ Math.round((currentRisk.location_confidence || 0) * 100) }}%</b></div></div></section>
