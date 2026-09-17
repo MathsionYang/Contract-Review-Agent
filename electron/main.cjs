@@ -14,6 +14,7 @@ const { createReviewChatService } = require("./review-chat.cjs");
 const { createCredentialStore } = require("./credential-store.cjs");
 const { invokeModel, testModelConnection } = require("./model-gateway.cjs");
 const { createVectorCache } = require("./knowledge-retrieval.cjs");
+const { probeSkill, analyzeContract, discoverSkills } = require("./clause-skill.cjs");
 const { deleteKnowledgeEntries } = require("../src/services/knowledgeManagement.mjs");
 const { applyModelUpdate } = require("../src/services/modelState.mjs");
 
@@ -298,7 +299,12 @@ function registerIpc() {
       const result = await runReview({
         review,
         state: stored,
-        services: { invokeModel: invokeConfiguredModel, vectorCache, signal: controller.signal },
+        services: { invokeModel: invokeConfiguredModel, vectorCache, signal: controller.signal,
+          // 抽取缓存的读写与失效判断都留在主进程，渲染层只看到命中结果与来源标记。
+          extractionCache: {
+            load: (hash) => storage.loadExtractionCache(hash),
+            save: (hash, entry) => storage.saveExtractionCache(hash, entry)
+          } },
         onProgress: (progress) => sendReviewProgress(projectId, { ...progress, runId, sequence: ++sequence, fileVersionId: review.project?.file_version_id })
       });
       const latest = storage.loadState();
@@ -331,7 +337,43 @@ function registerIpc() {
     if (runningReviewProjects.size || reviewChatService.activeRequestCount()) {
       throw new Error("审查或对话正在运行，请等待完成后再删除任务");
     }
-    return storage.deleteTask(options.projectId);
+    const nextState = storage.deleteTask(options.projectId);
+    // 只回收"删完之后已经没有任何在用审查引用"的抽取缓存，其它任务的缓存必须保留。
+    const referenced = new Set(Object.values(nextState.reviews || {}).map((item) => item?.document?.sha256).filter(Boolean));
+    const orphaned = storage.listExtractionCacheHashes().filter((hash) => !referenced.has(hash));
+    const removed = orphaned.length ? storage.pruneExtractionCache(orphaned) : 0;
+    if (!removed) return nextState;
+    return storage.saveState(mergeAudit(nextState, auditEntry("清理抽取缓存", "orphaned", "成功", `随任务删除回收 ${removed} 份抽取结果`)));
+  });
+
+  // 抽取缓存是纯性能副本：可随时整体清理，不影响任何已保存的审查结果。
+  ipcMain.handle("extraction-cache:clear", () => {
+    if (runningReviewProjects.size || reviewChatService.activeRequestCount()) throw new Error("审查或对话正在运行，请稍后再清理缓存");
+    const result = storage.clearExtractionCache();
+    return { ...result, state: storage.saveState(mergeAudit(storage.loadState(), auditEntry("清理抽取缓存", "all", "成功", `清理 ${result.removed} 份缓存，释放 ${result.bytes} 字节`))) };
+  });
+
+  // 条款抽取 Skill 状态：用于界面提示可用性；不可用时审查链路自动回退到内置解析，不阻塞用户。
+  // 列表来自目录扫描，因此升级 Skill 只需替换目录，界面与后端同时生效。
+  ipcMain.handle("clause-skill:status", async (_event, options = {}) => {
+    const status = await probeSkill({ refresh: Boolean(options?.refresh) });
+    return { ...status, discovered: discoverSkills().map((skill) => ({ name: skill.name, version: skill.version,
+      description: skill.description, directory: skill.directory, contract_source: skill.contractSource,
+      script: skill.script, declares_blocks: skill.declares_blocks })) };
+  });
+
+  // 用 Skill 的条级结构复核当前合同的条边界，供人工核验；不改动任何审查结果。
+  ipcMain.handle("clause-skill:analyze", async (_event, options = {}) => {
+    const projectId = String(options.projectId || "");
+    const review = storage.loadState().reviews?.[projectId];
+    if (!review?.document) throw new Error("当前项目没有可解析的合同版本");
+    const storedPath = review.project?.stored_path || "";
+    if (!storedPath || !fs.existsSync(storedPath)) throw new Error("找不到合同原始文件的本地副本");
+    const analysis = await analyzeContract(storedPath, review.document);
+    if (!analysis.ok) return { ...analysis, state: storage.loadState() };
+    const nextState = mergeAudit(storage.loadState(), auditEntry("条款结构复核", projectId, "成功",
+      `Skill 识别 ${analysis.articles.length} 条，块数 ${analysis.block_count}`));
+    return { ...analysis, state: storage.saveState(nextState) };
   });
 
   ipcMain.handle("review:chat", async (_event, options = {}) => reviewChatService.chat(options));

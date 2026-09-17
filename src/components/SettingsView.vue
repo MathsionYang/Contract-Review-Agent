@@ -2,12 +2,14 @@
 import { reactive, ref, watch } from "vue";
 import { Check, FolderOpen, HardDrive, LockKeyhole, RotateCcw, Save, ShieldCheck, Trash2 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
+import { electronApi } from "../services/electronApi";
 import { defaultSettings } from "../data/sampleData";
 
 const store = useReviewStore();
 defineEmits(["new-review", "open-review", "configure", "export"]);
 const settings = reactive({ ...defaultSettings });
 const legalAllowlistText = ref("");
+const cacheBusy = ref(false);
 const exportOptions = ["DOCX", "PDF", "XLSX", "JSON"];
 
 watch(
@@ -55,8 +57,18 @@ function openWorkspaceInfo() {
   store.notify("本地工作区由 Electron 主进程管理，合同原件不会上传到渲染层", "ok");
 }
 
-function clearLocalCache() {
-  store.notify("当前版本没有独立缓存文件，清理操作不会删除合同原件或审查版本", "ok");
+// 抽取缓存是纯性能副本：清理不会删除合同原件、审查版本、风险或审计记录。
+async function clearLocalCache() {
+  cacheBusy.value = true;
+  try {
+    const result = await electronApi.clearExtractionCache();
+    if (result?.state) store.state = result.state;
+    store.notify(`已清理 ${result?.removed || 0} 份条款抽取缓存，释放 ${Math.round((result?.bytes || 0) / 1024)} KB`, "ok");
+  } catch (error) {
+    store.notify(error.message || "抽取缓存清理失败", "warn");
+  } finally {
+    cacheBusy.value = false;
+  }
 }
 </script>
 
@@ -80,7 +92,8 @@ function clearLocalCache() {
         <div class="setting-row"><span>存储模式</span><strong>本地文件系统</strong></div>
         <div class="setting-row"><span>当前项目</span><strong>{{ store.activeProject?.project_name || "未导入合同" }}</strong></div>
         <div class="setting-row"><span>原始文件</span><strong class="mono setting-value">{{ store.activeProject?.stored_path || "等待导入" }}</strong></div>
-        <div class="settings-card-actions"><button class="button small-button" type="button" @click="openWorkspaceInfo"><FolderOpen :size="14" />查看存储说明</button><button class="icon-button" type="button" title="清理临时缓存" aria-label="清理临时缓存" @click="clearLocalCache"><Trash2 :size="15" /></button></div>
+        <div class="setting-row"><span>条款抽取缓存</span><strong>{{ store.review?.extraction_source === 'cache' ? '本次复用本地缓存' : store.review?.extraction_source === 'model' ? '本次实时抽取' : '尚未抽取' }}</strong></div>
+        <div class="settings-card-actions"><button class="button small-button" type="button" @click="openWorkspaceInfo"><FolderOpen :size="14" />查看存储说明</button><button class="button small-button" type="button" :disabled="cacheBusy" @click="clearLocalCache"><Trash2 :size="14" />{{ cacheBusy ? "清理中" : "清理抽取缓存" }}</button></div>
       </section>
 
       <section class="panel settings-card">

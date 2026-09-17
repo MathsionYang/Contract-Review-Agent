@@ -171,7 +171,8 @@ onBeforeUnmount(() => clearInterval(timer));
           </ul>
         </div>
         <p v-if="summary.duplicate_fact_count || summary.rejected_fact_count" class="extraction-validation">已去重 {{ count(summary.duplicate_fact_count) }} 条 · 未通过校验 {{ count(summary.rejected_fact_count) }} 条</p>
-        <p v-if="summary.truncated_batch_count" class="extraction-validation">有 {{ count(summary.truncated_batch_count) }} 批输出达到长度上限，已自动拆分为 {{ count(summary.split_batch_count) }} 个子批次继续抽取</p>
+        <p v-if="summary.truncated_batch_count" class="extraction-validation">有 {{ count(summary.truncated_batch_count) }} 批输出达到长度上限：已将输出预算提高到 {{ count(summary.max_output_tokens_used) }} token 重试<span v-if="summary.split_batch_count">，并对 {{ count(summary.split_batch_count) }} 个批次做了拆分</span></p>
+        <p v-if="summary.budget_escalation_count" class="extraction-validation">输出预算共提高 {{ count(summary.budget_escalation_count) }} 次（上限 {{ count(summary.output_token_budget_ceiling) }} token）。若仍频繁出现，请提高抽取模型的输出预算或改用非推理模型。</p>
       </div>
     </div>
   </article>

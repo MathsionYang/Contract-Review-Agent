@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const http = require("node:http");
 const { invokeModel, testModelConnection } = require("../electron/model-gateway.cjs");
-const { extractWithModel, extractionBatches } = require("../electron/model-extraction.cjs");
+const { extractWithModel, extractionBatches, MAX_BUDGET_ESCALATIONS } = require("../electron/model-extraction.cjs");
 const { extractContractFacts } = require("../electron/contract-facts.cjs");
 const { createKnowledgeRetriever, createVectorCache } = require("../electron/knowledge-retrieval.cjs");
 const { runReview } = require("../electron/review-runner.cjs");
@@ -143,8 +143,11 @@ test("抽取分批覆盖长文，失败保留规则及已完成批次，小窗�
   const batches = extractionBatches(doc, chosen);
   assert.ok(batches.length > 1);
   assert.ok(batches.every((batch) => estimateTokens(batch.messages) <= 1488));
-  const covered = new Set(batches.flatMap((batch) => batch.blocks.flatMap((block) => Array.from({ length: block.text.length }, (_, i) => i + block.offset))));
-  assert.equal(covered.size, doc.text.length);
+  // 超长块必须被完整切分：按 block_id + offset 可以无损还原原文。
+  const restored = batches.flatMap((batch) => batch.blocks)
+    .map((unit) => String(doc.blocks.find((block) => block.block_id === unit.block_id)?.text || "").slice(unit.offset, unit.offset + unit.text.length))
+    .join("");
+  assert.equal(restored, doc.text);
   let calls = 0;
   const result = await extractWithModel(doc, { model: chosen, invokeModel: async () => ++calls === 1 ? { ok: true, data: { facts: [] } } : { ok: false, errorCode: "MODEL_REQUEST_TIMEOUT", message: "timeout" } });
   assert.equal(result.summary.status, "degraded");
@@ -179,9 +182,9 @@ test("单批原文与块数受限，避免一次响应承载整份合同", async
   const batches = extractionBatches(doc, model("extraction", { timeoutMs: 180000 }));
   assert.ok(batches.length > 1, "长合同必须拆成多个批次");
   for (const batch of batches) {
-    assert.ok(batch.blocks.length <= 24, "单批请求块数必须受限");
+    assert.ok(batch.blocks.length <= 64, "单批请求单元数必须受限");
     const chars = batch.blocks.reduce((total, block) => total + block.text.length, 0);
-    assert.ok(chars <= 2400, `单批原文过长：${chars}`);
+    assert.ok(chars <= 6000, `单批原文过长：${chars}`);
   }
   // 覆盖率不能因为拆批而丢失任何原文偏移（offset 是块内偏移，按 block_id 分别核对）。
   const covered = new Map();
@@ -221,23 +224,65 @@ test("空闲超时按首字节前后区分，推理长时间无输出也能等�
   assert.equal(recovered.ok, true);
 });
 
-test("输出达到长度上限时自动拆分批次，不整批丢失事实", async () => {
+test("输出达到长度上限时优先提高输出预算重试同一批，而不是拆小批次", async () => {
   const blocks = Array.from({ length: 8 }, (_, index) => ({ block_id: `b${index + 1}`, page: null, logical_page: 1, text: "第 X 条 付款与交付约定。" }));
   const doc = { text: blocks.map((block) => block.text).join(""), documentType: "docx", pages: [{ page: 1, text: "" }], blocks };
   const chosen = model("extraction");
   const requests = [];
   const result = await extractWithModel(doc, { model: chosen, invokeModel: async (request) => {
     requests.push(request);
-    // 第一次请求模拟被 max_tokens 截断，之后的子批次正常返回。
-    if (requests.length === 1) return { ok: false, errorCode: "MODEL_OUTPUT_TRUNCATED", message: "模型输出达到长度上限，审查尚未完成" };
-    return { ok: true, data: { facts: [] } };
+    // 前两次截断，第三次成功：应当靠增加输出预算解决，批次保持不拆。
+    return requests.length <= 2
+      ? { ok: false, errorCode: "MODEL_OUTPUT_TRUNCATED", message: "模型输出达到长度上限，审查尚未完成" }
+      : { ok: true, data: { facts: [] } };
   } });
   assert.ok(requests.length > 1, "截断后必须重试而不是放弃整批");
-  assert.equal(result.summary.truncated_batch_count, 1);
-  assert.ok(result.summary.split_batch_count >= 1);
-  assert.equal(result.summary.status, "completed", "拆分后全部子批次成功，不应降级");
+  // 输出预算必须逐次提高，且不改动批次组成。
+  const budgets = requests.map((request) => request.model.maxTokens);
+  assert.ok(budgets[1] > budgets[0], `预算必须提高：${budgets.join(" → ")}`);
+  assert.ok(Math.max(...budgets) >= budgets[0] * 2, "至少提高过一档");
+  for (const request of requests) assert.equal(request.messages.length, requests[0].messages.length, "批次内容不得因截断而改变");
+  assert.equal(result.summary.split_batch_count, 0, "单纯截断不应触发拆分");
+  assert.equal(result.summary.budget_escalation_count, 2);
+  assert.equal(result.summary.truncated_batch_count, 2);
+  assert.equal(result.summary.status, "completed");
   assert.equal(result.summary.completed_batches, result.summary.total_batches);
-  assert.ok(result.warnings.some((warning) => warning.code === "EXTRACTION_BATCH_TRUNCATED"));
+  assert.ok(result.warnings.some((warning) => warning.code === "EXTRACTION_BUDGET_ESCALATED"));
+});
+
+test("预算提到上限仍截断时最多再拆一层，且批次总数不再膨胀", async () => {
+  const blocks = Array.from({ length: 8 }, (_, index) => ({ block_id: `b${index + 1}`, page: null, logical_page: 1, text: "第 X 条 付款与交付约定。" }));
+  const doc = { text: blocks.map((block) => block.text).join(""), documentType: "docx", pages: [{ page: 1, text: "" }], blocks };
+  const originalBatches = extractionBatches(doc, model("extraction")).length;
+  const requests = [];
+  const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async (request) => {
+    requests.push(request);
+    return { ok: false, errorCode: "MODEL_OUTPUT_TRUNCATED", message: "截断" };
+  } });
+  // 拆分上限为 1 层：原始批次数不因拆分而增长。
+  assert.equal(result.summary.total_batches, originalBatches, "total_batches 必须保持为原始批次数");
+  assert.ok(result.summary.split_batch_count >= 1);
+  // 每个批次最多尝试 1 + 最大提额次数次；拆分上限 1 层，因此最多再多出 2 个子批次。
+  // 关键断言是"有硬上限且与内容规模无关"，而不是过去 64→32→16→8→… 那种指数级级联。
+  const maxAttemptsPerBatch = 1 + MAX_BUDGET_ESCALATIONS;
+  const ceiling = originalBatches * maxAttemptsPerBatch * 3;
+  assert.ok(requests.length <= ceiling, `调用次数必须有硬上限（≤ ${ceiling}），实际 ${requests.length}`);
+  // 拆分只发生一次，不会继续级联。
+  assert.equal(result.summary.split_batch_count, originalBatches, "每个原始批次最多拆一次");
+  assert.equal(result.summary.status, "degraded");
+});
+
+test("单块批次预算用尽时不再按字符空拆，直接如实报告预算不足", async () => {
+  const doc = document("2.1 价款 100 元。");
+  const requests = [];
+  const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async (request) => {
+    requests.push(request);
+    return { ok: false, errorCode: "MODEL_OUTPUT_TRUNCATED", message: "截断" };
+  } });
+  // 单块批次无法按单元再拆，切开只会把同一次推理重跑，因此必须直接报告而不是继续重试。
+  assert.equal(result.summary.split_batch_count, 0, "单块批次不应拆分");
+  assert.ok(result.warnings.some((warning) => warning.code === "EXTRACTION_OUTPUT_BUDGET_EXHAUSTED"));
+  assert.equal(result.summary.status, "degraded");
 });
 
 test("单块内容过长且持续被截断时，按原文偏移再切分", async () => {
@@ -255,6 +300,110 @@ test("单块内容过长且持续被截断时，按原文偏移再切分", async
   assert.ok(truncated > 0, "必须触发过截断以验证切分路径");
   assert.equal(result.summary.status, "completed");
   assert.ok(result.summary.completed_batches >= result.summary.total_batches);
+});
+
+test("同一表格的一行合并为一个单元，但仍按单元格锚定事实", async () => {
+  // 84 个单元格各占一个块会把合同撑成十几个批次，且单格脱离表头后几乎没有语义。
+  const cell = (row, column, text) => ({ block_id: `c_${row}_${column}`, logical_page: 1, block_type: "table_cell", text,
+    table_ref: { table_id: "table_1", row, column } });
+  const blocks = [
+    { block_id: "p0", logical_page: 1, text: "第二条 价款" },
+    cell(0, 0, "序号"), cell(0, 1, "项目"), cell(0, 2, "金额（元）"),
+    cell(1, 0, "1"), cell(1, 1, "云枢 MES V3.0 软件"), cell(1, 2, "960,000"),
+    { block_id: "p1", logical_page: 1, text: "第三条 交付" }
+  ];
+  const doc = { text: blocks.map((block) => block.text).join("\n"), documentType: "docx", pages: [{ page: 1, text: "" }], blocks };
+  const batches = extractionBatches(doc, model("extraction", { timeoutMs: 180000 }));
+  const units = batches.flatMap((batch) => batch.blocks);
+  // 两行各自合并成一个带 line 的单元，单元格顺序按 column 保留。
+  const rowUnits = units.filter((unit) => unit.line);
+  assert.equal(rowUnits.length, 2, "每行应合并为一个单元");
+  const firstLine = JSON.parse(rowUnits[0].line);
+  assert.equal(firstLine.table_id, "table_1");
+  assert.equal(firstLine.row, 0);
+  assert.deepEqual(firstLine.cells.map((item) => item.column), [0, 1, 2]);
+  assert.deepEqual(firstLine.cells.map((item) => item.text), ["序号", "项目", "金额（元）"]);
+  // 每个单元格的 block_id 仍在提示里，模型才能把事实锚定回单格。
+  assert.deepEqual(firstLine.cells.map((item) => item.block_id), ["c_0_0", "c_0_1", "c_0_2"]);
+  // 合并后仍按单元格完成锚定，不会因为合并而丢失证据。
+  // clause_no 由块定义推导（真实解析结果的表格单元格会继承所在条款号）。
+  const result = await extractWithModel(doc, { model: model("extraction"), invokeModel: async () => ({ ok: true, data: { facts: [
+    { fact_type: "money", value: "960000", raw_text: "960,000", block_id: "c_1_2" }
+  ] } }) });
+  const money = result.facts.filter((fact) => fact.fact_type === "money");
+  assert.equal(money.length, 1);
+  assert.equal(money[0].source_refs[0].block_id, "c_1_2");
+  assert.equal(money[0].raw_text, "960,000");
+  assert.equal(result.summary.rejected_fact_count, 0);
+});
+
+test("表格行合并不跨行、不跨表，也不丢单元格", async () => {
+  const cell = (table, row, column, text) => ({ block_id: `${table}_${row}_${column}`, logical_page: 1, text,
+    table_ref: { table_id: table, row, column } });
+  const blocks = [
+    cell("table_1", 0, 0, "A"), cell("table_1", 0, 1, "B"),
+    cell("table_1", 1, 0, "C"), cell("table_1", 1, 1, "D"),
+    cell("table_2", 0, 0, "E"), cell("table_2", 0, 1, "F")
+  ];
+  const doc = { text: blocks.map((block) => block.text).join("\n"), documentType: "docx", pages: [{ page: 1, text: "" }], blocks };
+  const units = extractionBatches(doc, model("extraction", { timeoutMs: 180000 })).flatMap((batch) => batch.blocks);
+  const lines = units.filter((unit) => unit.line).map((unit) => JSON.parse(unit.line));
+  assert.equal(lines.length, 3, "两张表共三行应产生三个单元");
+  assert.deepEqual(lines.map((line) => `${line.table_id}#${line.row}`), ["table_1#0", "table_1#1", "table_2#0"]);
+  const referenced = new Set(lines.flatMap((line) => line.cells.map((item) => item.block_id)));
+  assert.equal(referenced.size, blocks.length, "所有单元格都必须出现在提示中");
+});
+
+test("系统提示声明表格行结构，模型才能正确引用单元格", () => {
+  const cell = (row, column, text) => ({ block_id: `c${row}${column}`, logical_page: 1, text, table_ref: { table_id: "t", row, column } });
+  const doc = { text: "a\nb", documentType: "docx", pages: [{ page: 1, text: "" }], blocks: [cell(0, 0, "a"), cell(0, 1, "b")] };
+  const batch = extractionBatches(doc, model("extraction", { timeoutMs: 180000 }))[0];
+  const system = batch.messages.find((message) => message.role === "system").content;
+  // 输入已改用短字段名，提示必须同步说明 r（表格行）与 i（单元格块号）。
+  assert.ok(system.includes("r 数组"), "提示必须说明表格行字段 r");
+  assert.ok(system.includes("i 必须填写"), "提示必须要求按单元格块号 i 引用");
+  assert.ok(system.includes("不得跨单元格拼接"), "提示必须禁止跨单元格拼接引文");
+  // 输入真的使用短字段：不应再发送完整字段名。
+  const payload = JSON.parse(batch.messages.find((message) => message.role === "user").content);
+  const first = payload.blocks[0];
+  assert.ok("i" in first && "t" in first, "输入必须使用短字段名");
+  assert.equal("block_id" in first, false, "输入不得再发送完整字段名");
+  assert.ok(Array.isArray(first.r) && first.r.every((item) => "i" in item && "t" in item), "表格行必须用短字段");
+});
+
+test("抽出口径决定提示词允许的事实类型，越界类型被丢弃并计数", async () => {
+  const typeLine = (batch) => batch.messages.find((m) => m.role === "system").content
+    .split("\n").find((line) => line.startsWith("fact_type 只能取"));
+  const doc = document("2.1 价款 100 元，预付款 30%。");
+  const essentialLine = typeLine(extractionBatches(doc, model("extraction", { timeoutMs: 180000 }), { scope: "essential" })[0]);
+  for (const type of ["money", "ratio", "duration", "obligation", "penalty"]) {
+    assert.ok(essentialLine.includes(type), `essential 档位必须包含 ${type}`);
+  }
+  for (const type of ["condition", "date", "reference", "clause", "party"]) {
+    assert.equal(essentialLine.includes(type), false, `essential 档位不得要求 ${type}`);
+  }
+  const fullLine = typeLine(extractionBatches(doc, model("extraction", { timeoutMs: 180000 }), { scope: "full" })[0]);
+  assert.ok(fullLine.includes("condition") && fullLine.includes("party"), "full 档位保留全部类型");
+
+  const result = await extractWithModel(doc, { model: model("extraction"), scope: "essential",
+    invokeModel: async () => ({ ok: true, data: { facts: [
+      { fact_type: "money", value: "100", raw_text: "100 元", block_id: "b1" },
+      { fact_type: "condition", value: "验收后", raw_text: "预付款", block_id: "b1" }
+    ] } }) });
+  assert.equal(result.summary.out_of_scope_fact_count, 1);
+  assert.equal(result.facts.some((fact) => fact.fact_type === "condition"), false);
+  assert.equal(result.summary.scope, "essential");
+  assert.deepEqual(result.summary.scope_fact_types, ["money", "ratio", "duration", "obligation", "penalty"]);
+});
+
+test("超长普通块按偏移完整切分，不丢任何原文", async () => {
+  const long = "甲方向乙方支付价款并交付验收。".repeat(400);
+  const doc = { text: long, documentType: "docx", pages: [{ page: 1, text: "" }], blocks: [{ block_id: "b1", logical_page: 1, text: long }] };
+  const units = extractionBatches(doc, model("extraction", { timeoutMs: 180000 })).flatMap((batch) => batch.blocks);
+  assert.ok(units.length > 1, "超长块必须被切分");
+  const restored = units.map((unit) => long.slice(unit.offset, unit.offset + unit.text.length)).join("");
+  assert.equal(restored, long, "切分必须无损");
+  assert.ok(units.every((unit) => unit.block_id === "b1"), "切分后仍指向同一块");
 });
 
 test("向量语义召回非同词知识，保留候选状态、快照和来源定位", async () => {

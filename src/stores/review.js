@@ -834,6 +834,36 @@ export const useReviewStore = defineStore("review", () => {
     }
   }
 
+  // 审查 Skill 列表以磁盘扫描结果为准：不写死名称，升级 Skill 只需替换目录。
+  // 已保存的启停状态按名称保留，新出现的 Skill 默认启用，已移除的自动消失。
+  const clauseSkill = ref({ available: false, reason: "unknown", discovered: [] });
+  async function loadClauseSkill(options = {}) {
+    try {
+      const status = await electronApi.clauseSkillStatus({ refresh: Boolean(options.refresh) });
+      clauseSkill.value = status || { available: false, discovered: [] };
+      const discovered = Array.isArray(status?.discovered) ? status.discovered : [];
+      const previous = new Map((state.value.capabilities?.skills || []).map((item) => [item.name, item]));
+      state.value.capabilities = {
+        ...(state.value.capabilities || {}),
+        skills: discovered.map((skill) => ({
+          name: skill.name,
+          version: skill.version || "未标注",
+          scope: skill.declares_blocks ? "条款抽取" : "全部合同",
+          description: skill.description || "",
+          status: previous.get(skill.name)?.status === "disabled" ? "disabled" : "enabled",
+          source: "local",
+          directory: skill.directory,
+          contract_source: skill.contract_source,
+          available: Boolean(status?.available && status?.skill?.name === skill.name)
+        }))
+      };
+      return status;
+    } catch (error) {
+      clauseSkill.value = { available: false, reason: "probe_failed", message: error.message, discovered: [] };
+      return clauseSkill.value;
+    }
+  }
+
   async function toggleSkill(name) {
     const skill = (state.value.capabilities?.skills || []).find((item) => item.name === name);
     if (!skill) return;
@@ -901,6 +931,6 @@ export const useReviewStore = defineStore("review", () => {
     bootstrap, persist, notify, selectRisk, clearRisk, selectProject, deleteReviewTask, saveChecklistReview, syncActiveReviewExecution, setPage, setZoom, applyRiskAction, importContract, runReview, cancelReview, importKnowledgeFiles, importLegalSnapshot, verifyLegalRealtime,
     saveConfig, updateLegalSnapshot, updateEnterpriseMemory, toggleKnowledge, addKnowledge, updateKnowledge, deleteKnowledge, saveModel, deleteModel,
     saveSelectionAnnotation, reviewSelection, setChatModel, updateChatContextPreferences, chatReview, retryChat, cancelChat, confirmMemoryCandidate, dismissMemoryCandidate,
-    toggleModel, validateModel, toggleSkill, updateSettings, runValidator, runExport, resetSample
+    toggleModel, validateModel, toggleSkill, loadClauseSkill, clauseSkill, updateSettings, runValidator, runExport, resetSample
   };
 });

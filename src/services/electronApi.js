@@ -56,6 +56,18 @@ export const electronApi = {
     if (!bridge?.cancelReview) return Promise.resolve({ ok: false, status: "unsupported", message: "请重启桌面端以启用停止审查功能" });
     return bridge.cancelReview(toCloneable(payload));
   },
+  clearExtractionCache() {
+    if (!bridge?.clearExtractionCache) return Promise.reject(new Error("请重启桌面端以启用抽取缓存清理功能"));
+    return bridge.clearExtractionCache();
+  },
+  clauseSkillStatus(payload) {
+    if (!bridge?.clauseSkillStatus) return Promise.resolve({ available: false, reason: "bridge_unavailable", discovered: [] });
+    return bridge.clauseSkillStatus(toCloneable(payload || {}));
+  },
+  clauseSkillAnalyze(payload) {
+    if (!bridge?.clauseSkillAnalyze) return Promise.reject(new Error("请重启桌面端以启用条款结构复核功能"));
+    return bridge.clauseSkillAnalyze(toCloneable(payload));
+  },
   async deleteReviewTask(projectId) {
     if (bridge) {
       if (!bridge.deleteReviewTask) throw new Error("请重启桌面端以启用任务删除功能");

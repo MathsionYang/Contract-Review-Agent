@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const { buildKnowledgeItem, searchKnowledgeSources } = require("./knowledge.cjs");
 const { evaluateDeterministicRules, mergeReviewFindings, normalizeModelRisks } = require("./review-engine.cjs");
 const { extractContractFacts } = require("./contract-facts.cjs");
@@ -8,12 +9,50 @@ const { validateReview } = require("./validator.cjs");
 const { coverageFrom } = require("./checklist-policy.cjs");
 const { estimateTokens } = require("./context-assembler.cjs");
 const { createRiskStream } = require("./risk-stream.cjs");
-const { extractWithModel } = require("./model-extraction.cjs");
+const { extractWithModel, EXTRACTION_PROMPT_VERSION } = require("./model-extraction.cjs");
+const { compact } = require("./contract-evidence.cjs");
 const { executionModel, modelIdentity } = require("./model-runtime.cjs");
 const { createKnowledgeRetriever } = require("./knowledge-retrieval.cjs");
 
 function now() {
   return new Date().toISOString();
+}
+
+// 抽取缓存的键结构版本：键的构成发生变化时必须递增，否则旧缓存会被误判为命中。
+const EXTRACTION_CACHE_KEY_VERSION = "extract-cache-v1";
+// 解析器块结构版本：块 id、字符范围或分页语义变化时必须递增，否则缓存事实会指向错误位置。
+const PARSER_BLOCK_VERSION = "parser-blocks-v2";
+
+function extractionFingerprint({ document, model, scope, promptVersion, maxTokens }) {
+  return [EXTRACTION_CACHE_KEY_VERSION, document?.sha256 || "", PARSER_BLOCK_VERSION, promptVersion || "",
+    scope || "full", model?.configId || "", model?.modelId || model?.name || "", model?.version || "",
+    String(Number(maxTokens) || 0)].join("|");
+}
+
+// 缓存内容用当前解析结果重新锚定：块不存在、哈希对不上或定位失败一律丢弃，
+// 避免解析器升级后复用指向旧块结构的事实而产生静默的证据错位。
+function blockTextHash(text) {
+  return `sha256:${crypto.createHash("sha256").update(String(text || "")).digest("hex")}`;
+}
+
+function revalidateCachedFacts(facts, document) {
+  const blocks = new Map((document?.blocks || []).map((block) => [block.block_id, block]));
+  const kept = [];
+  let dropped = 0;
+  for (const fact of Array.isArray(facts) ? facts : []) {
+    if (!fact || typeof fact !== "object" || !Array.isArray(fact.source_refs) || !fact.source_refs.length) { dropped += 1; continue; }
+    const ref = fact.source_refs[0];
+    const block = blocks.get(ref.block_id);
+    // 块可能没有预存 text_hash（例如无表格的旧解析结果），此时按当前文本重算再比对。
+    const currentHash = block ? (block.text_hash || blockTextHash(block.text)) : "";
+    const usable = Boolean(block)
+      && (!ref.text_hash || ref.text_hash === currentHash)
+      && Array.isArray(ref.char_range) && ref.char_range[0] >= 0 && ref.char_range[1] <= String(block.text || "").length
+      && compact(String(block.text || "").slice(ref.char_range[0], ref.char_range[1])) === compact(String(fact.raw_text || ""));
+    if (!usable) { dropped += 1; continue; }
+    kept.push(fact);
+  }
+  return { facts: kept, dropped };
 }
 
 function selectedItems(state, kind, configuredNames) {
@@ -246,25 +285,63 @@ async function runReview(options = {}) {
   // 记录已上报的活动刻度，避免抽取阶段重复推送同一批次的相同状态。
   const extractionMarks = new Map();
   let extracted;
-  try {
-    extracted = await extractWithModel(document, { contractType: review.project.contract_type,
-      baseline: extractContractFacts(document, { contractType: review.project.contract_type }),
-      model: executionModel(state, review, "extraction"), invokeModel: services.invokeModel || invokeModel,
-      signal,
-      onProgress: (summary) => {
-        // 抽取模块不感知时间线，这里保留已累积的活动记录，避免被每批上报覆盖。
-        review.execution_summary.extraction = { ...summary, activities: review.execution_summary.extraction?.activities ?? [] };
-        const fraction = summary.total_batches ? summary.completed_batches / summary.total_batches : 0;
-        const key = `${summary.phase}:${summary.current_batch}:${summary.completed_batches}`;
-        if (summary.phase !== "finished" && extractionMarks.get("extract") !== key) {
-          extractionMarks.set("extract", key);
-          pushActivity("extraction", summary.phase, { batch: summary.current_batch, total_batches: summary.total_batches,
-            received_char_count: summary.received_char_count, received_token_estimate: summary.received_token_estimate,
-            reasoning_char_count: summary.reasoning_char_count, clause_no: summary.current_source?.clause_no || "" });
-        }
-        progress("extract", Math.round(12 + 15 * fraction));
+  const extractionModel = executionModel(state, review, "extraction");
+  const extractionScope = services.extractionScope || "essential";
+  const cacheKey = extractionFingerprint({ document, model: extractionModel, scope: extractionScope,
+    promptVersion: EXTRACTION_PROMPT_VERSION, maxTokens: extractionModel?.maxTokens || 4096 });
+  const baseline = extractContractFacts(document, { contractType: review.project.contract_type });
+  let cacheStatus = { hit: false, key: cacheKey, reason: "disabled" };
+  // 缓存命中时不调用模型：事实仍需逐条按当前解析块重新校验，避免复用失效的证据引用。
+  if (services.extractionCache && document.sha256) {
+    const cached = services.extractionCache.load(document.sha256);
+    if (!cached) cacheStatus = { hit: false, key: cacheKey, reason: "miss" };
+    else if (cached.key !== cacheKey) cacheStatus = { hit: false, key: cacheKey, reason: "key_changed" };
+    else {
+      const { facts: revalidated, dropped } = revalidateCachedFacts(cached.facts, document);
+      // 键一致但引用失效说明解析块结构与缓存代次不匹配，必须整体重抽而不是留下半份结果。
+      if (dropped) cacheStatus = { hit: false, key: cacheKey, reason: "stale_refs", dropped };
+      else {
+        cacheStatus = { hit: true, key: cacheKey, reason: "hit", cached_at: cached.created_at || "",
+          model: cached.model || null, scope: cached.scope || extractionScope, prompt_version: cached.prompt_version || "" };
+        extracted = { ...baseline, facts: revalidated,
+          summary: { ...(cached.summary || {}), ...modelIdentity(extractionModel), status: "completed", phase: "cached",
+            call_count: 0, source: "cache", baseline_fact_count: baseline.facts.length,
+            total_fact_count: revalidated.length, completed_at: now(), latency_ms: 0,
+            cache: cacheStatus } };
       }
-    });
+    }
+  }
+  try {
+    if (extracted) {
+      // 缓存命中：不发起模型请求，直接把已校验的事实并入执行摘要。
+      pushActivity("extraction", "cache_hit", { cached_at: cacheStatus.cached_at, fact_count: extracted.facts.length });
+      review.execution_summary.extraction = { ...extracted.summary, activities: review.execution_summary.extraction?.activities ?? [] };
+      progress("extract", 27);
+    } else {
+      extracted = await extractWithModel(document, { contractType: review.project.contract_type,
+        baseline,
+        model: extractionModel, invokeModel: services.invokeModel || invokeModel,
+        signal,
+        scope: extractionScope,
+        onProgress: (summary) => {
+          // 抽取模块不感知时间线，这里保留已累积的活动记录，避免被每批上报覆盖。
+          review.execution_summary.extraction = { ...summary, activities: review.execution_summary.extraction?.activities ?? [] };
+          const fraction = summary.total_batches ? summary.completed_batches / summary.total_batches : 0;
+          const key = `${summary.phase}:${summary.current_batch}:${summary.completed_batches}`;
+          if (summary.phase !== "finished" && extractionMarks.get("extract") !== key) {
+            extractionMarks.set("extract", key);
+            pushActivity("extraction", summary.phase, { batch: summary.current_batch, total_batches: summary.total_batches,
+              received_char_count: summary.received_char_count, received_token_estimate: summary.received_token_estimate,
+              reasoning_char_count: summary.reasoning_char_count, clause_no: summary.current_source?.clause_no || "",
+              // 输出预算与拆分次数写进时间线，便于定位"为什么这次调用变多了"。
+              output_tokens: summary.max_output_tokens_used || 0,
+              budget_escalations: summary.budget_escalation_count || 0,
+              splits: summary.split_batch_count || 0 });
+          }
+          progress("extract", Math.round(12 + 15 * fraction));
+        }
+      });
+    }
   } catch (error) {
     if (String(error.code || "").includes("CANCEL")) {
       cancelled = true;
@@ -275,6 +352,23 @@ async function runReview(options = {}) {
   }
   // 抽取模块返回的是它自己的摘要，这里回填时间线，保证最终持久化的执行摘要仍带推理时间线。
   review.execution_summary.extraction = { ...extracted.summary, activities: review.execution_summary.extraction?.activities ?? [] };
+  review.execution_summary.extraction.cache = cacheStatus;
+  // 只在完整抽取成功时写缓存：被取消或降级的结果不缓存，否则后续会命中一份残缺事实。
+  if (!cancelled && !cacheStatus.hit && services.extractionCache && document.sha256
+    && review.execution_summary.extraction.status === "completed") {
+    try {
+      services.extractionCache.save(document.sha256, { key: cacheKey, created_at: now(), scope: extractionScope,
+        prompt_version: EXTRACTION_PROMPT_VERSION, parser_version: PARSER_BLOCK_VERSION,
+        model: modelIdentity(extractionModel), facts: extracted.facts,
+        summary: { ...review.execution_summary.extraction, activities: undefined, cache: undefined } });
+      cacheStatus = { ...cacheStatus, stored: true };
+    } catch (error) {
+      cacheStatus = { ...cacheStatus, stored: false, store_error: error.message };
+    }
+    review.execution_summary.extraction.cache = cacheStatus;
+  }
+  review.extraction_source = cacheStatus.hit ? "cache" : extractionModel ? "model" : "rules_only";
+  review.extraction_cache = cacheStatus;
   errors.push(...extracted.warnings.filter((warning) => warning.code.startsWith("EXTRACTION_")).map((warning) => ({ ...warning, stage: "extract" })));
   progress("rules", 28);
   const checked = runContractChecks({

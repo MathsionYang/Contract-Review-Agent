@@ -1,0 +1,45 @@
+{
+  "name": "contract-clause-extractor",
+  "skill_version": "1.0.0",
+  "description": "把 docx / PDF 合同抽成有序块（段落 + 表格 Markdown），供条款抽取与证据锚定使用。",
+  "inputs": ["docx", "pdf"],
+  "outputs": ["blocks", "format", "needs_ocr", "block_count"],
+  "script": "scripts/extract_blocks.py",
+  "runtime": {
+    "language": "python",
+    "min_version": "3.8",
+    "interpreter_candidates": {
+      "win32": ["py", "python", "python3"],
+      "default": ["python3", "python"]
+    },
+    "dependencies": {
+      "docx": "python-docx（docx 抽取必需）",
+      "fitz": "PyMuPDF（PDF 抽取，三选一）",
+      "pdfplumber": "pdfplumber（PDF 抽取，三选一）",
+      "pypdf": "pypdf（PDF 抽取，三选一）"
+    }
+  },
+  "block_contract": {
+    "required_root": ["blocks"],
+    "required_block": ["kind"],
+    "text_keys": ["text", "markdown"],
+    "kinds": ["paragraph", "table"],
+    "block_fields": {
+      "i": "块序号，从 0 递增，用于交叉核对顺序",
+      "kind": "paragraph | table",
+      "text": "段落原文（kind=paragraph 必有）",
+      "markdown": "表格 Markdown（kind=table 必有）",
+      "style": "段落样式名，用于识别条标题层级",
+      "heading_level": "标题级别，0 表示非标题",
+      "numbering": "自动编号信息，可为 null",
+      "page": "页码，docx 为 null，PDF 为所在页"
+    }
+  },
+  "usage": {
+    "command": "python scripts/extract_blocks.py <文件> --out <输出.json>",
+    "notes": [
+      "适配层只消费 blocks / format / needs_ocr / block_count，新增字段不会破坏集成。",
+      "上游依据 heading_level 与条编号识别条边界；删除或改名这些字段需要同步提升 skill_version。"
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 <script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import {
-  Check, Cpu, FileCode2, Pencil, PlugZap, Plus, Power, ShieldCheck, Sparkles, Trash2, UploadCloud, X
+  Check, Cpu, FileCode2, Pencil, PlugZap, Plus, Power, RotateCcw, ShieldCheck, Sparkles, Trash2, UploadCloud, X
 } from "lucide-vue-next";
 import { useReviewStore } from "../stores/review";
 import { electronApi } from "../services/electronApi";
@@ -37,7 +37,16 @@ const credentialStatusLoading = ref(false);
 const modelSaving = ref(false);
 
 const models = computed(() => store.state.capabilities?.models || []);
-const enabledSkillCount = computed(() => (store.state.capabilities?.skills || []).filter((item) => item.status === "enabled").length);
+const skills = computed(() => store.state.capabilities?.skills || []);
+const enabledSkillCount = computed(() => skills.value.filter((item) => item.status === "enabled").length);
+const skillHealth = computed(() => {
+  const status = store.clauseSkill || {};
+  if (status.available) return { tone: "success", label: "可加载", detail: `解释器 ${status.interpreter || "-"}` };
+  const reasons = { python_not_found: "未检测到 Python", missing_dependency: "缺少 Python 依赖", skill_not_found: "未发现 Skill 目录", script_missing: "缺少 Skill 脚本" };
+  return { tone: "warning", label: reasons[status.reason] || "不可用", detail: status.message || "审查将回退到内置解析" };
+});
+// 列表来自磁盘扫描，进入页面时刷新一次，升级 Skill 后无需重启即可看到新版本。
+onMounted(() => { store.loadClauseSkill(); });
 
 function createEmptyModel() {
   return {
@@ -175,25 +184,27 @@ function formatTestedAt(value) {
         </div>
         <div class="panel-header-actions">
           <span class="badge badge-primary">{{ enabledSkillCount }} 项启用</span>
-          <button class="icon-button" type="button" title="安装 Skill" aria-label="安装 Skill" @click="store.notify('Skill 安装入口将在 Electron 版本中接入签名校验', 'warn')"><UploadCloud :size="16" /></button>
+          <span class="badge" :class="skillHealth.tone === 'success' ? 'badge-success' : 'badge-warning'" :title="skillHealth.detail">条款抽取 · {{ skillHealth.label }}</span>
+          <button class="icon-button" type="button" title="重新扫描 Skill 目录" aria-label="重新扫描 Skill 目录" @click="store.loadClauseSkill({ refresh: true })"><RotateCcw :size="16" /></button>
         </div>
       </div>
       <div class="capability-grid">
-        <article v-for="skill in store.state.capabilities?.skills" :key="skill.name" class="capability-card">
+        <article v-for="skill in skills" :key="skill.name" class="capability-card">
           <div class="capability-icon"><ShieldCheck :size="19" /></div>
           <div class="capability-card-main">
             <div class="capability-card-title">
               <strong>{{ skill.name }}</strong>
-              <span class="badge" :class="skill.status === 'enabled' ? 'badge-success' : skill.status === 'isolated' ? 'badge-danger' : 'badge-warning'">{{ statusLabels[skill.status] || skill.status }}</span>
+              <span class="badge" :class="skill.available === false ? 'badge-warning' : skill.status === 'enabled' ? 'badge-success' : 'badge-warning'">{{ skill.available === false ? '不可用' : statusLabels[skill.status] || skill.status }}</span>
             </div>
-            <div class="capability-version mono">v{{ skill.version }} · {{ skill.scope }}</div>
+            <div class="capability-version mono">v{{ skill.version }} · {{ skill.scope }} · 本地目录</div>
             <p>{{ skill.description }}</p>
           </div>
           <div class="capability-card-actions">
-            <button class="icon-button small" type="button" title="查看 Skill 详情" aria-label="查看 Skill 详情" @click="store.notify(`${skill.name} 当前版本 ${skill.version}`, 'ok')"><FileCode2 :size="15" /></button>
+            <button class="icon-button small" type="button" title="查看 Skill 详情" aria-label="查看 Skill 详情" @click="store.notify(`${skill.name} v${skill.version} · ${skill.scope}`, 'ok')"><FileCode2 :size="15" /></button>
             <button v-if="skill.status === 'enabled' || skill.status === 'disabled'" class="icon-button small" type="button" :title="skill.status === 'enabled' ? '停用 Skill' : '启用 Skill'" :aria-label="skill.status === 'enabled' ? `停用 ${skill.name}` : `启用 ${skill.name}`" @click="toggleSkill(skill)"><Power :size="14" /></button>
           </div>
         </article>
+        <p v-if="!skills.length" class="empty-cell">未在 skills/ 目录发现可用 Skill；审查将使用内置解析与模型抽取。</p>
       </div>
     </section>
 

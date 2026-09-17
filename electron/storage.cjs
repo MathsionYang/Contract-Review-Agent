@@ -43,6 +43,65 @@ function createStorage(rootDir) {
   const statePath = path.join(stateDirectory, "state.json");
   const projectDirectory = ensureDirectory(path.join(root, "projects"));
   const knowledgeDirectory = ensureDirectory(path.join(root, "knowledge"));
+  const extractionCacheDirectory = ensureDirectory(path.join(root, "cache", "extractions"));
+
+  // 抽取缓存是纯性能副本：按合同内容哈希存放，键不匹配即视为未命中，损坏文件直接删除重算。
+  function extractionCachePath(documentHash) {
+    return path.join(extractionCacheDirectory, `${String(documentHash || "").replace(/[^a-f0-9]/gi, "").slice(0, 64) || "unknown"}.json`);
+  }
+
+  function loadExtractionCache(documentHash) {
+    const filePath = extractionCachePath(documentHash);
+    if (!fs.existsSync(filePath)) return null;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_error) {
+      try { fs.unlinkSync(filePath); } catch (_ignored) { /* 丢弃损坏缓存即可 */ }
+      return null;
+    }
+  }
+
+  function saveExtractionCache(documentHash, entry) {
+    if (!String(documentHash || "").trim()) return null;
+    writeJsonAtomically(extractionCachePath(documentHash), entry);
+    return entry;
+  }
+
+  function deleteExtractionCache(documentHash) {
+    const filePath = extractionCachePath(documentHash);
+    if (!fs.existsSync(filePath)) return false;
+    try { fs.unlinkSync(filePath); return true; } catch (_error) { return false; }
+  }
+
+  function clearExtractionCache() {
+    let removed = 0;
+    let bytes = 0;
+    let files = [];
+    try { files = fs.readdirSync(extractionCacheDirectory); } catch (_error) { files = []; }
+    for (const name of files) {
+      if (!name.endsWith(".json")) continue;
+      const filePath = path.join(extractionCacheDirectory, name);
+      try { bytes += fs.statSync(filePath).size; fs.unlinkSync(filePath); removed += 1; } catch (_error) { /* 单个失败不影响其余 */ }
+    }
+    return { removed, bytes };
+  }
+
+  // 列出当前缓存里的合同哈希，供删除任务时判断哪些已无人引用。
+  function listExtractionCacheHashes() {
+    try { return fs.readdirSync(extractionCacheDirectory).filter((name) => name.endsWith(".json")).map((name) => name.replace(/\.json$/, "")); }
+    catch (_error) { return []; }
+  }
+
+  // 删除任务时调用：只清理传入的哈希，绝不动其它任务仍在引用的缓存。
+  function pruneExtractionCache(hashes = []) {
+    let removed = 0;
+    for (const hash of Array.isArray(hashes) ? hashes : []) {
+      if (!String(hash || "").trim()) continue;
+      try { if (fs.existsSync(extractionCachePath(hash))) { fs.unlinkSync(extractionCachePath(hash)); removed += 1; } } catch (_error) { /* 忽略单个失败 */ }
+    }
+    return removed;
+  }
 
   function loadState() {
     if (!fs.existsSync(statePath)) return cloneState(DEFAULT_STATE);
@@ -139,7 +198,9 @@ function createStorage(rootDir) {
     };
   }
 
-  return { loadState, saveState, deleteTask, saveProjectFile, saveKnowledgeFile, statePath, rootDir: root };
+  return { loadState, saveState, deleteTask, saveProjectFile, saveKnowledgeFile, statePath, rootDir: root,
+    loadExtractionCache, saveExtractionCache, deleteExtractionCache, clearExtractionCache, pruneExtractionCache,
+    listExtractionCacheHashes, extractionCacheDirectory };
 }
 
 module.exports = { createStorage };

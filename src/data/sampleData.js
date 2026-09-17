@@ -185,13 +185,9 @@ export const knowledgeData = {
 };
 
 export const capabilityData = {
-  skills: [
-    { name: "contract-common-review", version: "1.3.0", scope: "全部合同", description: "合同通用结构、一致性、争议解决和责任边界审查。", status: "enabled", icon: "shield" },
-    { name: "procurement-contract-review", version: "1.2.0", scope: "采购合同", description: "采购专项审查，覆盖付款、交付、验收、质保和供应商义务。", status: "enabled", icon: "cart" },
-    { name: "selected-text-review", version: "1.0.0", scope: "全部合同", description: "人工划词、划句和划段局部审查。", status: "enabled", icon: "cursor" },
-    { name: "legal-source-verification", version: "1.0.0", scope: "全部合同", description: "法律来源版本、状态、原文和快照核验。", status: "validating", icon: "book" },
-    { name: "external-skill-upload-demo", version: "0.8.0", scope: "隔离区", description: "待校验 Skill 包，尚未允许进入审查任务。", status: "isolated", icon: "file" }
-  ],
+  // 不再内置演示 Skill。审查 Skill 列表由主进程扫描 skills/ 目录后回填，
+  // 保证界面展示的就是实际可加载的版本，而不是写死的示例数据。
+  skills: [],
   // 首次启动不提供测试模型，用户必须在能力配置中人工新增。
   models: []
 };
