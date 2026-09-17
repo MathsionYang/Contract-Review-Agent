@@ -42,10 +42,23 @@ function inferClauseNo(value) {
   return match ? match[0].replace(/\s+/g, "") : "";
 }
 
-function docxBlocksFromHtml(html, text) {
+// 逻辑页估算：DOCX 常常没有任何分页标记（本项目的采购合同实测 lastRenderedPageBreak 与
+// <w:br w:type="page"> 均为 0），因此无法得到真实物理页码。这里只做阅读分段，
+// 并明确标记 page_status=estimated，避免把估算值当成真实页码。
+const ESTIMATED_CHARS_PER_PAGE = 700;
+
+function estimatePageCount(text, explicitBreaks) {
+  if (explicitBreaks > 0) return explicitBreaks + 1;
+  const length = String(text || "").length;
+  return Math.max(1, Math.ceil(length / ESTIMATED_CHARS_PER_PAGE));
+}
+
+function docxBlocksFromHtml(html, text, pageCount, pageStatus) {
   const blocks = [];
   const source = String(html || "");
   const fullText = String(text || "");
+  const pages = Math.max(1, Number(pageCount) || 1);
+  const estimated = pageStatus === "estimated";
   const sourceOffsets = [];
   let normalizedText = "";
   for (const match of fullText.matchAll(/\s+|\S/g)) {
@@ -54,7 +67,14 @@ function docxBlocksFromHtml(html, text) {
   }
   let normalizedCursor = 0;
   let order = 0;
+  let tableOrder = 0;
   let currentClause = "";
+  // 把块在原文中的偏移映射到估算逻辑页（1 起），保证同一块不会被拆到两页。
+  const logicalPageFor = (sourceStart) => {
+    if (pages <= 1 || sourceStart === null || sourceStart === undefined) return 1;
+    const ratio = sourceStart / Math.max(1, fullText.length);
+    return Math.min(pages, Math.max(1, Math.floor(ratio * pages) + 1));
+  };
   const append = (input = {}) => {
     const blockText = String(input.text || "").trim();
     if (!blockText) return;
@@ -70,8 +90,8 @@ function docxBlocksFromHtml(html, text) {
       block_id: `docx_block_${++order}`,
       source_type: "docx",
       page: null,
-      logical_page: 1,
-      page_status: "unresolved",
+      logical_page: logicalPageFor(charRange ? charRange[0] : null),
+      page_status: pageStatus,
       block_type: input.block_type || "paragraph",
       clause_no: clauseNo,
       text: blockText,
@@ -87,7 +107,8 @@ function docxBlocksFromHtml(html, text) {
   while ((token = tokenPattern.exec(source))) {
     const value = token[0];
     if (/^<table\b/i.test(value)) {
-      const tableId = `table_${order + 1}`;
+      // 表格编号必须用独立的表序号，不能用块序号（原实现会产出 table_3/table_44 这类编号）。
+      const tableId = `table_${++tableOrder}`;
       let row = -1;
       const rowPattern = /<tr\b[\s\S]*?<\/tr\s*>/gi;
       let rowMatch;
@@ -133,25 +154,46 @@ function baseDocumentMetadata(filePath, buffer) {
   };
 }
 
+// 统计 DOCX 里的显式分页标记。存在时可用作真实分页依据；本项目实测合同里该标记为 0，
+// 这时只能退回字符数估算并明确标记 page_status=estimated。
+async function docxExplicitPageBreaks(buffer) {
+  try {
+    const zipfile = require("mammoth/lib/zipfile");
+    const zip = await zipfile.openArrayBuffer(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+    if (!zip.exists("word/document.xml")) return 0;
+    const xml = await zip.read("word/document.xml", "utf-8");
+    const marks = String(xml || "").match(/<w:br[^>]*w:type="page"|<w:lastRenderedPageBreak/g);
+    return marks ? marks.length : 0;
+  } catch (_error) {
+    return 0;
+  }
+}
+
 async function parseDocx(filePath, buffer) {
   const mammoth = require("mammoth");
   const result = await mammoth.extractRawText({ path: filePath });
   const htmlResult = await mammoth.convertToHtml({ path: filePath });
   const text = String(result.value || "").trim();
+  const explicitBreaks = await docxExplicitPageBreaks(buffer);
+  const formFeeds = (text.match(/\f/g) || []).length;
+  const breaks = Math.max(explicitBreaks, formFeeds);
+  const pageCount = estimatePageCount(text, breaks);
+  const pageStatus = breaks > 0 ? "resolved" : pageCount > 1 ? "estimated" : "unresolved";
   const pageTexts = splitPages(text);
-  if (pageTexts.length > MAX_PAGE_COUNT) {
+  if (pageCount > MAX_PAGE_COUNT) {
     throw parserError("PAGE_LIMIT_EXCEEDED", `合同页数超过 ${MAX_PAGE_COUNT} 页限制`);
   }
   return {
     ...baseDocumentMetadata(filePath, buffer),
     documentType: "docx",
-    pageCount: pageTexts.length,
+    pageCount,
+    page_status: pageStatus,
     pages: pageTexts.map((pageText, index) => ({
       page: index + 1,
       text: pageText,
       ocr: { status: "not_required" }
     })),
-    blocks: docxBlocksFromHtml(htmlResult.value, text),
+    blocks: docxBlocksFromHtml(htmlResult.value, text, pageCount, pageStatus),
     text,
     parseMessages: [
       ...(Array.isArray(result.messages) ? result.messages : []),

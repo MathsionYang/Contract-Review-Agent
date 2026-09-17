@@ -11,10 +11,12 @@ const MIN_EXTRACTION_TIMEOUT_MS = 45000;
 // 单次响应的原文上限：把整份合同塞进一次请求会让模型长时间不产出任何字节而触发空闲超时，
 // 拆成多个小批次可以做到请求级可观测，并且每批都能更快完成。
 const BLOCK_CHAR_LIMIT = 1200;
-const BATCH_CHAR_LIMIT = 2200;
-const BATCH_BLOCK_LIMIT = 24;
+const BATCH_CHAR_LIMIT = 1600;
+const BATCH_BLOCK_LIMIT = 12;
 // 推理模型在输出正式 JSON 前会先思考，首字节延迟可达 60 秒以上，需要给首段响应单独的宽限。
 const FIRST_DELTA_GRACE_MS = 180000;
+// 抽取的响应是成批 JSON 事实，2048 的输出预算容易在批次中途被截断。
+const DEFAULT_EXTRACTION_MAX_TOKENS = 4096;
 
 // 用户未填写超时/上下文/输出预算时，按角色补一个能真正跑完抽取的安全默认值，不修改已保存的配置。
 function effectiveExtractionModel(model) {
@@ -22,7 +24,7 @@ function effectiveExtractionModel(model) {
   const timeoutMs = Number(model.timeoutMs) > 0 ? Number(model.timeoutMs) : DEFAULT_EXTRACTION_TIMEOUT_MS;
   return { ...model, timeoutMs,
     contextLength: Number(model.contextLength) > 0 ? Number(model.contextLength) : 16000,
-    maxTokens: Number(model.maxTokens) > 0 ? Number(model.maxTokens) : 2048 };
+    maxTokens: Number(model.maxTokens) > 0 ? Number(model.maxTokens) : DEFAULT_EXTRACTION_MAX_TOKENS };
 }
 
 // 空闲超时越短，单批原文越要小，避免"批次过大必然超时"的死循环。

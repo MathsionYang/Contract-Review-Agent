@@ -103,6 +103,35 @@ test("DOCX 证据块偏移对应原始正文并区分重复段落", async () => 
   assert.notDeepEqual(matches[0].char_range, matches[1].char_range);
 });
 
+test("表格编号按表序号连续生成，且表格不跨越估算逻辑页", async () => {
+  const { parseContract } = require("../electron/parser.cjs");
+  const dir = tempDir();
+  const filePath = path.join(dir, "多表合同.docx");
+  const table = (rows) => new Table({ rows: rows.map((cells) => new TableRow({ children: cells.map((text) => new TableCell({ children: [new Paragraph(text)] })) })) });
+  const document = new Document({ sections: [{ children: [
+    new Paragraph("第一条 当事人"),
+    table([["项目", "甲方"], ["名称", "瀚元智能装备制造有限公司"]]),
+    new Paragraph("第二条 标的"),
+    table([["序号", "项目"], ["1", "MES 软件"]]),
+    new Paragraph("第三条 价款"),
+    table([["合计", "1286000"]])
+  ] }] });
+  fs.writeFileSync(filePath, await Packer.toBuffer(document));
+  const parsed = await parseContract(filePath);
+  const tableIds = [...new Set(parsed.blocks.filter((block) => block.table_ref).map((block) => block.table_ref.table_id))];
+  // 编号必须从 table_1 起连续，不能用块序号拼出 table_3/table_44 这类值。
+  assert.deepEqual(tableIds, ["table_1", "table_2", "table_3"]);
+  // 同一张表的所有单元格必须落在同一个逻辑页，避免表格被跨页拆散。
+  for (const tableId of tableIds) {
+    const pages = new Set(parsed.blocks.filter((block) => block.table_ref?.table_id === tableId).map((block) => block.logical_page));
+    assert.equal(pages.size, 1, `${tableId} 被拆到多个逻辑页：${[...pages].join(",")}`);
+  }
+  // 页数信息必须带状态，估算值不得冒充真实页码。
+  assert.equal(typeof parsed.pageCount, "number");
+  assert.ok(["resolved", "estimated", "unresolved"].includes(parsed.page_status), parsed.page_status);
+  assert.ok(parsed.blocks.every((block) => block.page_status === parsed.page_status));
+});
+
 test("解析可搜索 PDF 时保留页码和文本层", async () => {
   const dir = tempDir();
   const filePath = path.join(dir, "采购合同.pdf");

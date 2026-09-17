@@ -51,6 +51,12 @@ const contextScopeOptions = [
 
 const pageCount = computed(() => store.review?.document?.pageCount || store.review?.document?.pages?.length || 1);
 const currentPage = computed(() => store.review?.document?.pages?.find((page) => Number(page.page) === store.selectedPage) || { page: store.selectedPage, text: "当前文档没有可展示的解析文本。" });
+// DOCX 的页码是字符数估算（page_status=estimated），必须与真实物理页码区分。
+const pageStatusLabel = computed(() => {
+  const status = store.review?.document?.page_status;
+  if (store.review?.document?.documentType !== "docx") return "页";
+  return status === "estimated" ? "· 页数为估算值" : "· 物理页码待确认";
+});
 const currentRisk = computed(() => store.activeRisk);
 const filteredRisks = computed(() => store.risks.filter((risk) => riskFilter.value === "all" || risk.risk_level === riskFilter.value));
 const currentPageAnnotations = computed(() => (store.review?.annotations || []).filter((item) => Number(item.page) === Number(currentPage.value.page)));
@@ -136,8 +142,7 @@ function insertMarkers(text, markers) {
   const source = String(text || "");
   const candidates = markers
     .map((marker) => {
-      const quote = String(marker.quote || "").trim();
-      const range = quoteRange(source, quote);
+      const range = quoteRange(source, marker.quote);
       return range ? { ...marker, start: range[0], end: range[1] } : null;
     })
     .filter(Boolean)
@@ -162,8 +167,19 @@ function insertMarkers(text, markers) {
   return result + renderText(source.slice(cursor));
 }
 
-const renderedPageHtml = computed(() => {
-  const text = currentPage.value.text || "";
+// 合同阅读器改用证据块渲染：表格单元格按 table_ref 还原成真正的表格，
+// 段落/标题保持原顺序，风险、高亮和搜索标记仍然按整页文本计算后落到所属片段。
+const pageBlocks = computed(() => {
+  const document_ = store.review?.document;
+  if (!document_?.blocks?.length) return [];
+  const page = Number(currentPage.value.page);
+  return document_.blocks.filter((block) => Number(block.logical_page || 1) === page);
+});
+const pageText = computed(() => pageBlocks.value.length
+  ? pageBlocks.value.map((block) => String(block.text || "")).join("\n")
+  : String(currentPage.value.text || ""));
+
+function pageMarkers(text) {
   const riskMarkers = store.risks
     .filter((risk) => locationPage(risk.contract_location, store.review?.document) === Number(currentPage.value.page) && risk.contract_location?.quote)
     .map((risk) => ({
@@ -182,15 +198,80 @@ const renderedPageHtml = computed(() => {
   const markers = [...evidenceMarkers, ...riskMarkers, ...annotationMarkers];
   if (searchQuery.value.trim()) {
     const term = searchQuery.value.trim();
+    const lower = text.toLocaleLowerCase();
+    const needle = term.toLocaleLowerCase();
     let offset = 0;
     while (offset < text.length) {
-      const index = text.toLocaleLowerCase().indexOf(term.toLocaleLowerCase(), offset);
+      const index = lower.indexOf(needle, offset);
       if (index < 0) break;
       markers.push({ quote: text.slice(index, index + term.length), className: "document-search-hit" });
       offset = index + term.length;
     }
   }
-  return insertMarkers(text, markers);
+  return markers;
+}
+
+// 把表格单元格合并成 HTML 表格；同一 table_id 视为一张表，行按 table_ref.row 归位。
+function buildTableHtml(cells) {
+  const tableId = cells[0]?.table_ref?.table_id || "";
+  const rowCount = Math.max(...cells.map((cell) => Number(cell.table_ref?.row) || 0)) + 1;
+  const columnCount = Math.max(...cells.map((cell) => Number(cell.table_ref?.column) || 0)) + 1;
+  const rows = [];
+  for (let row = 0; row < rowCount; row += 1) {
+    const values = [];
+    for (let column = 0; column < columnCount; column += 1) {
+      const cell = cells.find((item) => Number(item.table_ref?.row) === row && Number(item.table_ref?.column) === column);
+      values.push(`<td>${cell ? renderText(cell.text) : ""}</td>`);
+    }
+    rows.push(`<tr>${values.join("")}</tr>`);
+  }
+  return `<div class="document-table-wrap"><table class="document-table" data-table-id="${escapeHtml(tableId)}"><tbody>${rows.join("")}</tbody></table></div>`;
+}
+
+// 无证据块（历史数据）时仍按整页文本渲染，保证向后兼容。
+const renderedPageHtml = computed(() => insertMarkers(pageText.value, pageMarkers(pageText.value)));
+
+const documentSegments = computed(() => {
+  const blocks = pageBlocks.value;
+  if (!blocks.length) return [{ kind: "text", key: "fallback", html: renderedPageHtml.value }];
+  const text = pageText.value;
+  const markers = pageMarkers(text);
+  const segments = [];
+  let cursor = 0;
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const needle = String(block.text || "");
+    const start = needle ? text.indexOf(needle, cursor) : cursor;
+    const blockStart = start >= 0 ? start : cursor;
+    const blockEnd = blockStart + needle.length;
+    if (block.table_ref) {
+      const cells = [];
+      let last = index;
+      while (last < blocks.length && blocks[last].table_ref?.table_id === block.table_ref.table_id) {
+        cells.push(blocks[last]);
+        last += 1;
+      }
+      const lastBlockText = String(blocks[last - 1].text || "");
+      const tableEnd = text.indexOf(lastBlockText, cursor) + lastBlockText.length || blockEnd;
+      const slice = text.slice(cursor, Math.max(blockStart, cursor));
+      if (slice) segments.push({ kind: "text", key: `t-${index}`, html: insertMarkers(slice, markers) });
+      segments.push({ kind: "table", key: `tb-${block.table_ref.table_id}`, html: buildTableHtml(cells) });
+      cursor = tableEnd;
+      index = last - 1;
+      continue;
+    }
+    const trailingIndex = text.indexOf("\n", blockEnd);
+    const blockEndWithBreak = trailingIndex >= 0 ? trailingIndex + 1 : blockEnd;
+    const slice = text.slice(cursor, blockEndWithBreak);
+    // 证据块文本与整页文本对不上时（历史快照）回退到块自身文本，绝不静默丢内容。
+    const content = start >= 0 ? slice : needle;
+    if (content) {
+      segments.push({ kind: "text", key: `t-${index}`, html: insertMarkers(content, markers), className: block.block_type === "heading" ? "document-block-heading" : "" });
+    }
+    cursor = start >= 0 ? blockEndWithBreak : cursor;
+  }
+  if (cursor < text.length) segments.push({ kind: "text", key: "tail", html: insertMarkers(text.slice(cursor), markers) });
+  return segments;
 });
 
 function selectRisk(risk) { checklistEvidence.value = null; store.selectRisk(risk.risk_id); }
@@ -486,10 +567,15 @@ function displaySize(bytes) {
         </div>
         <div class="document-body">
           <div class="document-paper" :style="{ fontSize: `${14 * store.zoom}px` }" @click="handleDocumentClick">
-            <div class="document-page-heading">{{ store.review?.document?.documentType === 'docx' ? '逻辑页' : '第' }} {{ currentPage.page }} / {{ pageCount }} {{ store.review?.document?.documentType === 'docx' ? '· 物理页码待确认' : '页' }}</div>
+            <div class="document-page-heading">{{ store.review?.document?.documentType === 'docx' ? '逻辑页' : '第' }} {{ currentPage.page }} / {{ pageCount }} {{ pageStatusLabel }}</div>
             <h3>{{ store.activeProject?.project_name || "合同原文" }}</h3>
             <p class="document-caption">{{ store.review?.document?.fileName || "等待导入合同文件" }}</p>
-            <div ref="documentTextElement" class="document-text" v-html="renderedPageHtml" @mouseup="handleDocumentMouseUp" @touchend="handleDocumentMouseUp"></div>
+            <div ref="documentTextElement" class="document-text" @mouseup="handleDocumentMouseUp" @touchend="handleDocumentMouseUp">
+              <template v-for="segment in documentSegments" :key="segment.key">
+                <div v-if="segment.kind === 'table'" class="document-table-block" v-html="segment.html"></div>
+                <p v-else :class="['document-block', segment.className]" v-html="segment.html"></p>
+              </template>
+            </div>
             <div v-if="!store.review?.document?.pages?.length" class="document-empty">导入 DOCX 或 PDF 后显示真实解析文本</div>
           </div>
         </div>

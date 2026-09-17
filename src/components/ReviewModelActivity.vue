@@ -171,6 +171,7 @@ onBeforeUnmount(() => clearInterval(timer));
           </ul>
         </div>
         <p v-if="summary.duplicate_fact_count || summary.rejected_fact_count" class="extraction-validation">已去重 {{ count(summary.duplicate_fact_count) }} 条 · 未通过校验 {{ count(summary.rejected_fact_count) }} 条</p>
+        <p v-if="summary.truncated_batch_count" class="extraction-validation">有 {{ count(summary.truncated_batch_count) }} 批输出达到长度上限，已自动拆分为 {{ count(summary.split_batch_count) }} 个子批次继续抽取</p>
       </div>
     </div>
   </article>

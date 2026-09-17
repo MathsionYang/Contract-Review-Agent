@@ -221,6 +221,42 @@ test("空闲超时按首字节前后区分，推理长时间无输出也能等�
   assert.equal(recovered.ok, true);
 });
 
+test("输出达到长度上限时自动拆分批次，不整批丢失事实", async () => {
+  const blocks = Array.from({ length: 8 }, (_, index) => ({ block_id: `b${index + 1}`, page: null, logical_page: 1, text: "第 X 条 付款与交付约定。" }));
+  const doc = { text: blocks.map((block) => block.text).join(""), documentType: "docx", pages: [{ page: 1, text: "" }], blocks };
+  const chosen = model("extraction");
+  const requests = [];
+  const result = await extractWithModel(doc, { model: chosen, invokeModel: async (request) => {
+    requests.push(request);
+    // 第一次请求模拟被 max_tokens 截断，之后的子批次正常返回。
+    if (requests.length === 1) return { ok: false, errorCode: "MODEL_OUTPUT_TRUNCATED", message: "模型输出达到长度上限，审查尚未完成" };
+    return { ok: true, data: { facts: [] } };
+  } });
+  assert.ok(requests.length > 1, "截断后必须重试而不是放弃整批");
+  assert.equal(result.summary.truncated_batch_count, 1);
+  assert.ok(result.summary.split_batch_count >= 1);
+  assert.equal(result.summary.status, "completed", "拆分后全部子批次成功，不应降级");
+  assert.equal(result.summary.completed_batches, result.summary.total_batches);
+  assert.ok(result.warnings.some((warning) => warning.code === "EXTRACTION_BATCH_TRUNCATED"));
+});
+
+test("单块内容过长且持续被截断时，按原文偏移再切分", async () => {
+  const doc = document("2.1 " + "甲方向乙方支付价款并交付验收。".repeat(60));
+  const chosen = model("extraction");
+  let longest = 0;
+  let truncated = 0;
+  const result = await extractWithModel(doc, { model: chosen, invokeModel: async (request) => {
+    const chars = JSON.stringify(request.messages).length;
+    longest = Math.max(longest, chars);
+    // 只对最大的那次请求返回截断，迫使按偏移继续细分。
+    if (chars > 1200 && truncated < 3) { truncated += 1; return { ok: false, errorCode: "MODEL_OUTPUT_TRUNCATED", message: "截断" }; }
+    return { ok: true, data: { facts: [] } };
+  } });
+  assert.ok(truncated > 0, "必须触发过截断以验证切分路径");
+  assert.equal(result.summary.status, "completed");
+  assert.ok(result.summary.completed_batches >= result.summary.total_batches);
+});
+
 test("向量语义召回非同词知识，保留候选状态、快照和来源定位", async () => {
   const retriever = createKnowledgeRetriever({ sources: [source()], model: model("embedding"), invokeModel: async ({ input }) => ({ ok: true, data: { vectors: input.map(() => [1, 0]) } }) });
   const hits = await retriever.search("迟延交货如何追偿");
