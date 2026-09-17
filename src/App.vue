@@ -203,7 +203,7 @@ function statusClass(status) { return status === "published" || status === "acti
           <span v-if="execution.models?.[item.key]" class="mono">{{ execution.models[item.key].version }}</span>
         </div>
       </div>
-      <div class="execution-skills"><ListChecks :size="14" /><span>已启用 Skill</span><strong>{{ execution.skills?.length || 0 }}</strong><em v-for="skill in execution.skills || []" :key="`${skill.name}-${skill.version}`">{{ skill.name }} · {{ skill.version }}</em></div>
+      <div class="execution-skills"><ListChecks :size="14" /><span>已启用 Skill</span><strong>{{ execution.skills?.length || 0 }}</strong><em v-for="skill in execution.skills || []" :key="`${skill.name}-${skill.version}`">{{ skill.name }}<template v-if="skill.version"> · {{ skill.version }}</template></em></div>
     </div>
     <div class="form-field">
       <div class="config-section-title"><strong>法律快照</strong><button class="text-action" type="button" @click="manageSnapshots"><BookOpenCheck :size="14" />管理法律快照</button></div>

@@ -129,6 +129,14 @@ export const useReviewStore = defineStore("review", () => {
       } else {
         state.value = await electronApi.saveState(state.value);
       }
+      // Skill 列表以磁盘扫描为唯一事实来源。引导阶段必须扫描一次：
+      // 否则能力配置里会一直留着首次启动时播种的示例 Skill 名单，
+      // 界面就会显示出根本不存在于 skills/ 目录、也从未被执行的"已启用 Skill"。
+      const skillsBeforeScan = JSON.stringify(saved.capabilities?.skills || []);
+      await loadClauseSkill();
+      // 扫描结果与磁盘上残留的名单不一致时写回，避免每次启动重复迁移。
+      if (JSON.stringify(state.value.capabilities?.skills || []) !== skillsBeforeScan) await persist();
+      // 用扫描结果刷新本次审查的执行快照，让"已启用 Skill"反映真实目录而不是历史残留。
       if (review.value && syncActiveReviewExecutionSnapshot()) await persist();
     } catch (error) {
       notify(error.message || "本地状态读取失败", "warn");
@@ -859,7 +867,7 @@ export const useReviewStore = defineStore("review", () => {
         ...(state.value.capabilities || {}),
         skills: discovered.map((skill) => ({
           name: skill.name,
-          version: skill.version || "未标注",
+          version: skill.version || "",
           scope: skill.declares_blocks ? "条款抽取" : "全部合同",
           description: skill.description || "",
           status: previous.get(skill.name)?.status === "disabled" ? "disabled" : "enabled",
