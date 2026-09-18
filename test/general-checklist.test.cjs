@@ -82,3 +82,14 @@ test("清单通过必须覆盖完整判据，未解析引用不算通过，保�
   assert.equal(byId(result, "GC-1-05").status, "unverifiable");
   assert.ok(byId(result, "GC-1-05").required_materials.some((m) => m.includes("授权")));
 });
+
+test("清单区分缺失候选、外部材料不足与不适用，并保留扫描证据", () => {
+  const result = run("2.1 甲方支付尾款。", "software");
+  const candidate = byId(result, "GC-2-09");
+  assert.equal(candidate.status_detail, "missing_candidate");
+  assert.ok(candidate.scan_evidence);
+  assert.deepEqual(candidate.scan_evidence.block_ids, ["b1"]);
+  assert.equal(byId(result, "GC-1-03").status_detail, "external_material_missing");
+  assert.equal(byId(result, "GC-4-07").status_detail, "not_applicable");
+  assert.match(candidate.applicability_reason, /通用|适用/);
+});

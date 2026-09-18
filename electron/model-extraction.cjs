@@ -184,23 +184,47 @@ function decodeUnit(payload = {}) {
   return unit;
 }
 
-// 按条边界把单元归组：Skill 给出条标题所在块，这里把每个单元归到它所属的条。
-// 单条过大时不再强行合并，否则会退回"一次请求装整份合同"的老问题；
-// 单条过小时会与相邻条合并到一个批次，避免把请求数放大到每条一次。
-function groupUnitsByArticle(units, articleBoundaries) {
-  if (!Array.isArray(articleBoundaries?.articles) || articleBoundaries.articles.length < 2) return null;
-  const starts = articleBoundaries.articles.map((article) => ({ clause_no: article.clause_no, block_id: article.block_id }));
-  const groups = [];
+// 按条边界把单元归组，并把相邻的小条合并成批。
+//
+// 之前是"一条一批"，实测在真实合同上会把 2 个批次放大成 13 个、prompt token 从 4565 涨到 8080：
+// 12 条里有 8 条只占 3–5 个块，每条单独一发请求的固定开销（系统提示词）远大于正文本身。
+// 这里改为：先按条切开，再把相邻的小条合并到同一批，直到接近批次大小上限。
+// 单条过大时不会被强行合并（超过上限就自己成批），因此不会退回"一次请求装整份合同"的老问题。
+function groupUnitsByArticle(units, articleBoundaries, limits = {}) {
+  const articles = Array.isArray(articleBoundaries?.articles) ? articleBoundaries.articles : [];
+  if (articles.length < 2) return null;
+  const starts = new Map(articles.map((article) => [String(article.block_id || ""), article]));
+  const sections = [];
   let current = null;
   for (const unit of units) {
-    const index = starts.findIndex((start) => start.block_id === unit.block_id);
-    if (index >= 0 || !current) {
-      const article = index >= 0 ? starts[index] : starts[0];
-      current = { clause_no: article.clause_no, units: [] };
-      groups.push(current);
+    const article = starts.get(String(unit.block_id || ""));
+    if (article) {
+      current = { clause_no: article.clause_no, preamble: false, units: [] };
+      sections.push(current);
     }
+    // 首条标题之前的单元（合同名、编号、主体表、前言）不属于任何一条，
+    // 不能记成第一条的条款号——那会让"本批覆盖第一条"变成假信息。
+    if (!current) { current = { clause_no: "", preamble: true, units: [] }; sections.push(current); }
     current.units.push(unit);
   }
+  const populated = sections.filter((section) => section.units.length);
+  if (populated.length < 2) return null;
+  const charLimit = Number(limits.charLimit) || Infinity;
+  const blockLimit = Number(limits.blockLimit) || Infinity;
+  const fits = typeof limits.fits === "function" ? limits.fits : () => true;
+  // 条号按出现顺序去重：同一个条号只记一次，且不把"前言"混进条号列表。
+  const mergeClauseNos = (list, section) => (section.preamble || list.includes(section.clause_no) ? list : [...list, section.clause_no]);
+  const groups = [];
+  let pending = { clause_nos: [], units: [] };
+  const flush = () => { if (pending.units.length) { groups.push(pending); pending = { clause_nos: [], units: [] }; } };
+  for (const section of populated) {
+    const candidate = { clause_nos: mergeClauseNos(pending.clause_nos, section), units: [...pending.units, ...section.units] };
+    const chars = candidate.units.reduce((sum, unit) => sum + unit.text.length, 0);
+    // 合并后超限就先把已攒的批次收口，让当前条自己起一批（大条因此保持独立）。
+    if (pending.units.length && (chars > charLimit || candidate.units.length > blockLimit || !fits(candidate.units))) flush();
+    pending = { clause_nos: mergeClauseNos(pending.clause_nos, section), units: [...pending.units, ...section.units] };
+  }
+  flush();
   return groups.filter((group) => group.units.length);
 }
 
@@ -215,17 +239,18 @@ function extractionBatches(document, model, options = {}) {
   let batch = [];
   let batchChars = 0;
   const units = extractionUnits(document, charLimit);
-  // 有可靠条边界时按条顺序装批：一个批次不会跨条，单次输入与输出都更小，
-  // 失败也只影响某一条而不是整份合同。条边界不可靠时退回原来的顺序装批。
-  const groups = options.articleBoundaries ? groupUnitsByArticle(units, options.articleBoundaries) : null;
-  const stream = groups ? groups.flatMap((group) => [...group.units, { groupBreak: true }]) : units;
-  for (const unit of stream) {
-    if (unit.groupBreak) {
-      if (batch.length) { batches.push({ blocks: batch, messages: wrap(batch.map(unitPayload)) }); batch = []; batchChars = 0; }
-      continue;
-    }
+  const overBudget = (candidate) => estimateTokens(wrap(candidate.map(unitPayload))) > budget;
+  // 有可靠条边界时按条装批：批次不跨条，失败只影响某几条而不是整份合同，
+  // 相邻小条会被合并以免把请求数放大到每条一次。条边界不可靠时退回顺序装批。
+  const groups = options.articleBoundaries
+    ? groupUnitsByArticle(units, options.articleBoundaries, { charLimit, blockLimit: BATCH_BLOCK_LIMIT, fits: (candidate) => !overBudget(candidate) })
+    : null;
+  if (groups) {
+    return groups.map((group) => ({ blocks: group.units, clause_nos: group.clause_nos, messages: wrap(group.units.map(unitPayload)) }));
+  }
+  for (const unit of units) {
     const overChars = batchChars + unit.text.length > charLimit;
-    if (batch.length && (overChars || batch.length >= BATCH_BLOCK_LIMIT || estimateTokens(wrap([...batch, unit].map(unitPayload))) > budget)) {
+    if (batch.length && (overChars || batch.length >= BATCH_BLOCK_LIMIT || overBudget([...batch, unit]))) {
       batches.push({ blocks: batch, messages: wrap(batch.map(unitPayload)) });
       batch = [];
       batchChars = 0;
@@ -369,7 +394,8 @@ function anchoredFact(candidate, document, batch) {
     return reject("clause_mismatch", `条款号 ${candidate.clause_no} 与原文 ${ref.clause_no || "(空)"} 不符`);
   }
   const fact = { fact_type: type, raw_text: ref.quote, clause_no: ref.clause_no, source_refs: refs, confidence: 0.8,
-    file_version_id: document.fileVersionId || document.file_version_id || "", origin: "model", verification_status: "anchored_candidate" };
+    file_version_id: document.fileVersionId || document.file_version_id || "", origin: "model", verification_status: "anchored_candidate",
+    binding_mode: Number.isInteger(candidate.quote_start) || Array.isArray(candidate.char_range) ? "explicit" : "inferred" };
   if (["money", "ratio", "duration"].includes(type)) {
     // 允许引文内包含修饰语：模型常把数值连同上下文一起引用
     //（如"即人民币 634,000 元""本合同签订后 7 个工作日内"）。
@@ -412,12 +438,18 @@ function sameFact(a, b) {
     const right = b.value ?? b.raw_text;
     if (Number.isFinite(Number(left)) && Number.isFinite(Number(right)) && String(left) !== String(right)) return false;
   }
+  // An inferred model quote must not create a second copy when the baseline
+  // fact is ambiguous (its source refs are intentionally empty). An explicit
+  // offset is allowed to represent the second occurrence.
+  if (a.binding_mode === "inferred" && (!b.source_refs || !b.source_refs.length)) return true;
+  if (b.binding_mode === "inferred" && (!a.source_refs || !a.source_refs.length)) return true;
+  const refsFor = (fact) => [...(fact.source_refs || []), ...(fact.source_ref_candidates || [])];
   const overlaps = (one, other) => Boolean(
     one.block_id === other.block_id
     && Array.isArray(one.char_range) && Array.isArray(other.char_range)
     && one.char_range[0] < other.char_range[1] && other.char_range[0] < one.char_range[1]
   );
-  return Boolean(a.source_refs?.some((one) => b.source_refs?.some((other) => overlaps(one, other))));
+  return Boolean(refsFor(a).some((one) => refsFor(b).some((other) => overlaps(one, other))));
 }
 
 async function extractWithModel(document, options = {}) {
@@ -440,7 +472,13 @@ async function extractWithModel(document, options = {}) {
     // 进度事件会流向渲染层，必须遵守"不把模型原始输出外发"的既有约束。
     rejection_reasons: {}, rejected_fact_types: {},
     // 抽出口径与提示词版本必须进快照：缓存键和审计都要用它判断结果是否可复用。
-    scope, scope_fact_types: [...allowedTypes], prompt_version: EXTRACTION_PROMPT_VERSION, out_of_scope_fact_count: 0 };
+    scope, scope_fact_types: [...allowedTypes], prompt_version: EXTRACTION_PROMPT_VERSION, out_of_scope_fact_count: 0,
+    // 条边界来源：有 Skill 提供的真实条边界时批次按条切分，这里如实记录是哪一种口径。
+    article_source: options.articleBoundaries ? "skill" : "none",
+    article_count: Array.isArray(options.articleBoundaries?.articles) ? options.articleBoundaries.articles.length : 0,
+    current_clause_nos: [],
+    // 每批覆盖的条号：跑完后仍可查"这批抽的是哪几条"，而不是被下一批覆盖掉。
+    clause_progress: [] };
   // Progress contains only real input excerpts and validated facts, never raw model output.
   const report = () => options.onProgress?.(JSON.parse(JSON.stringify(summary)));
   if (!model) {
@@ -460,7 +498,7 @@ async function extractWithModel(document, options = {}) {
     report();
   };
   try {
-    const batches = extractionBatches(document, model, { scope });
+    const batches = extractionBatches(document, model, { scope, articleBoundaries: options.articleBoundaries });
     summary.total_batches = batches.length;
     // 截断的正确处理是提高输出预算，而不是把批次拆小：
     // 截断意味着"输出被预算截断"，而推理模型的思考长度与批次大小基本无关，
@@ -474,6 +512,8 @@ async function extractWithModel(document, options = {}) {
       const first = batch.blocks[0];
       const source = extractionBlocks(document).find((block) => block.block_id === first.block_id);
       summary.current_batch = Math.min(summary.completed_batches + 1, summary.total_batches);
+      // 按条装批时把本批覆盖的条号写进进度：界面与审计据此知道这一批在抽哪几条。
+      summary.current_clause_nos = Array.isArray(batch.clause_nos) ? batch.clause_nos : [];
       summary.current_source = { block_id: first.block_id, clause_no: first.clause_no, page: source?.page ?? null,
         logical_page: source?.logical_page ?? source?.page ?? null, quote: first.text.slice(0, 180) };
       // 同一批最多尝试若干次：先用当前预算，截断则逐级提高预算；到顶后交给下面的拆分分支。
@@ -579,6 +619,8 @@ async function extractWithModel(document, options = {}) {
           clause_no: fact.clause_no, quote: fact.raw_text.slice(0, 180), batch: summary.current_batch }].slice(-5);
       }
       summary.completed_batches += 1;
+      // 记录本批覆盖的条号，跑完后仍可查"这批抽的是哪几条"。
+      summary.clause_progress = [...summary.clause_progress, { batch: summary.current_batch, clause_nos: summary.current_clause_nos || [] }].slice(-32);
       summary.total_fact_count = facts.length;
       summary.phase = "batch_completed";
       report();

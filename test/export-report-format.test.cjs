@@ -95,6 +95,24 @@ test("风险按等级从严重到轻排序，同级按待复核优先，已删�
   assert.ok(payload.level_meta.every((item) => item.label && item.color));
 });
 
+test("导出保留风险等级、结论置信度和 canonical 风险组", async () => {
+  const review = reviewFixture();
+  review.risks[0].decision_confidence = "medium";
+  review.risks[0].canonical_issue_id = "amount_consistency";
+  const outputDir = tempDir();
+  const result = await exportReview({ review, formats: ["JSON", "XLSX", "PDF"], outputDir, mode: "draft" });
+  const jsonPath = result.records.find((record) => record.format === "JSON").filePath;
+  const payload = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+  const risk = payload.risks.find((item) => item.risk_id === "r-low");
+  assert.equal(risk.decision_confidence, "medium");
+  assert.equal(risk.canonical_issue_id, "amount_consistency");
+  assert.ok(payload.risk_field_contract.includes("decision_confidence"));
+  const xlsxPath = result.records.find((record) => record.format === "XLSX").filePath;
+  const sharedStrings = readZipEntry(xlsxPath, "xl/sharedStrings.xml");
+  assert.ok(sharedStrings.includes("结论置信度"));
+  assert.ok(sharedStrings.includes("风险聚合组"));
+});
+
 test("DOCX 已从导出格式下架，请求时被门禁拦截", async () => {
   const outputDir = tempDir();
   const result = await exportReview({ review: reviewFixture(), formats: ["DOCX"], outputDir, mode: "draft" });

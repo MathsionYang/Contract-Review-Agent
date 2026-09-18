@@ -30,5 +30,9 @@ export const LEGACY_NOTICE_CODES = new Set([
   "EXTRACTION_FACTS_REJECTED",
   "EXTRACTION_BUDGET_ESCALATED",
   "EXTRACTION_BATCH_TRUNCATED",
-  "PAGE_LOCATION_UNRESOLVED"
+  "PAGE_LOCATION_UNRESOLVED",
+  // 上下文预算导致的剔除属于"提示"而不是"故障"：流程本身跑完了，只是模型看到的材料变少。
+  // 把它们计入失败会把任务误降级为 partial，与"一条被剔除的候选就把抽取阶段标红"是同一类错误。
+  "MODEL_CONTEXT_FACTS_OMITTED",
+  "MODEL_CONTEXT_EVIDENCE_OMITTED"
 ]);

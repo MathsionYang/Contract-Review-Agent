@@ -640,18 +640,19 @@ test("抽取与向量失败时继续分析和本地检查，但必须记录降�
 });
 
 test("事实过多时仍为检索依据保留上下文预算", async () => {
-  let payload;
+  const payloads = [];
   const text = Array.from({ length: 200 }, (_, index) => `3.${index + 1} 第${index + 1}项费用金额${index + 100}元。`).join("\n");
   const result = await runReview({ review: { project: { project_id: "p", file_version_id: "v" }, document: document(text), config: { snapshot: { id: "law-v1", status: "published" } } },
     state: { capabilities: { models: [model("analysis"), model("embedding")] }, knowledge: { legalSnapshots: [source({ status: "published" })] } },
     services: { invokeModel: async (request) => {
       if (request.model.role === "embedding") return { ok: true, data: { vectors: request.input.map(() => [1, 0]) } };
-      payload = JSON.parse(request.messages[1].content);
+      payloads.push(JSON.parse(request.messages[1].content));
       return { ok: true, data: { risks: [] } };
     } } });
-  assert.ok(result.review.model_context.omitted_fact_count > 0);
-  assert.ok(payload.facts.length > 0);
-  assert.ok(payload.evidence.length > 0);
+  assert.equal(result.review.model_context.omitted_fact_count, 0, "补审批次后事实应全部覆盖");
+  assert.equal(result.review.model_context.omitted_evidence_count, 0, "补审批次后依据应全部覆盖");
+  assert.ok(payloads.some((payload) => payload.facts.length > 0));
+  assert.ok(payloads.some((payload) => payload.evidence.length > 0));
 });
 
 test("小上下文向量模型的知识和查询输入均受限，索引仍覆盖完整知识", async () => {

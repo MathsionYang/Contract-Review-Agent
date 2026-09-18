@@ -28,8 +28,9 @@ const message = computed(() => {
     if (interrupted.value) return "语义分析已中断，已接收的完整风险仍保留。";
     if (running.value) {
       if (props.summary.phase === "preparing") return "正在整理合同、事实和检索依据。";
-      if (props.summary.phase === "receiving") return `正在接收模型输出：已收到约 ${count(props.summary.received_char_count)} 字，已识别 ${count(props.summary.received_risk_count)} 条候选。`;
-      return "已提交语义分析请求，等待模型返回首个片段。";
+      const batchLabel = props.summary.total_batches ? `第 ${count(props.summary.current_batch)}/${count(props.summary.total_batches)} 批 · ` : "";
+      if (props.summary.phase === "receiving") return `${batchLabel}正在接收模型输出：已收到约 ${count(props.summary.received_char_count)} 字，已识别 ${count(props.summary.received_risk_count)} 条候选。`;
+      return `${batchLabel}已提交语义分析请求，等待模型返回首个片段。`;
     }
     if (props.summary.status === "completed") return `语义分析完成，共收到 ${count(props.summary.received_risk_count)} 条模型候选风险，待人工核验。`;
     if (props.summary.status === "cancelled") return `语义分析已被用户停止，保留 ${count(props.summary.received_risk_count)} 条完整模型候选。`;
@@ -143,7 +144,7 @@ onBeforeUnmount(() => clearInterval(timer));
         <span>合计 <b>{{ count(summary.total_fact_count ?? (count(summary.baseline_fact_count) + count(summary.accepted_fact_count))) }}</b></span>
       </div>
       <div v-if="analysis && expanded && summary.context" class="extraction-counts">
-        <span>合同 <b>{{ count(summary.context.page_count) }}</b> 页</span><span>事实 <b>{{ count(summary.context.included_fact_count) }}</b></span><span>检索依据 <b>{{ count(summary.context.included_evidence_count) }}</b></span>
+        <span>合同 <b>{{ count(summary.context.page_count) }}</b> 页</span><span>事实 <b>{{ count(summary.context.included_fact_count) }}/{{ count(summary.context.total_fact_count ?? summary.context.included_fact_count) }}</b></span><span>检索依据 <b>{{ count(summary.context.included_evidence_count) }}/{{ count(summary.context.total_evidence_count ?? summary.context.included_evidence_count) }}</b></span><span v-if="summary.context.submitted_batches">补审批次 <b>{{ count(summary.context.completed_batches) }}/{{ count(summary.context.submitted_batches) }}</b></span>
       </div>
       <p v-if="analysis && summary.context?.truncated_pages?.length" class="extraction-error">{{ summary.context.truncated_pages.length }} 页原文有删节，未覆盖全部内容。</p>
       <p v-if="summary.message" class="extraction-error">{{ summary.message }}</p>

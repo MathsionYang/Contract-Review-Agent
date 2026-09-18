@@ -184,3 +184,20 @@ UI 现有的 `正式`、`候选`、`已撤销`是展示兼容值，边界适配�
 - 字段、枚举、必填性和核心不变量已经冻结为本文件版本 `M3-A-1.0`。
 - 任务、模型、Skill、Tool 和错误码状态机见《合同审查Agent状态转移与错误码》；需求、测试和验收映射见《合同审查Agent-M3需求追踪矩阵》。
 - 当前 P0-P2 代码仍存在 `running` 任务状态、中文记忆状态和描述型错误码等兼容值；这些差异已登记到 RTM，必须在对应 M3-B/M3-C/M3-E 实现任务中完成边界归一化后，才可宣称代码与冻结契约完全一致。
+## 6. 2026-09-18 审查证据与风险聚合扩展
+
+本节补充运行时审查链路实际使用的兼容字段。新增字段不改变既有风险对象的核心枚举，但必须通过 `validator.cjs` 和导出校验。
+
+| 字段 | 类型/取值 | 约束 |
+| --- | --- | --- |
+| `decision_confidence` | `high` / `medium` / `low` | 表示当前结论可信度，与 `risk_level` 分离；没有合法原文定位时不得为 `high`。 |
+| `canonical_issue_id` | `snake_case` string | 风险主问题组标识，例如 `amount_consistency`、`tax_compliance`、`dispute_resolution`、`acceptance_quality`。 |
+| `related_risk_ids` | `string[]` | 同一主风险组内的子风险标识，合并时去重并保留来源。 |
+| `related_rule_ids` | `string[]` | 触发主风险的规则或清单检查编号。 |
+| `related_clause_nos` | `string[]` | 跨条款风险涉及的全部真实条款号。 |
+| `cross_clause` | `boolean` | 标记是否需要多条款关系才能成立；必须至少保留来源条款和目标条款证据。 |
+| `source_refs_status` | `verified` / `ambiguous` / `unresolved` | 事实原文定位状态；`ambiguous` 只能作为候选展示，不能作为已验证证据。 |
+| `source_ref_candidates` | `EvidenceRef[]` | 歧义定位的候选集合，与 `source_refs_status` 配套使用。 |
+| `risk_groups` | `RiskItem[]` | 审查结果中的 canonical 主风险集合；兼容规则索引可通过 `is_aggregation_alias=true` 识别。 |
+
+模型风险的 `contract_location` 必须包含 `block_id`、`clause_no`、`char_range` 和 `quote`，并由本地原文回放校验。条款号本身不能替代原文证据；无效、越界或无法回放的引用不得提升 `evidence_status`。

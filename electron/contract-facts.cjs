@@ -1,5 +1,5 @@
 const crypto = require("node:crypto");
-const { clauseDefinitions, resolveRefs } = require("./contract-evidence.cjs");
+const { clauseDefinitions, resolveRefs, resolveClauseRefs, normalizeClauseNo, compact } = require("./contract-evidence.cjs");
 
 const UPPERCASE_DIGITS = {
   零: 0, 〇: 0, 一: 1, 壹: 1, 二: 2, 贰: 2, 两: 2, 三: 3, 叁: 3,
@@ -50,6 +50,24 @@ function documentBlocks(document = {}) {
   const pages = Array.isArray(document.pages) && document.pages.length
     ? document.pages
     : [{ page: 1, text: String(document.text || "") }];
+  const rawText = String(document.text || "");
+  const pageText = pages.map((page) => String(page.text || "")).join("\n");
+  // Some callers provide page metadata plus a complete document text. A page
+  // summary such as "合同正文" cannot anchor extracted facts; use the
+  // complete text as a synthetic source block when it is clearly different.
+  if (rawText && pageText && compact(pageText) !== compact(rawText)
+    && !compact(rawText).includes(compact(pageText).slice(0, Math.min(24, compact(pageText).length)))) {
+    return [{
+      block_id: "page_1",
+      source_type: document.extension === ".pdf" ? "pdf" : "document",
+      page: 1,
+      page_status: "resolved",
+      block_type: "page",
+      clause_no: "",
+      text: rawText,
+      text_hash: hashText(rawText)
+    }];
+  }
   return pages.map((page, index) => ({
     block_id: `page_${page.page || index + 1}`,
     source_type: document.extension === ".pdf" ? "pdf" : "document",
@@ -62,11 +80,57 @@ function documentBlocks(document = {}) {
   }));
 }
 
-function sourceRefs(blocks, rawText) {
+function annotateRefs(refs, status, candidates = refs) {
+  const result = Array.isArray(refs) ? refs.slice() : [];
+  Object.defineProperties(result, {
+    status: { value: status, enumerable: false, configurable: true },
+    candidates: { value: Array.isArray(candidates) ? candidates.slice() : [], enumerable: false, configurable: true }
+  });
+  return result;
+}
+
+function sourceRefs(blocks, rawText, options = {}) {
+  const list = Array.isArray(blocks) ? blocks : [];
   const needle = String(rawText || "").trim();
-  const refs = resolveRefs({ blocks }, needle);
-  if (refs.length) return refs;
-  return [{ block_id: "unresolved", page: null, clause_no: "", quote: needle, text_hash: hashText(needle) }];
+  const targetClause = normalizeClauseNo(options.clauseNo || options.clause_no || "");
+  const targetBlock = String(options.blockId || options.block_id || "");
+  const requestedRange = options.charRange || options.char_range;
+  let candidates = [];
+
+  // A parser/model supplied block and character range is the strongest
+  // locator. Validate it against the block text before accepting it.
+  if (targetBlock && Array.isArray(requestedRange) && requestedRange.length === 2) {
+    const block = list.find((item) => String(item?.block_id || "") === targetBlock);
+    const start = Number(requestedRange[0]);
+    const end = Number(requestedRange[1]);
+    const raw = String(block?.text || "");
+    const quote = block && Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end > start && end <= raw.length
+      ? raw.slice(start, end) : "";
+    const quoteMatches = !needle || compact(quote) === compact(needle);
+    if (block && quote && quoteMatches) {
+      const clause = clauseDefinitions(raw).filter((item) => item.index <= start).at(-1)?.clause_no
+        || block.clause_no || targetClause;
+      if (!targetClause || normalizeClauseNo(clause) === targetClause) {
+        candidates = [{
+          block_id: block.block_id,
+          page: block.page ?? null,
+          logical_page: block.logical_page ?? block.page ?? null,
+          clause_no: normalizeClauseNo(clause),
+          quote,
+          char_range: [start, end],
+          range_scope: "block",
+          text_hash: block.text_hash || hashText(raw)
+        }];
+      }
+    }
+  }
+
+  if (!candidates.length && needle) {
+    candidates = resolveRefs({ blocks: list }, needle, targetClause);
+  }
+  if (candidates.length === 1) return annotateRefs(candidates, "verified", candidates);
+  if (candidates.length > 1) return annotateRefs([], "ambiguous", candidates);
+  return annotateRefs([], "unresolved", []);
 }
 
 function clauseMatches(text) {
@@ -97,13 +161,21 @@ function clauseNoBefore(text, index) {
 
 function addFact(facts, input) {
   const rawText = String(input.raw_text || input.text || "").trim();
+  const suppliedRefs = Array.isArray(input.source_refs) ? input.source_refs : [];
+  const refStatus = input.source_refs_status || input.sourceRefsStatus || input.source_refs?.status || "unresolved";
+  const refCandidates = input.source_ref_candidates || input.source_refs?.candidates || [];
   const fact = {
     fact_id: input.fact_id || `fact_${facts.length + 1}`,
     fact_type: input.fact_type,
     raw_text: rawText,
     clause_no: input.clause_no || "",
     value: input.value,
-    source_refs: input.source_refs,
+    // Keep ambiguous candidates in the legacy source_refs field so older
+    // consumers can render an evidence preview. Downstream code must use
+    // source_refs_status before treating these refs as verified evidence.
+    source_refs: suppliedRefs.length ? suppliedRefs : (Array.isArray(refCandidates) ? refCandidates.slice() : []),
+    source_ref_candidates: Array.isArray(refCandidates) ? refCandidates.slice() : [],
+    source_refs_status: refStatus,
     confidence: Number.isFinite(Number(input.confidence)) ? Number(input.confidence) : 0.86
   };
   for (const [key, value] of Object.entries(input)) {
@@ -118,7 +190,7 @@ function extractContractFacts(document = {}, options = {}) {
   const blocks = documentBlocks(document);
   const clauses = clauseMatches(text).map((clause) => ({
     ...clause,
-    source_refs: sourceRefs(blocks, clause.text.slice(0, Math.min(clause.text.length, 160)))
+      source_refs: sourceRefs(blocks, clause.text.slice(0, Math.min(clause.text.length, 160)), { clauseNo: clause.clause_no })
   }));
   const facts = [];
   const warnings = [];
@@ -144,7 +216,7 @@ function extractContractFacts(document = {}, options = {}) {
         currency: "CNY",
         raw_text: raw,
         clause_no: clauseNoBefore(text, match.index) || clauseFor(blocks, raw),
-        source_refs: sourceRefs(blocks, raw)
+        source_refs: sourceRefs(blocks, raw, { clauseNo: clauseNoBefore(text, match.index) || clauseFor(blocks, raw) })
       });
     }
   }
@@ -158,7 +230,7 @@ function extractContractFacts(document = {}, options = {}) {
       value: Number(ratioMatch[1]) / 100,
       raw_text: raw,
       clause_no: clauseNoBefore(text, ratioMatch.index) || clauseFor(blocks, raw),
-      source_refs: sourceRefs(blocks, raw)
+      source_refs: sourceRefs(blocks, raw, { clauseNo: clauseNoBefore(text, ratioMatch.index) || clauseFor(blocks, raw) })
     });
   }
 
@@ -174,7 +246,7 @@ function extractContractFacts(document = {}, options = {}) {
       calendar_type: calendarType,
       raw_text: raw,
       clause_no: clauseNoBefore(text, durationMatch.index) || clauseFor(blocks, raw),
-      source_refs: sourceRefs(blocks, raw)
+      source_refs: sourceRefs(blocks, raw, { clauseNo: clauseNoBefore(text, durationMatch.index) || clauseFor(blocks, raw) })
     });
   }
 
@@ -202,12 +274,12 @@ function extractContractFacts(document = {}, options = {}) {
       name: value.replace(/地址.*$/, "").trim(),
       address: addressMatch || value,
       raw_text: partyMatch[0],
-      source_refs: sourceRefs(blocks, partyMatch[0])
+      source_refs: sourceRefs(blocks, partyMatch[0], { clauseNo: clauseNoBefore(text, partyMatch.index) || clauseFor(blocks, partyMatch[0]) })
     });
   }
   for (const addressMatch of text.matchAll(/((?:湖南|湖北|广东|浙江|江苏|北京|上海|天津|重庆)[^，。；;\n]+)/g)) {
     const existing = facts.find((fact) => fact.fact_type === "party" && fact.address === addressMatch[1]);
-    if (!existing) addPartyFact({ fact_type: "party", party_id: "unknown", name: "", address: addressMatch[1], raw_text: addressMatch[0], source_refs: sourceRefs(blocks, addressMatch[0]) });
+    if (!existing) addPartyFact({ fact_type: "party", party_id: "unknown", name: "", address: addressMatch[1], raw_text: addressMatch[0], source_refs: sourceRefs(blocks, addressMatch[0], { clauseNo: clauseNoBefore(text, addressMatch.index) || clauseFor(blocks, addressMatch[0]) }) });
   }
 
   const obligationPattern = /(甲方|乙方)\s*(?:(?:应|须)?\s*(?:向|给)\s*(甲方|乙方)|(?:应|须|负责))\s*([^。；;\n]{2,100})/g;
@@ -222,7 +294,7 @@ function extractContractFacts(document = {}, options = {}) {
       action: obligationMatch[3].trim(),
       raw_text: raw,
       clause_no: clauseNo,
-      source_refs: sourceRefs(blocks, raw)
+      source_refs: sourceRefs(blocks, raw, { clauseNo })
     });
   }
 
@@ -241,7 +313,7 @@ function extractContractFacts(document = {}, options = {}) {
       references: [...raw.matchAll(/第\s*([\d.]+)\s*条/g)].map((match) => match[1]),
       raw_text: raw,
       clause_no: clauseNoBefore(text, contentIndex + (anchor?.index || 0)) || clauseFor(blocks, raw) || "",
-      source_refs: sourceRefs(blocks, raw)
+      source_refs: sourceRefs(blocks, raw, { clauseNo: clauseNoBefore(text, contentIndex + (anchor?.index || 0)) || clauseFor(blocks, raw) })
     });
   }
 
@@ -250,4 +322,4 @@ function extractContractFacts(document = {}, options = {}) {
   return { facts, clauses, warnings, blocks, text, contractType: options.contractType || "" };
 }
 
-module.exports = { extractContractFacts, parseChineseMoney };
+module.exports = { extractContractFacts, parseChineseMoney, sourceRefs };

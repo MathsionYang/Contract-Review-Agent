@@ -62,6 +62,22 @@ test("已接受且证据完整的高风险可以通过导出门禁", () => {
   assert.ok(result.items.every((item) => item.status === "passed"));
 });
 
+test("风险校验保留 decision_confidence 与 canonical_issue_id 字段", () => {
+  const review = baseReview();
+  review.risks[0].decision_confidence = "high";
+  review.risks[0].canonical_issue_id = "liability_scope";
+  const result = validateReview(review, { formats: ["JSON"] });
+  assert.equal(result.canExport, true);
+  assert.ok(!result.blockingCodes.includes("INVALID_DECISION_CONFIDENCE"));
+});
+
+test("非法 decision_confidence 阻断导出", () => {
+  const review = baseReview();
+  review.risks[0].decision_confidence = "certain";
+  const result = validateReview(review, { formats: ["JSON"] });
+  assert.ok(result.blockingCodes.includes("INVALID_DECISION_CONFIDENCE"));
+});
+
 test("扫描 PDF 没有 OCR 结果时标记为不可验证并阻断导出", () => {
   const review = baseReview();
   review.document.documentType = "scanned_pdf";

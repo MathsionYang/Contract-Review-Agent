@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "description": "Profile-neutral offline baselines. Clause patterns are semantic patterns, not contract-specific article numbers.",
+  "cases": [
+    {
+      "case_id": "procurement_core_terms",
+      "contract_type": "procurement",
+      "profile": "procurement",
+      "rule_pack_version": "procurement.v1",
+      "issue_id": "amount_consistency",
+      "expected_topics": ["amount", "delivery", "acceptance", "warranty"],
+      "expected_severity_floor": "high",
+      "expected_clause_patterns": ["numbered_clause", "payment_terms", "delivery_terms", "acceptance_terms"],
+      "evidence_requirement": "source_refs_with_block_and_quote",
+      "sample_topics": ["amount", "delivery", "acceptance", "warranty", "liability", "dispute"]
+    },
+    {
+      "case_id": "software_delivery_and_data",
+      "contract_type": "software",
+      "profile": "software",
+      "rule_pack_version": "software.v1",
+      "issue_id": "delivery_acceptance_consistency",
+      "expected_topics": ["delivery", "acceptance", "intellectual_property", "data"],
+      "expected_severity_floor": "high",
+      "expected_clause_patterns": ["numbered_clause", "milestone_terms", "license_terms", "data_processing_terms"],
+      "evidence_requirement": "source_refs_with_block_and_quote",
+      "sample_topics": ["delivery", "acceptance", "intellectual_property", "data", "liability"]
+    },
+    {
+      "case_id": "service_sla_and_personnel",
+      "contract_type": "service",
+      "profile": "service",
+      "rule_pack_version": "service.v1",
+      "issue_id": "service_level_consistency",
+      "expected_topics": ["service_level", "delivery", "acceptance", "personnel"],
+      "expected_severity_floor": "medium",
+      "expected_clause_patterns": ["numbered_clause", "sla_terms", "milestone_terms", "personnel_terms"],
+      "evidence_requirement": "source_refs_with_block_and_quote",
+      "sample_topics": ["service_level", "delivery", "acceptance", "personnel", "liability"]
+    },
+    {
+      "case_id": "lease_possession_and_return",
+      "contract_type": "lease",
+      "profile": "lease",
+      "rule_pack_version": "lease.v1",
+      "issue_id": "possession_return_consistency",
+      "expected_topics": ["amount", "delivery", "maintenance", "termination"],
+      "expected_severity_floor": "medium",
+      "expected_clause_patterns": ["numbered_clause", "rent_terms", "handover_terms", "return_terms"],
+      "evidence_requirement": "source_refs_with_block_and_quote",
+      "sample_topics": ["amount", "delivery", "maintenance", "termination", "liability"]
+    },
+    {
+      "case_id": "unknown_generic_obligations",
+      "contract_type": "unknown",
+      "profile": "unknown",
+      "rule_pack_version": "generic.v1",
+      "issue_id": "generic_obligation_consistency",
+      "expected_topics": ["amount", "delivery", "liability", "dispute"],
+      "expected_severity_floor": "medium",
+      "expected_clause_patterns": ["numbered_clause", "payment_terms", "performance_terms", "liability_terms"],
+      "evidence_requirement": "source_refs_with_block_and_quote",
+      "sample_topics": ["amount", "delivery", "liability", "dispute"]
+    }
+  ]
+}

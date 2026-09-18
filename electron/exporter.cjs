@@ -99,7 +99,10 @@ function reportSummary(review) {
     high: risks.filter((risk) => risk.risk_level === "high").length,
     medium: risks.filter((risk) => risk.risk_level === "medium").length,
     low: risks.filter((risk) => risk.risk_level === "low").length,
-    pending: risks.filter((risk) => risk.human_status === "pending_review").length
+    pending: risks.filter((risk) => risk.human_status === "pending_review").length,
+    // 分区后的另两类产物规模：让消费方一眼看出"实质判断有多少、不可判断的有多少"。
+    pending_verification: (review.pending_verification || []).length,
+    rule_notes: (review.rule_notes || []).length
   };
 }
 
@@ -391,6 +394,8 @@ async function writePdf(review, filePath, generatedAt, validation) {
     pushLine("分析", textOf(risk.analysis || "未提供"));
     pushLine("建议", textOf(risk.suggestion || "未提供"));
     pushLine("证据", `${textOf(risk.evidence_status || "未记录")}    结论：${textOf(risk.conclusion_status || "未记录")}`);
+    pushLine("置信度", textOf(risk.decision_confidence || "未记录"));
+    pushLine("风险组", textOf(risk.canonical_issue_id || "未归组"));
     const blockHeight = bodyLines.length * 13 + 6;
     if (cursor - blockHeight < 42) { addPage(); }
     page.drawRectangle({ x: margin, y: cursor - (bodyLines.length - 1) * 13 - 4, width: 3, height: Math.max(12, blockHeight - 6), color: rgb(...style.pdf) });
@@ -465,18 +470,20 @@ async function writeXlsx(review, filePath, generatedAt, validation) {
     { header: "风险分析", key: "analysis", width: 60 },
     { header: "修改建议", key: "suggestion", width: 60 },
     { header: "证据状态", key: "evidence", width: 16 },
-    { header: "人工状态", key: "human", width: 16 }
+    { header: "人工状态", key: "human", width: 16 },
+    { header: "结论置信度", key: "decision_confidence", width: 16 },
+    { header: "风险聚合组", key: "canonical_issue_id", width: 24 }
   ];
-  sheet.mergeCells("A1:K1");
+  sheet.mergeCells("A1:M1");
   sheet.getCell("A1").value = `${textOf(review.project?.project_name || "合同审查")} - ${context.draft ? "草稿 DRAFT / NOT FINAL" : "正式报告"}`;
   sheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
   sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2B4ACB" } };
-  sheet.mergeCells("A2:K2");
+  sheet.mergeCells("A2:M2");
   sheet.getCell("A2").value = `审查版本：${textOf(review.review_version_id || "未命名")}    文件版本：${textOf(review.project?.file_version_id)}    导出时间：${generatedAt}`;
   sheet.getRow(3).values = sheet.columns.map((column) => column.header);
   sheet.getRow(3).font = { bold: true, color: { argb: "FF1A2233" } };
   sheet.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF1FB" } };
-  sheet.autoFilter = "A3:K3";
+  sheet.autoFilter = "A3:M3";
   // riskRows 已按严重度排好；等级列直接按等级上色，扫描时无需再读文字。
   let rank = 0;
   for (const risk of riskRows(review)) {
@@ -494,7 +501,9 @@ async function writeXlsx(review, filePath, generatedAt, validation) {
       analysis: risk.analysis || "",
       suggestion: risk.suggestion || "",
       evidence: risk.evidence_status || "",
-      human: risk.human_status || ""
+      human: risk.human_status || "",
+      decision_confidence: risk.decision_confidence || "",
+      canonical_issue_id: risk.canonical_issue_id || ""
     });
     row.getCell(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: style.argb } };
     row.getCell(2).font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -566,7 +575,14 @@ function writeJson(review, filePath, generatedAt, validation) {
     level_meta: LEVEL_SEVERITY_ORDER.map((level) => ({ level, label: LEVEL_STYLE[level].label, color: LEVEL_STYLE[level].hex })),
     severity_distribution: severityDistribution(review).map(({ level, label, count }) => ({ level, label, count })),
     risk_order: "risk_level desc, human_status(pending first), location_confidence asc, clause_no asc",
+    risk_field_contract: ["risk_level", "decision_confidence", "canonical_issue_id", "contract_location", "evidence_status", "conclusion_status"],
     risks: riskRows(review),
+    // 与 risks 分区存放的两类产物必须一并导出，否则等于把它们藏起来：
+    //  · pending_verification —— 本地筛查/抽取不足以判断的条目（"未能抽取…"），
+    //    是系统对自身覆盖面的自述，不是对合同的判断；
+    //  · rule_notes           —— 知识底座里规则文档自身的条文，属管理性说明。
+    pending_verification: review.pending_verification || [],
+    rule_notes: review.rule_notes || [],
     humanRevisions: review.humanRevisions || []
   };
   fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");

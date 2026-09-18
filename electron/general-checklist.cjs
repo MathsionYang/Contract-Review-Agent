@@ -1,5 +1,11 @@
 const catalog = require("./general-checklist-catalog.json");
-const { compact, resolveRefs, clauseDefinitions } = require("./contract-evidence.cjs");
+const { compact, resolveRefs, clauseDefinitions, extractClauseReferences } = require("./contract-evidence.cjs");
+
+// 分级与证据强度的绑定规则收敛在 src/services/evidenceLevel.mjs，与 contract-checks 共用同一实现。
+let evidenceLevel = { capLevelByEvidence: (level) => level || "medium", locationConfidence: (anchored) => (anchored ? 0.6 : 0) };
+try {
+  evidenceLevel = require("../src/services/evidenceLevel.mjs");
+} catch (_error) { /* 保持内联回退实现 */ }
 
 const CATALOG = catalog.items;
 const MAPPED = {
@@ -9,6 +15,7 @@ const MAPPED = {
   "GC-2-22": ["amount.total_vs_uppercase"],
   "GC-2-23": ["amount.item_sum", "amount.schedule_amount_anchor"],
   "GC-2-24": ["timeline.trial_before_final_acceptance", "timeline.license_term_conflict"],
+  "GC-2-25": ["reference.unresolved_target"],
   "GC-3-03": ["obligation.environment_transfer", "acceptance.cost_allocation"],
   "GC-4-02": ["penalty.unlimited_delay_cap", "penalty.daily_rate_excessive"],
   "GC-4-04": ["liability.broad_indirect_loss"],
@@ -68,8 +75,7 @@ const MATERIALS = {
   "GC-6-10": ["修订记录与双方确认凭证"]
 };
 
-function runGeneralChecklist({ document = {}, contractType = "", checkResults: existing = [] } = {}) {
-  const text = String(document.text || "");
+function runGeneralChecklist({ document = {}, contractType = "", checkResults: existing = [] } = {}) {  const text = String(document.text || "");
   const normalized = compact(text);
   const definitions = clauseDefinitions(text);
   const statements = text.split(/[。；;]/).map(compact).filter(Boolean);
@@ -146,11 +152,13 @@ function runGeneralChecklist({ document = {}, contractType = "", checkResults: e
   if (cap) screen("GC-4-06", [["保密与侵权例外", /(?:保密|侵权).{0,60}(?:不受|不适用).{0,15}(?:上限|限制)/], ["故意重大过失例外", /(?:故意|重大过失).{0,60}(?:不受|不适用).{0,15}(?:上限|限制)/]]);
   else set("GC-4-06", "not_applicable", "未检出责任上限，例外清单暂不适用；责任上限另项检查。");
 
-  const declared = new Set(definitions.map((c) => c.clause_no));
-  const references = [...text.matchAll(/第\s*(\d+(?:\.\d+)+)\s*条/g)];
+  const declared = new Set(definitions.map((c) => String(c.clause_no || "").replace(/\s+/g, "")));
+  const clauseReferences = extractClauseReferences(text);
+  const broken = clauseReferences.filter((edge) => edge.target_clause_no && !declared.has(edge.target_clause_no));
   const allReferences = [...text.matchAll(/第\s*[一二三四五六七八九十百千\d.]+\s*条/g)];
-  const broken = references.filter((m) => !declared.has(m[1]));
-  set("GC-2-25", broken.length ? "conflict" : allReferences.length > references.length ? "unverifiable" : references.length ? "pass" : "unverifiable", broken.length ? `内部引用未找到条款定义：${[...new Set(broken.map((m) => m[1]))].join("、")}；须区分合同内部引用与外部法律引用。` : "已核对可解析的数字条款引用；其他引用形式仍需核验。", broken.map((m) => m[0]));
+  set("GC-2-25", broken.length ? "conflict" : allReferences.length > clauseReferences.length ? "unverifiable" : clauseReferences.length ? "pass" : "unverifiable",
+    broken.length ? `内部引用未找到条款定义：${[...new Set(broken.map((edge) => edge.target_clause_no))].join("、")}；已排除外部法律条文引用。` : "已核对可解析的数字条款引用；其他引用形式仍需核验。",
+    broken.map((edge) => edge.quote));
   const duplicate = definitions.filter((c, i) => definitions.findIndex((d) => d.clause_no === c.clause_no) !== i);
   const typo = statements.filter((s) => /有乙方负责|有甲方负责|XXX|待填写|【待补充】/.test(s));
   set("GC-6-08", duplicate.length || typo.length ? "conflict" : "unverifiable", duplicate.length || typo.length ? `发现重复条款或文本残留：${duplicate.map((d) => d.clause_no).join("、") || "疑似错字/占位符"}。` : "基础重复编号和占位符扫描完成，账户与名称准确性需资料核验。", [...duplicate.map((d) => d.text), ...typo]);
@@ -168,30 +176,54 @@ function runGeneralChecklist({ document = {}, contractType = "", checkResults: e
     if (related.length) {
       // A narrow detector can establish a defect, but cannot certify the full GC criterion.
       const adverse = related.find((c) => c.status === "conflict") || related.find((c) => c.status === "missing");
-      result = { status: adverse?.status || "unverifiable", message: adverse?.message || "专项子检查已执行，完整通用判据仍需核验。",
+      const relationPass = entry.check_id === "GC-2-25" && related.every((c) => c.status === "pass");
+      result = { status: adverse?.status || (relationPass ? "pass" : "unverifiable"), message: adverse?.message || (relationPass ? "已核对合同内部数字条款引用均指向已定义条款。" : "专项子检查已执行，完整通用判据仍需核验。"),
         source_refs: related.flatMap((c) => c.source_refs || []), related_checks: related.map((c) => c.check_id), mapped: true };
     }
     if (!result) result = { status: "unverifiable", message: external ? "需要有效外部材料或官方记录核验，合同自述不足以确认。" : "需要结合业务立场、条款上下文和附件进行语义复核。", source_refs: [] };
     if (scope && !scope[0].test(normalized)) result = { status: "not_applicable", message: `当前文本未触发适用条件：${scope[1]}。新增材料后应重新检查。`, source_refs: [] };
+    const statusDetail = result.status === "not_applicable"
+      ? "not_applicable"
+      : external && ["unverifiable", "missing"].includes(result.status)
+        ? "external_material_missing"
+        : result.status === "missing"
+          ? "missing_candidate"
+          : result.status;
+    const scanEvidence = {
+      file_version_id: document.fileVersionId || "",
+      document_hash: document.sha256 || "",
+      block_ids: (document.blocks || []).map((b) => b.block_id),
+      full_text_scanned: Boolean(text),
+      scanned_char_count: text.length,
+      quote_count: (result.source_refs || []).length
+    };
     return { ...entry, catalog_version: catalog.version, catalog_source: catalog.source,
       method: external ? "external_verification" : evaluations.has(entry.check_id) ? "text_screening" : related.length ? "deterministic_mapping" : "semantic_review",
-      applicability: scope?.[1] || "通用审查；材料不足时不推定不适用", contract_type: contractType,
+      applicability: scope?.[1] || "通用审查；材料不足时不推定不适用", applicability_reason: scope?.[1] || (external ? "需要外部材料确认；合同未触发时仍保留待核验状态" : "通用审查项，依据全文扫描结果判断候选缺失"), contract_type: contractType,
       evidence_requirement: external ? "原件、授权或官方核验记录及有效日期" : "当前合同原文、关联条款及附件；缺失项保存全文检查范围",
       required_materials: MATERIALS[entry.check_id] || (external ? ["有效证明材料或官方核验记录"] : []),
-      fact_refs: [], ...result,
+      fact_refs: [], ...result, status_detail: statusDetail, scan_evidence: scanEvidence,
       search_scope: { file_version_id: document.fileVersionId || "", document_hash: document.sha256 || "", block_ids: (document.blocks || []).map((b) => b.block_id) }
     };
   });
   const findings = checkResults.filter((c) => !c.mapped && ["conflict", "missing"].includes(c.status)).map((check) => {
     const first = check.source_refs[0];
+    const anchored = Boolean(first);
+    // 与 contract-checks 共用同一份分级规则：没有原文定位就不能给 high/critical。
+    // 清单筛检出的条目大多没有引用（实测 22 条模板句全部 location_confidence = 0），
+    // 若沿用 CATALOG 的静态严重度，会让"没找到"比"找到了"更容易被评为严重。
+    const declared = check.severity || "medium";
+    const level = evidenceLevel.capLevelByEvidence(declared, anchored);
     return { risk_id: `check_${check.check_id}`, rule_id: check.check_id, source_type: "checklist_screening", evidence_origin: "checklist_screening",
-      title: `${check.title}：${check.status === "missing" ? "约定要素待补齐" : "存在待核验问题"}`, risk_level: check.severity,
+      title: `${check.title}：${check.status === "missing" ? "约定要素待补齐" : "存在待核验问题"}`, risk_level: level,
+      status_detail: check.status_detail || (check.status === "missing" ? "missing_candidate" : check.status),
+      ...(level !== declared ? { level_capped_from: declared, level_cap_reason: "缺少原文定位，等级上限为 medium" } : {}),
       risk_category: check.layer === "L6" ? "text_quality" : "commercial", risk_topic: check.layer === "L4" ? "remedy" : "general_checklist",
       conclusion_status: "needs_verification", evidence_status: "unverified", human_status: "pending_review",
-      location_confidence: first ? 0.9 : 0,
-      contract_location: { file_version_id: document.fileVersionId || "", page: first?.page ?? null, clause_no: first?.clause_no || "", quote: first?.quote || "", source_refs: check.source_refs, location_status: first ? "resolved" : "unresolved" },
+      location_confidence: evidenceLevel.locationConfidence(anchored, false),
+      contract_location: { file_version_id: document.fileVersionId || "", page: first?.page ?? null, clause_no: first?.clause_no || "", quote: first?.quote || "", source_refs: check.source_refs, location_status: anchored ? "resolved" : "unresolved" },
       analysis: check.message, suggestion: `请核对并补充：${check.criterion}。`, checklist_ids: [check.check_id], related_checks: [check.check_id],
-      catalog_version: catalog.version, legal_basis: [], company_basis: [] };
+      catalog_version: catalog.version, applicability_reason: check.applicability_reason, scan_evidence: check.scan_evidence, legal_basis: [], company_basis: [] };
   });
   return { catalogVersion: catalog.version, checkResults, findings, documentText: text };
 }

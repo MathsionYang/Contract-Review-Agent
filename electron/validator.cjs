@@ -5,6 +5,7 @@ const { coverageFrom, validHumanReview } = require("./checklist-policy.cjs");
 const ALLOWED_CATEGORIES = new Set(["legal", "commercial", "company_policy", "text_quality", "evidence"]);
 const ALLOWED_CONCLUSIONS = new Set(["candidate", "confirmed", "needs_verification", "rejected"]);
 const ALLOWED_EVIDENCE = new Set(["verified", "partially_verified", "unverified", "invalid", "not_applicable"]);
+const ALLOWED_DECISION_CONFIDENCE = new Set(["high", "medium", "low"]);
 const ALLOWED_HUMAN = new Set([
   "pending_review",
   "accepted",
@@ -242,7 +243,7 @@ function validateReview(review, options = {}) {
     const valid = review.checklist_version === catalog.version && checks.length === entries.size
       && new Set(checks.map((c) => c?.check_id)).size === entries.size
       && checks.every((c) => c && entries.has(c.check_id) && c.severity === entries.get(c.check_id).severity
-        && ["pass", "conflict", "missing", "unverifiable", "not_applicable", "skipped"].includes(c.status));
+        && ["pass", "conflict", "missing", "missing_candidate", "unverifiable", "not_applicable", "skipped"].includes(c.status));
     if (!valid) block("checklist.structure", "通用审查清单", "CHECKLIST_INVALID", "清单版本、编号、等级或状态不完整", "重新执行当前版本的通用清单检查");
     else pass("checklist.structure", "通用审查清单", `已保存 ${checks.length} 项检查状态`);
     const expected = coverageFrom(checks);
@@ -250,7 +251,7 @@ function validateReview(review, options = {}) {
       block("checklist.coverage", "通用清单覆盖统计", "CHECKLIST_COVERAGE_INVALID", "清单覆盖统计缺失或与逐项结果不一致", "重新生成完整清单统计");
     } else pass("checklist.coverage", "通用清单覆盖统计", "通用检查与专项检查分别统计");
     const pending = checks.filter((c) => ["high", "critical"].includes(entries.get(c?.check_id)?.severity)
-      && ["unverifiable", "skipped"].includes(c.status) && !validHumanReview(c, review));
+      && ["unverifiable", "missing_candidate", "skipped"].includes(c.status) && !validHumanReview(c, review));
     if (pending.length) block("checklist.pending", "关键通用检查复核", "CHECKLIST_REVIEW_REQUIRED", `${pending.length} 项关键检查待核验：${pending.map((c) => c.check_id).join("、")}`, "在通用清单中记录复核结论、复核人、依据与说明");
     else if (valid) pass("checklist.pending", "关键通用检查复核", "没有未处理的关键待核验项");
   }
@@ -281,6 +282,12 @@ function validateReview(review, options = {}) {
     }
     if (risk.evidence_status && !ALLOWED_EVIDENCE.has(risk.evidence_status)) {
       block(`${prefix}.evidence`, "证据状态", "INVALID_EVIDENCE_STATUS", "证据状态不在允许范围内", "修正证据状态", riskId);
+    }
+    if (risk.decision_confidence && !ALLOWED_DECISION_CONFIDENCE.has(risk.decision_confidence)) {
+      block(`${prefix}.decision-confidence`, "结论置信度", "INVALID_DECISION_CONFIDENCE", "decision_confidence 不在 high、medium、low 允许范围内", "修正结论置信度或重新生成风险", riskId);
+    }
+    if (risk.canonical_issue_id !== undefined && (typeof risk.canonical_issue_id !== "string" || !risk.canonical_issue_id.trim())) {
+      block(`${prefix}.canonical-issue`, "风险聚合标识", "INVALID_CANONICAL_ISSUE_ID", "canonical_issue_id 必须是非空字符串", "补齐稳定的风险聚合标识", riskId);
     }
     if (risk.human_status && !ALLOWED_HUMAN.has(risk.human_status)) {
       block(`${prefix}.human`, "人工处理状态", "INVALID_HUMAN_STATUS", "人工处理状态不在允许范围内", "修正人工处理状态", riskId);

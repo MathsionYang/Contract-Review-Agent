@@ -107,3 +107,17 @@ test("无对方罚则时不虚构费率不对称，明确定义时间单位时�
   assert.equal(checks.get("timeline.calendar_unit_mixing").status, "pass");
   assert.notEqual(checks.get("penalty.daily_rate_excessive").status, "conflict");
 });
+
+test("罚则规则不依赖固定的 8.1/8.3 条款号", () => {
+  const document = {
+    fileVersionId: "penalty_generic_v1",
+    text: "5.1 乙方逾期交付的，每逾期一日按合同总价的万分之五支付违约金。5.2 乙方逾期超过30日的，除按第5.1条支付违约金外，另按合同总价的10%支付违约金。"
+  };
+  const facts = extractContractFacts(document, { contractType: "procurement" });
+  const result = runContractChecks({ document, facts, contractType: "procurement" });
+  const checks = new Map(result.checkResults.map((check) => [check.check_id, check]));
+  assert.equal(checks.get("penalty.stacking").status, "conflict");
+  assert.equal(checks.get("penalty.unlimited_delay_cap").status, "conflict");
+  assert.ok(checks.get("penalty.stacking").related_clause_nos?.includes("5.1"));
+  assert.ok(checks.get("penalty.stacking").related_clause_nos?.includes("5.2"));
+});
